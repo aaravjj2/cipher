@@ -28,6 +28,8 @@ from core.research_platform.factors import FactorCandidate, FactorResearchServic
 from core.research_platform.lean import LeanAuditValidator
 from core.research_platform.local_capabilities import build_local_capability_report
 from core.research_platform.local_scheduler import run_due
+from core.research_platform.engine_adapters import EngineGateError, screen_vectorbt_buy_and_hold
+from core.research_platform.market_quality import HoldoutCohortEligibility
 from core.research_platform.model_context import (
     ModelContextValidationError,
     build_model_context_assessment,
@@ -417,6 +419,12 @@ def test_local_scheduler_records_blocked_jobs_without_execution(tmp_path: Path):
     assert any(event["status"] == "ready_for_manual_research_run" for event in result["last_run"])
     assert any(event["status"] == "blocked" for event in result["last_run"])
     assert all(event["live_order_authority"] is False for event in result["last_run"])
+
+
+def test_vectorbt_adapter_refuses_uncleared_holdout_c(tmp_path: Path):
+    cohort = HoldoutCohortEligibility(source_count=1, common_tickers=9, strict_independent_origins=6)
+    with pytest.raises(EngineGateError, match="Holdout C gate"):
+        screen_vectorbt_buy_and_hold([100.0, 101.0], cohort, ArtifactStore(tmp_path / "artifacts"))
 
 
 def test_base_timesfm_context_is_never_promotion_eligible():

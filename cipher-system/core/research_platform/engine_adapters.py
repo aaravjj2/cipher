@@ -1,0 +1,64 @@
+"""Governed optional-engine adapters for local research only."""
+
+from __future__ import annotations
+
+import importlib.metadata
+from dataclasses import dataclass
+from typing import Any, Sequence
+
+import numpy as np
+
+from .artifact_store import ArtifactReference, ArtifactStore
+from .market_quality import HoldoutCohortEligibility
+
+
+class EngineGateError(RuntimeError):
+    pass
+
+
+@dataclass(frozen=True)
+class VectorBTScreenResult:
+    total_return: float
+    max_drawdown: float
+    trade_count: int
+    artifact: ArtifactReference
+
+
+def engine_versions() -> dict[str, str]:
+    packages = {"vectorbt": "vectorbt", "qlib": "pyqlib", "riskfolio": "Riskfolio-Lib", "rdagent": "rdagent"}
+    return {name: importlib.metadata.version(package) for name, package in packages.items()}
+
+
+def screen_vectorbt_buy_and_hold(
+    closes: Sequence[float],
+    cohort: HoldoutCohortEligibility,
+    artifacts: ArtifactStore,
+) -> VectorBTScreenResult:
+    """Run a non-promotable baseline only after the unchanged Holdout C gate."""
+
+    if not cohort.eligible:
+        raise EngineGateError(f"Holdout C gate is not cleared: {cohort.to_dict()['reasons']}")
+    values = np.asarray(closes, dtype=float)
+    if values.ndim != 1 or len(values) < 2 or not np.isfinite(values).all() or (values <= 0).any():
+        raise ValueError("closes must contain at least two finite positive values")
+    import vectorbt as vbt
+
+    portfolio = vbt.Portfolio.from_holding(values)
+    payload = {
+        "engine": "VectorBT",
+        "engine_version": importlib.metadata.version("vectorbt"),
+        "cohort": cohort.to_dict(),
+        "strategy": "buy_and_hold_baseline",
+        "total_return": float(portfolio.total_return()),
+        "max_drawdown": float(portfolio.max_drawdown()),
+        "trade_count": int(portfolio.trades.count()),
+        "promotion_eligible": False,
+        "execution_authority": False,
+    }
+    artifact = artifacts.put_json(payload, metadata={"kind": "vectorbt_screen", "promotion_eligible": False})
+    return VectorBTScreenResult(
+        total_return=payload["total_return"],
+        max_drawdown=payload["max_drawdown"],
+        trade_count=payload["trade_count"],
+        artifact=artifact,
+    )
