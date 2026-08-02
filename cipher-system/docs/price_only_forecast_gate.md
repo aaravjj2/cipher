@@ -64,3 +64,17 @@ The price-only gate was a real fix for forecast research availability, but not
 for deployment: both models remain context-only and require a larger,
 cross-regime, non-overlapping study before any scheduling, persistence, sizing,
 promotion, or trading use. The full session-and-volume gate is unchanged.
+
+## Holdout C Independent Origins
+
+For Holdout C ranking research, independence is enforced in
+`scripts/construct_alpaca_holdout_c_cohort.py`. A candidate day belongs to a
+block only when at least eight tickers are price-only eligible on that same
+day. A strict independent origin consumes a non-overlapping 52-session slice:
+32 context sessions followed by 20 outcome sessions. Origins are generated at
+offsets `0, 52, 104, ...` inside one contiguous eligible block; the cohort gate
+uses the strongest single block and does not add origins from separate blocks.
+Changing ticker alone therefore cannot create an independent origin, and an
+additional ticker helps only if it repairs the common daily universe for every
+session in the candidate block. This definition applies before any outcomes
+are evaluated.

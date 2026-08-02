@@ -10,7 +10,16 @@ Cipher implements the attached autonomous quant architecture as a guarded resear
 - Layer 6 produces simulation-only portfolio proposals and audit records. It does not create broker orders.
 - Layer 7 feedback routes back into the Layer 5 validation gate, not into live runtime execution.
 
-## Implemented Tables
+## Storage Decision
+
+Local DuckDB and SQLite are the adopted systems of record for this checkout.
+Cloud provisioning is not planned unless a concrete future requirement arises:
+local disk exhaustion, a cloud-native scheduled workload, or multi-user access.
+No guarded research workflow depends on BigQuery, GCS, Cloud Run, or Cloud
+Functions being provisioned later. Existing cloud scripts remain dormant
+optional migration utilities, not prerequisites or scheduled work.
+
+## Implemented Logical Tables
 
 The canonical BigQuery DDL now includes the additional topology needed by the seven-layer plan:
 
@@ -32,15 +41,11 @@ Existing tables such as `market_bars`, `option_quotes`, `news_events`, `model_fo
 - `scripts/describe_seven_layer_stack.py`
   Prints the stack plan and boundary status without touching GCP or starting a live process.
 
-## Local-Only Status
+## Local Status
 
 This checkout is an independent local clone. It is not connected to the prior
-VM, and the default configuration has `cloud_writes_enabled=false`, no GCS
-bucket, and the placeholder BigQuery project `cipher-project-not-configured`.
-
-- Phase 0 is deliberately **not passed** locally: provisioning and validating
-  BigQuery, GCS, and Cloud Run/Functions requires a separately configured cloud
-  project and credentials.
+VM, and `cloud_writes_enabled=false` is intentional. Cloud configuration is
+not an incomplete phase or a blocker for local research.
 - Phases 1-3 are implemented as guarded local research infrastructure, but a
   dataset, forecast, factor, or strategy is not promoted until its required
   data-quality and out-of-sample evidence has been recorded.
