@@ -1,0 +1,54 @@
+{
+  "generated_for": "leveraged_etf_csp_wheel",
+  "quality_policy": "Explicit thesis whitelist pending point-in-time fundamentals ingestion. Every override is surfaced as a research limitation.",
+  "assets": [
+    {
+      "symbol": "NVDL",
+      "reference": "NVDA",
+      "quality_kind": "single_company",
+      "quality_approved": true,
+      "quality_as_of": "thesis-curated",
+      "leverage_multiple": 2.0,
+      "gross_margin_exempt": false,
+      "dividend_yield": 0.0,
+      "quality_override_reason": "User thesis explicitly approves NVDA-linked leveraged exposure; point-in-time NVDA fundamentals have not yet been ingested.",
+      "notes": "GraniteShares daily 2x NVDA exposure. Daily leverage reset and compounding must be treated separately from NVDA fundamentals."
+    },
+    {
+      "symbol": "TSLL",
+      "reference": "TSLA",
+      "quality_kind": "single_company",
+      "quality_approved": true,
+      "quality_as_of": "thesis-curated",
+      "leverage_multiple": 2.0,
+      "gross_margin_exempt": true,
+      "dividend_yield": 0.0,
+      "quality_override_reason": "User thesis explicitly approves TSLA-linked leveraged exposure; point-in-time TSLA fundamentals have not yet been ingested.",
+      "notes": "Direxion daily 2x TSLA exposure. Automotive gross-margin treatment is explicitly exempted in the thesis profile."
+    },
+    {
+      "symbol": "SOXL",
+      "reference": "NYSE_SEMICONDUCTOR_INDEX",
+      "quality_kind": "index_basket",
+      "quality_approved": true,
+      "quality_as_of": "thesis-curated",
+      "leverage_multiple": 3.0,
+      "gross_margin_exempt": true,
+      "dividend_yield": 0.0,
+      "quality_override_reason": "Semiconductor basket exception supplied by the thesis; not every constituent is required to exceed $200B.",
+      "notes": "Direxion daily 3x semiconductor-index exposure. Basket exception must not be mislabeled as a single-company fundamental pass."
+    },
+    {
+      "symbol": "TQQQ",
+      "reference": "NASDAQ_100",
+      "quality_kind": "index_basket",
+      "quality_approved": true,
+      "quality_as_of": "thesis-curated",
+      "leverage_multiple": 3.0,
+      "gross_margin_exempt": true,
+      "dividend_yield": 0.0,
+      "quality_override_reason": "Nasdaq-100 basket exception supplied by the thesis; the quality screen applies at basket level.",
+      "notes": "ProShares daily 3x Nasdaq-100 exposure. Daily target is not a promise of 3x cumulative performance."
+    }
+  ]
+}

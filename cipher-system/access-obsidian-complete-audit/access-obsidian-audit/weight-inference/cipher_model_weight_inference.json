@@ -1,0 +1,395 @@
+{
+  "source": "C:\\Users\\aarav\\Documents\\Codex\\2026-07-18\\try\\outputs\\access-obsidian-audit\\weight-inference\\primary-scan-completion-states.json",
+  "parsed_records": 30,
+  "limitations": [
+    "This is a first-pass regression over visible scanner fields, not the proprietary source model.",
+    "Raw greeks, open interest, IV, bid/ask spreads, VWAP, ATR, live flow, and full candidate universe were not exposed in this output.",
+    "Scores are compressed between 70 and 82 in the captured sample, so coefficient stability is limited."
+  ],
+  "r_squared_visible_features": 0.32221751517059083,
+  "weights": [
+    {
+      "feature": "intercept",
+      "coefficient": 68.86666437111118
+    },
+    {
+      "feature": "vacuum_count",
+      "standardized_coefficient": -4.363025341021341,
+      "correlation_to_score": -0.13228412069910725
+    },
+    {
+      "feature": "near_gap_pct",
+      "standardized_coefficient": 0.8455284467744151,
+      "correlation_to_score": -0.013056029747369633
+    },
+    {
+      "feature": "pull_from_support_pct",
+      "standardized_coefficient": -1.0871042628360514,
+      "correlation_to_score": 0.05036210125369503
+    },
+    {
+      "feature": "stretch_from_support_pct",
+      "standardized_coefficient": -0.03595980722607073,
+      "correlation_to_score": 0.03731017497186421
+    },
+    {
+      "feature": "support_count",
+      "standardized_coefficient": 5.02311391386185,
+      "correlation_to_score": 0.22062553281680725
+    },
+    {
+      "feature": "resistance_count",
+      "standardized_coefficient": 0.0,
+      "correlation_to_score": 0.0
+    }
+  ],
+  "top_records": [
+    {
+      "rank": 1,
+      "ticker": "LAES",
+      "direction": "BULLISH",
+      "score": 82.0,
+      "supports": [
+        2.5,
+        2.0
+      ],
+      "resistances": [
+        3.0,
+        3.5
+      ],
+      "pull_target": 3.0,
+      "vacuum_targets": [
+        3.0,
+        3.5
+      ],
+      "close_under": 2.23,
+      "first_support": 2.5,
+      "first_resistance": 3.0,
+      "last_vacuum_target": 3.5,
+      "support_count": 2,
+      "resistance_count": 2,
+      "vacuum_count": 2,
+      "near_gap": 0.5,
+      "pull_from_support": 0.5,
+      "stretch_from_support": 1.0,
+      "near_gap_pct": 0.2,
+      "pull_from_support_pct": 0.2,
+      "stretch_from_support_pct": 0.4,
+      "read": "LAES is holding above support at 2.5 and pressing into the 3 ceiling; a push through opens room toward the 3 pull target, with continuation into 3.5 if it keeps running. A close back under 2.23 would weaken the setup."
+    },
+    {
+      "rank": 2,
+      "ticker": "PCG",
+      "direction": "BULLISH",
+      "score": 79.0,
+      "supports": [
+        16.5,
+        16.0
+      ],
+      "resistances": [
+        17.5,
+        18.0
+      ],
+      "pull_target": 20.0,
+      "vacuum_targets": [
+        18.0,
+        19.0,
+        20.0,
+        21.0
+      ],
+      "close_under": 16.5,
+      "first_support": 16.5,
+      "first_resistance": 17.5,
+      "last_vacuum_target": 21.0,
+      "support_count": 2,
+      "resistance_count": 2,
+      "vacuum_count": 4,
+      "near_gap": 1.0,
+      "pull_from_support": 3.5,
+      "stretch_from_support": 4.5,
+      "near_gap_pct": 0.06060606060606061,
+      "pull_from_support_pct": 0.21212121212121213,
+      "stretch_from_support_pct": 0.2727272727272727,
+      "read": "PCG is holding above support at 16.5 and pressing into the 17.5 ceiling; a push through opens room toward the 20 pull target, with continuation into 21 if it keeps running. A close back under 16.5 would weaken the setup."
+    },
+    {
+      "rank": 3,
+      "ticker": "IOVA",
+      "direction": "BULLISH",
+      "score": 78.0,
+      "supports": [
+        4.5,
+        4.0
+      ],
+      "resistances": [
+        5.5,
+        7.5
+      ],
+      "pull_target": 5.5,
+      "vacuum_targets": [
+        5.5,
+        6.0,
+        7.0,
+        7.5
+      ],
+      "close_under": 4.5,
+      "first_support": 4.5,
+      "first_resistance": 5.5,
+      "last_vacuum_target": 7.5,
+      "support_count": 2,
+      "resistance_count": 2,
+      "vacuum_count": 4,
+      "near_gap": 1.0,
+      "pull_from_support": 1.0,
+      "stretch_from_support": 3.0,
+      "near_gap_pct": 0.2222222222222222,
+      "pull_from_support_pct": 0.2222222222222222,
+      "stretch_from_support_pct": 0.6666666666666666,
+      "read": "IOVA is holding above support at 4.5 and pressing into the 5.5 ceiling; a push through opens room toward the 5.5 pull target, with continuation into 7.5 if it keeps running. A close back under 4.5 would weaken the setup."
+    },
+    {
+      "rank": 4,
+      "ticker": "AXTI",
+      "direction": "BULLISH",
+      "score": 76.0,
+      "supports": [
+        43.0,
+        40.0
+      ],
+      "resistances": [
+        49.5,
+        50.0
+      ],
+      "pull_target": 50.0,
+      "vacuum_targets": [
+        50.0,
+        55.0,
+        57.0,
+        60.0
+      ],
+      "close_under": 43.0,
+      "first_support": 43.0,
+      "first_resistance": 49.5,
+      "last_vacuum_target": 60.0,
+      "support_count": 2,
+      "resistance_count": 2,
+      "vacuum_count": 4,
+      "near_gap": 6.5,
+      "pull_from_support": 7.0,
+      "stretch_from_support": 17.0,
+      "near_gap_pct": 0.1511627906976744,
+      "pull_from_support_pct": 0.16279069767441862,
+      "stretch_from_support_pct": 0.3953488372093023,
+      "read": "AXTI is holding above support at 43 and pressing into the 49.5 ceiling; a push through opens room toward the 50 pull target, with continuation into 60 if it keeps running. A close back under 43 would weaken the setup."
+    },
+    {
+      "rank": 5,
+      "ticker": "HIVE",
+      "direction": "BULLISH",
+      "score": 73.0,
+      "supports": [
+        2.5,
+        2.0
+      ],
+      "resistances": [
+        3.0,
+        3.5
+      ],
+      "pull_target": 4.0,
+      "vacuum_targets": [
+        3.0,
+        3.5,
+        4.0
+      ],
+      "close_under": 1.98,
+      "first_support": 2.5,
+      "first_resistance": 3.0,
+      "last_vacuum_target": 4.0,
+      "support_count": 2,
+      "resistance_count": 2,
+      "vacuum_count": 3,
+      "near_gap": 0.5,
+      "pull_from_support": 1.5,
+      "stretch_from_support": 1.5,
+      "near_gap_pct": 0.2,
+      "pull_from_support_pct": 0.6,
+      "stretch_from_support_pct": 0.6,
+      "read": "HIVE is holding above support at 2.5 and pressing into the 3 ceiling; a push through opens room toward the 4 pull target. A close back under 1.98 would weaken the setup."
+    },
+    {
+      "rank": 6,
+      "ticker": "NUAI",
+      "direction": "BULLISH",
+      "score": 73.0,
+      "supports": [
+        4.0,
+        3.5
+      ],
+      "resistances": [
+        4.5,
+        5.0
+      ],
+      "pull_target": 4.5,
+      "vacuum_targets": [
+        4.5,
+        5.0,
+        5.5,
+        6.0
+      ],
+      "close_under": 3.22,
+      "first_support": 4.0,
+      "first_resistance": 4.5,
+      "last_vacuum_target": 6.0,
+      "support_count": 2,
+      "resistance_count": 2,
+      "vacuum_count": 4,
+      "near_gap": 0.5,
+      "pull_from_support": 0.5,
+      "stretch_from_support": 2.0,
+      "near_gap_pct": 0.125,
+      "pull_from_support_pct": 0.125,
+      "stretch_from_support_pct": 0.5,
+      "read": "NUAI is holding above support at 4 and pressing into the 4.5 ceiling; a push through opens room toward the 4.5 pull target, with continuation into 6 if it keeps running. A close back under 3.22 would weaken the setup."
+    },
+    {
+      "rank": 7,
+      "ticker": "CSCO",
+      "direction": "BULLISH",
+      "score": 72.0,
+      "supports": [
+        109.0,
+        108.0
+      ],
+      "resistances": [
+        112.0,
+        114.0
+      ],
+      "pull_target": 120.0,
+      "vacuum_targets": [
+        115.0,
+        120.0,
+        125.0,
+        130.0
+      ],
+      "close_under": 109.0,
+      "first_support": 109.0,
+      "first_resistance": 112.0,
+      "last_vacuum_target": 130.0,
+      "support_count": 2,
+      "resistance_count": 2,
+      "vacuum_count": 4,
+      "near_gap": 3.0,
+      "pull_from_support": 11.0,
+      "stretch_from_support": 21.0,
+      "near_gap_pct": 0.027522935779816515,
+      "pull_from_support_pct": 0.10091743119266056,
+      "stretch_from_support_pct": 0.1926605504587156,
+      "read": "CSCO is holding above support at 109 and pressing into the 112 ceiling; a push through opens room toward the 120 pull target, with continuation into 130 if it keeps running. A close back under 109 would weaken the setup."
+    },
+    {
+      "rank": 8,
+      "ticker": "CLOV",
+      "direction": "BULLISH",
+      "score": 71.0,
+      "supports": [
+        4.0,
+        4.5
+      ],
+      "resistances": [
+        5.0,
+        5.5
+      ],
+      "pull_target": 5.0,
+      "vacuum_targets": [
+        5.0,
+        5.5,
+        6.0,
+        6.5
+      ],
+      "close_under": 4.0,
+      "first_support": 4.0,
+      "first_resistance": 5.0,
+      "last_vacuum_target": 6.5,
+      "support_count": 2,
+      "resistance_count": 2,
+      "vacuum_count": 4,
+      "near_gap": 1.0,
+      "pull_from_support": 1.0,
+      "stretch_from_support": 2.5,
+      "near_gap_pct": 0.25,
+      "pull_from_support_pct": 0.25,
+      "stretch_from_support_pct": 0.625,
+      "read": "CLOV is holding above support at 4 and pressing into the 5 ceiling; a push through opens room toward the 5 pull target, with continuation into 6.5 if it keeps running. A close back under 4 would weaken the setup."
+    },
+    {
+      "rank": 9,
+      "ticker": "WULF",
+      "direction": "BULLISH",
+      "score": 71.0,
+      "supports": [
+        17.0,
+        16.0
+      ],
+      "resistances": [
+        18.5,
+        19.0
+      ],
+      "pull_target": 20.0,
+      "vacuum_targets": [
+        20.0,
+        22.0,
+        23.0,
+        25.0
+      ],
+      "close_under": 17.0,
+      "first_support": 17.0,
+      "first_resistance": 18.5,
+      "last_vacuum_target": 25.0,
+      "support_count": 2,
+      "resistance_count": 2,
+      "vacuum_count": 4,
+      "near_gap": 1.5,
+      "pull_from_support": 3.0,
+      "stretch_from_support": 8.0,
+      "near_gap_pct": 0.08823529411764706,
+      "pull_from_support_pct": 0.17647058823529413,
+      "stretch_from_support_pct": 0.47058823529411764,
+      "read": "WULF is holding above support at 17 and pressing into the 18.5 ceiling; a push through opens room toward the 20 pull target, with continuation into 25 if it keeps running. A close back under 17 would weaken the setup."
+    },
+    {
+      "rank": 10,
+      "ticker": "HIMS",
+      "direction": "BULLISH",
+      "score": 70.0,
+      "supports": [
+        31.0,
+        30.5
+      ],
+      "resistances": [
+        33.0,
+        34.0
+      ],
+      "pull_target": 40.0,
+      "vacuum_targets": [
+        35.0,
+        36.5,
+        40.0,
+        45.0
+      ],
+      "close_under": 31.0,
+      "first_support": 31.0,
+      "first_resistance": 33.0,
+      "last_vacuum_target": 45.0,
+      "support_count": 2,
+      "resistance_count": 2,
+      "vacuum_count": 4,
+      "near_gap": 2.0,
+      "pull_from_support": 9.0,
+      "stretch_from_support": 14.0,
+      "near_gap_pct": 0.06451612903225806,
+      "pull_from_support_pct": 0.2903225806451613,
+      "stretch_from_support_pct": 0.45161290322580644,
+      "read": "HIMS is holding above support at 31 and pressing into the 33 ceiling; a push through opens room toward the 40 pull target, with continuation into 45 if it keeps running. A close back under 31 would weaken the setup."
+    }
+  ]
+}

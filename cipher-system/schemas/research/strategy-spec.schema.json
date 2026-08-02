@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cipher.local/schemas/research/strategy-spec.schema.json",
+  "title": "Cipher Strategy Specification",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "strategy_id",
+    "name",
+    "version",
+    "signal_rule",
+    "instrument_rule",
+    "contract_selection_rule",
+    "entry_rule",
+    "exit_rule",
+    "sizing_rule",
+    "portfolio_constraints",
+    "required_feature_ids",
+    "fill_model",
+    "benchmark",
+    "statistical_plan",
+    "promotion_thresholds"
+  ],
+  "properties": {
+    "strategy_id": {"type": "string", "pattern": "^strategy_[a-f0-9]{12,64}$"},
+    "name": {"type": "string", "minLength": 1},
+    "version": {"type": "string", "minLength": 1},
+    "signal_rule": {"type": "object"},
+    "instrument_rule": {"type": "object"},
+    "contract_selection_rule": {"type": "object"},
+    "entry_rule": {"type": "object"},
+    "exit_rule": {"type": "object"},
+    "sizing_rule": {"type": "object"},
+    "portfolio_constraints": {"type": "object"},
+    "required_feature_ids": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"type": "string", "pattern": "^feature_[a-f0-9]{12,64}$"}
+    },
+    "fill_model": {"type": "object"},
+    "benchmark": {"type": "string", "minLength": 1},
+    "statistical_plan": {"type": "object"},
+    "promotion_thresholds": {"type": "object"},
+    "description": {"type": "string"}
+  }
+}

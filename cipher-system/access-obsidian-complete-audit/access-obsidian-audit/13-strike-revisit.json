@@ -1,0 +1,2138 @@
+{
+  "name": "Strike Matrix baseline revisit",
+  "controls": [
+    {
+      "aria": "Toggle navigation",
+      "cls": "nav-toggle",
+      "disabled": false,
+      "i": 0,
+      "pressed": "",
+      "selected": "",
+      "text": "",
+      "title": "Menu"
+    },
+    {
+      "aria": "Add to watchlist",
+      "cls": "iconbtn iconbtn-txt",
+      "disabled": false,
+      "i": 1,
+      "pressed": "",
+      "selected": "",
+      "text": "+ Watchlist",
+      "title": "Add this ticker to your watchlist"
+    },
+    {
+      "aria": "",
+      "cls": "on",
+      "disabled": false,
+      "i": 2,
+      "pressed": "",
+      "selected": "",
+      "text": "1",
+      "title": "Workspace 1"
+    },
+    {
+      "aria": "",
+      "cls": "",
+      "disabled": false,
+      "i": 3,
+      "pressed": "",
+      "selected": "",
+      "text": "2",
+      "title": "Workspace 2"
+    },
+    {
+      "aria": "Toggle chart view",
+      "cls": "iconbtn",
+      "disabled": false,
+      "i": 4,
+      "pressed": "",
+      "selected": "",
+      "text": "",
+      "title": "Chart view"
+    },
+    {
+      "aria": "Toggle SPY/QQQ split view",
+      "cls": "iconbtn iconbtn-txt",
+      "disabled": false,
+      "i": 5,
+      "pressed": "",
+      "selected": "",
+      "text": "SPY/QQQ",
+      "title": "SPY / QQQ split"
+    },
+    {
+      "aria": "Toggle live trade tape",
+      "cls": "iconbtn iconbtn-txt",
+      "disabled": false,
+      "i": 6,
+      "pressed": "",
+      "selected": "",
+      "text": "TS",
+      "title": "Live trade tape"
+    },
+    {
+      "aria": "Toggle volume profile",
+      "cls": "iconbtn iconbtn-txt",
+      "disabled": false,
+      "i": 7,
+      "pressed": "",
+      "selected": "",
+      "text": "VP",
+      "title": "Volume Profile — traded volume by price (POC / HVN / LVN + bounce edges)"
+    },
+    {
+      "aria": "Toggle X-Ray matrix overlay",
+      "cls": "iconbtn iconbtn-txt",
+      "disabled": false,
+      "i": 8,
+      "pressed": "",
+      "selected": "",
+      "text": "X-Ray",
+      "title": "X-Ray — overlay the strike matrix on the chart"
+    },
+    {
+      "aria": "Capture chart image",
+      "cls": "iconbtn iconbtn-txt",
+      "disabled": false,
+      "i": 9,
+      "pressed": "",
+      "selected": "",
+      "text": "Capture",
+      "title": "Save chart image to your computer"
+    },
+    {
+      "aria": "Save chart",
+      "cls": "iconbtn iconbtn-txt",
+      "disabled": false,
+      "i": 10,
+      "pressed": "",
+      "selected": "",
+      "text": "Save chart",
+      "title": "Save this chart to Chart Saves"
+    },
+    {
+      "aria": "Open Bio flow scanner",
+      "cls": "iconbtn iconbtn-txt btn-bio",
+      "disabled": false,
+      "i": 11,
+      "pressed": "",
+      "selected": "",
+      "text": "Bio",
+      "title": "Bio / pharma / medtech deep-OTM flow"
+    },
+    {
+      "aria": "Open Contract Search",
+      "cls": "iconbtn iconbtn-txt",
+      "disabled": false,
+      "i": 12,
+      "pressed": "",
+      "selected": "",
+      "text": "Contract Search",
+      "title": "Contract Search — today's traded volume and buy/sell split on one contract"
+    },
+    {
+      "aria": "",
+      "cls": "",
+      "disabled": false,
+      "i": 13,
+      "pressed": "",
+      "selected": "",
+      "text": "Full",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "on",
+      "disabled": false,
+      "i": 14,
+      "pressed": "",
+      "selected": "",
+      "text": "Compact",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "",
+      "disabled": false,
+      "i": 15,
+      "pressed": "",
+      "selected": "",
+      "text": "±3%",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "",
+      "disabled": false,
+      "i": 16,
+      "pressed": "",
+      "selected": "",
+      "text": "±6%",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "",
+      "disabled": false,
+      "i": 17,
+      "pressed": "",
+      "selected": "",
+      "text": "±12%",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "on",
+      "disabled": false,
+      "i": 18,
+      "pressed": "",
+      "selected": "",
+      "text": "All",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "on",
+      "disabled": false,
+      "i": 19,
+      "pressed": "",
+      "selected": "",
+      "text": "GEX",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "",
+      "disabled": false,
+      "i": 20,
+      "pressed": "",
+      "selected": "",
+      "text": "VEX",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "on",
+      "disabled": false,
+      "i": 21,
+      "pressed": "",
+      "selected": "",
+      "text": "Matrix",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "",
+      "disabled": false,
+      "i": 22,
+      "pressed": "",
+      "selected": "",
+      "text": "Sniper",
+      "title": ""
+    },
+    {
+      "aria": "Refresh the Strike Matrix",
+      "cls": "iconbtn",
+      "disabled": false,
+      "i": 23,
+      "pressed": "",
+      "selected": "",
+      "text": "",
+      "title": "Refresh the matrix"
+    },
+    {
+      "aria": "Toggle matrix auto-refresh",
+      "cls": "iconbtn iconbtn-txt",
+      "disabled": false,
+      "i": 24,
+      "pressed": "",
+      "selected": "",
+      "text": "Auto refresh",
+      "title": "Auto-refresh the matrix every 15s"
+    },
+    {
+      "aria": "Toggle sidebar",
+      "cls": "side-collapse",
+      "disabled": false,
+      "i": 25,
+      "pressed": "",
+      "selected": "",
+      "text": "",
+      "title": "Collapse sidebar"
+    },
+    {
+      "aria": "",
+      "cls": "on",
+      "disabled": false,
+      "i": 26,
+      "pressed": "",
+      "selected": "",
+      "text": "Strike Matrix",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "",
+      "disabled": false,
+      "i": 27,
+      "pressed": "",
+      "selected": "",
+      "text": "Night Vision",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "",
+      "disabled": false,
+      "i": 28,
+      "pressed": "",
+      "selected": "",
+      "text": "Spyglass",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "",
+      "disabled": false,
+      "i": 29,
+      "pressed": "",
+      "selected": "",
+      "text": "My Watchlists",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "",
+      "disabled": false,
+      "i": 30,
+      "pressed": "",
+      "selected": "",
+      "text": "Journal",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "",
+      "disabled": false,
+      "i": 31,
+      "pressed": "",
+      "selected": "",
+      "text": "Trident CIPHER X",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "",
+      "disabled": false,
+      "i": 32,
+      "pressed": "",
+      "selected": "",
+      "text": "Chart Saves CIPHER X",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "",
+      "disabled": false,
+      "i": 33,
+      "pressed": "",
+      "selected": "",
+      "text": "Setup Scanner CIPHER X",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "",
+      "disabled": false,
+      "i": 34,
+      "pressed": "",
+      "selected": "",
+      "text": "WO Admin",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "",
+      "disabled": false,
+      "i": 35,
+      "pressed": "",
+      "selected": "",
+      "text": "Mispricing Admin",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "",
+      "disabled": false,
+      "i": 36,
+      "pressed": "",
+      "selected": "",
+      "text": "Settings",
+      "title": ""
+    },
+    {
+      "aria": "Download matrix CSV",
+      "cls": "iconbtn matrix-csv",
+      "disabled": false,
+      "i": 37,
+      "pressed": "",
+      "selected": "",
+      "text": "",
+      "title": "Download this matrix as CSV"
+    },
+    {
+      "aria": "Toggle Node Galaxy view",
+      "cls": "iconbtn matrix-nodes",
+      "disabled": false,
+      "i": 38,
+      "pressed": "",
+      "selected": "",
+      "text": "",
+      "title": "Node Galaxy — force-directed exposure map"
+    },
+    {
+      "aria": "",
+      "cls": "on",
+      "disabled": false,
+      "i": 39,
+      "pressed": "",
+      "selected": "",
+      "text": "GEX",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "",
+      "disabled": false,
+      "i": 40,
+      "pressed": "",
+      "selected": "",
+      "text": "VEX",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "iconbtn iconbtn-txt on",
+      "disabled": false,
+      "i": 41,
+      "pressed": "",
+      "selected": "",
+      "text": "Snap to spot",
+      "title": "Snap each column to its spot"
+    },
+    {
+      "aria": "",
+      "cls": "iconbtn iconbtn-txt",
+      "disabled": false,
+      "i": 42,
+      "pressed": "",
+      "selected": "",
+      "text": "Snap to golden",
+      "title": "Center each column on its golden (dominant) level"
+    },
+    {
+      "aria": "",
+      "cls": "iconbtn iconbtn-txt",
+      "disabled": false,
+      "i": 43,
+      "pressed": "",
+      "selected": "",
+      "text": "FC",
+      "title": "Box the closest floor & ceiling for each ticker"
+    },
+    {
+      "aria": "Refresh",
+      "cls": "iconbtn",
+      "disabled": false,
+      "i": 44,
+      "pressed": "",
+      "selected": "",
+      "text": "",
+      "title": "Refresh"
+    },
+    {
+      "aria": "",
+      "cls": "iconbtn iconbtn-txt",
+      "disabled": false,
+      "i": 45,
+      "pressed": "",
+      "selected": "",
+      "text": "Auto",
+      "title": "Auto refresh (15s)"
+    },
+    {
+      "aria": "Back to scan results",
+      "cls": "iconbtn iconbtn-txt scan-back-btn",
+      "disabled": false,
+      "i": 46,
+      "pressed": "",
+      "selected": "",
+      "text": "Back to scan",
+      "title": "Back to your scan results"
+    },
+    {
+      "aria": "",
+      "cls": "on",
+      "disabled": false,
+      "i": 47,
+      "pressed": "",
+      "selected": "",
+      "text": "1 Exp",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "",
+      "disabled": false,
+      "i": 48,
+      "pressed": "",
+      "selected": "",
+      "text": "Compact",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "",
+      "disabled": false,
+      "i": 49,
+      "pressed": "",
+      "selected": "",
+      "text": "Full",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "",
+      "disabled": false,
+      "i": 50,
+      "pressed": "",
+      "selected": "",
+      "text": "Leap",
+      "title": "All listed expirations, including LEAPs"
+    },
+    {
+      "aria": "",
+      "cls": "on",
+      "disabled": false,
+      "i": 51,
+      "pressed": "",
+      "selected": "",
+      "text": "1D",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "",
+      "disabled": false,
+      "i": 52,
+      "pressed": "",
+      "selected": "",
+      "text": "5m",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "tf-more-btn",
+      "disabled": false,
+      "i": 53,
+      "pressed": "",
+      "selected": "",
+      "text": "More",
+      "title": "More timeframes"
+    },
+    {
+      "aria": "",
+      "cls": "",
+      "disabled": false,
+      "i": 54,
+      "pressed": "",
+      "selected": "",
+      "text": "1m",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "",
+      "disabled": false,
+      "i": 55,
+      "pressed": "",
+      "selected": "",
+      "text": "15m",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "",
+      "disabled": false,
+      "i": 56,
+      "pressed": "",
+      "selected": "",
+      "text": "1H",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "",
+      "disabled": false,
+      "i": 57,
+      "pressed": "",
+      "selected": "",
+      "text": "4H",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "",
+      "disabled": false,
+      "i": 58,
+      "pressed": "",
+      "selected": "",
+      "text": "1W",
+      "title": ""
+    },
+    {
+      "aria": "Refresh hot strikes",
+      "cls": "iconbtn",
+      "disabled": false,
+      "i": 59,
+      "pressed": "",
+      "selected": "",
+      "text": "",
+      "title": "Refresh hot strikes"
+    },
+    {
+      "aria": "Toggle auto-refresh",
+      "cls": "iconbtn iconbtn-txt",
+      "disabled": false,
+      "i": 60,
+      "pressed": "",
+      "selected": "",
+      "text": "Auto refresh",
+      "title": "Auto-refresh hot strikes every 15s"
+    },
+    {
+      "aria": "Toggle Ghost projection",
+      "cls": "iconbtn iconbtn-txt btn-ghost",
+      "disabled": false,
+      "i": 61,
+      "pressed": "",
+      "selected": "",
+      "text": "Ghost",
+      "title": "Ghost — project the next 15 minutes of price from the dealer hedging surface (SPY/QQQ)"
+    },
+    {
+      "aria": "Expand chart to full screen",
+      "cls": "iconbtn iconbtn-txt chart-expand-btn",
+      "disabled": false,
+      "i": 62,
+      "pressed": "",
+      "selected": "",
+      "text": "Expand",
+      "title": "Expand chart to full screen"
+    },
+    {
+      "aria": "",
+      "cls": "on",
+      "disabled": false,
+      "i": 63,
+      "pressed": "",
+      "selected": "",
+      "text": ">5k",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "",
+      "disabled": false,
+      "i": 64,
+      "pressed": "",
+      "selected": "",
+      "text": ">50k",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "",
+      "disabled": false,
+      "i": 65,
+      "pressed": "",
+      "selected": "",
+      "text": ">100k",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "ns-sq",
+      "disabled": false,
+      "i": 66,
+      "pressed": "",
+      "selected": "",
+      "text": "SQ",
+      "title": "Stream SPY + QQQ prints together"
+    },
+    {
+      "aria": "Exit full screen",
+      "cls": "chart-full-close",
+      "disabled": false,
+      "i": 67,
+      "pressed": "",
+      "selected": "",
+      "text": "✕",
+      "title": "Exit full screen"
+    },
+    {
+      "aria": "",
+      "cls": "on",
+      "disabled": false,
+      "i": 68,
+      "pressed": "",
+      "selected": "",
+      "text": "GEX",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "",
+      "disabled": false,
+      "i": 69,
+      "pressed": "",
+      "selected": "",
+      "text": "VEX",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "on",
+      "disabled": false,
+      "i": 70,
+      "pressed": "",
+      "selected": "",
+      "text": "≤$0.50",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "",
+      "disabled": false,
+      "i": 71,
+      "pressed": "",
+      "selected": "",
+      "text": "≤$0.25",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "",
+      "disabled": false,
+      "i": 72,
+      "pressed": "",
+      "selected": "",
+      "text": "≤$0.10",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "",
+      "disabled": false,
+      "i": 73,
+      "pressed": "",
+      "selected": "",
+      "text": "All px",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "on",
+      "disabled": false,
+      "i": 74,
+      "pressed": "",
+      "selected": "",
+      "text": "$5k",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "",
+      "disabled": false,
+      "i": 75,
+      "pressed": "",
+      "selected": "",
+      "text": "$10k",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "",
+      "disabled": false,
+      "i": 76,
+      "pressed": "",
+      "selected": "",
+      "text": "$25k",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "",
+      "disabled": false,
+      "i": 77,
+      "pressed": "",
+      "selected": "",
+      "text": "$50k",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "",
+      "disabled": false,
+      "i": 78,
+      "pressed": "",
+      "selected": "",
+      "text": "$100k",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "on",
+      "disabled": false,
+      "i": 79,
+      "pressed": "",
+      "selected": "",
+      "text": "All",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "",
+      "disabled": false,
+      "i": 80,
+      "pressed": "",
+      "selected": "",
+      "text": "Calls",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "",
+      "disabled": false,
+      "i": 81,
+      "pressed": "",
+      "selected": "",
+      "text": "Puts",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "on",
+      "disabled": false,
+      "i": 82,
+      "pressed": "",
+      "selected": "",
+      "text": "Bid/Ask",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "",
+      "disabled": false,
+      "i": 83,
+      "pressed": "",
+      "selected": "",
+      "text": "Ask",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "",
+      "disabled": false,
+      "i": 84,
+      "pressed": "",
+      "selected": "",
+      "text": "Bid",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "on",
+      "disabled": false,
+      "i": 85,
+      "pressed": "",
+      "selected": "",
+      "text": "Moneyness",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "",
+      "disabled": false,
+      "i": 86,
+      "pressed": "",
+      "selected": "",
+      "text": "OTM",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "",
+      "disabled": false,
+      "i": 87,
+      "pressed": "",
+      "selected": "",
+      "text": "ITM",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "flow-exp-btn",
+      "disabled": false,
+      "i": 88,
+      "pressed": "",
+      "selected": "",
+      "text": "Expirations",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "on",
+      "disabled": false,
+      "i": 89,
+      "pressed": "",
+      "selected": "",
+      "text": "≥5% OTM",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "",
+      "disabled": false,
+      "i": 90,
+      "pressed": "",
+      "selected": "",
+      "text": "≥10%",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "",
+      "disabled": false,
+      "i": 91,
+      "pressed": "",
+      "selected": "",
+      "text": "≥25%",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "",
+      "disabled": false,
+      "i": 92,
+      "pressed": "",
+      "selected": "",
+      "text": "≥50%",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "on",
+      "disabled": false,
+      "i": 93,
+      "pressed": "",
+      "selected": "",
+      "text": "$5k",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "",
+      "disabled": false,
+      "i": 94,
+      "pressed": "",
+      "selected": "",
+      "text": "$10k",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "",
+      "disabled": false,
+      "i": 95,
+      "pressed": "",
+      "selected": "",
+      "text": "$25k",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "",
+      "disabled": false,
+      "i": 96,
+      "pressed": "",
+      "selected": "",
+      "text": "$50k",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "on",
+      "disabled": false,
+      "i": 97,
+      "pressed": "",
+      "selected": "",
+      "text": "All",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "",
+      "disabled": false,
+      "i": 98,
+      "pressed": "",
+      "selected": "",
+      "text": "Calls",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "",
+      "disabled": false,
+      "i": 99,
+      "pressed": "",
+      "selected": "",
+      "text": "Puts",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "iconbtn iconbtn-txt",
+      "disabled": false,
+      "i": 100,
+      "pressed": "",
+      "selected": "",
+      "text": "Rescan",
+      "title": "Re-scan the sector"
+    },
+    {
+      "aria": "",
+      "cls": "on",
+      "disabled": false,
+      "i": 101,
+      "pressed": "",
+      "selected": "",
+      "text": "Call",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "",
+      "disabled": false,
+      "i": 102,
+      "pressed": "",
+      "selected": "",
+      "text": "Put",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "scan-run scan-cluster",
+      "disabled": false,
+      "i": 103,
+      "pressed": "",
+      "selected": "",
+      "text": "Search",
+      "title": ""
+    },
+    {
+      "aria": "Add ticker",
+      "cls": "wl-plus",
+      "disabled": false,
+      "i": 104,
+      "pressed": "",
+      "selected": "",
+      "text": "+",
+      "title": "Add ticker"
+    },
+    {
+      "aria": "Remove NBIS",
+      "cls": "wl-del",
+      "disabled": false,
+      "i": 105,
+      "pressed": "",
+      "selected": "",
+      "text": "×",
+      "title": "Remove"
+    },
+    {
+      "aria": "Remove SPY",
+      "cls": "wl-del",
+      "disabled": false,
+      "i": 106,
+      "pressed": "",
+      "selected": "",
+      "text": "×",
+      "title": "Remove"
+    },
+    {
+      "aria": "Remove DRAM",
+      "cls": "wl-del",
+      "disabled": false,
+      "i": 107,
+      "pressed": "",
+      "selected": "",
+      "text": "×",
+      "title": "Remove"
+    },
+    {
+      "aria": "Remove ARM",
+      "cls": "wl-del",
+      "disabled": false,
+      "i": 108,
+      "pressed": "",
+      "selected": "",
+      "text": "×",
+      "title": "Remove"
+    },
+    {
+      "aria": "Remove CRDO",
+      "cls": "wl-del",
+      "disabled": false,
+      "i": 109,
+      "pressed": "",
+      "selected": "",
+      "text": "×",
+      "title": "Remove"
+    },
+    {
+      "aria": "Remove RXT",
+      "cls": "wl-del",
+      "disabled": false,
+      "i": 110,
+      "pressed": "",
+      "selected": "",
+      "text": "×",
+      "title": "Remove"
+    },
+    {
+      "aria": "Remove AVGO",
+      "cls": "wl-del",
+      "disabled": false,
+      "i": 111,
+      "pressed": "",
+      "selected": "",
+      "text": "×",
+      "title": "Remove"
+    },
+    {
+      "aria": "Remove QQQ",
+      "cls": "wl-del",
+      "disabled": false,
+      "i": 112,
+      "pressed": "",
+      "selected": "",
+      "text": "×",
+      "title": "Remove"
+    },
+    {
+      "aria": "Remove MSFT",
+      "cls": "wl-del",
+      "disabled": false,
+      "i": 113,
+      "pressed": "",
+      "selected": "",
+      "text": "×",
+      "title": "Remove"
+    },
+    {
+      "aria": "Previous month",
+      "cls": "jr-nav",
+      "disabled": false,
+      "i": 114,
+      "pressed": "",
+      "selected": "",
+      "text": "",
+      "title": "Previous month"
+    },
+    {
+      "aria": "Next month",
+      "cls": "jr-nav",
+      "disabled": false,
+      "i": 115,
+      "pressed": "",
+      "selected": "",
+      "text": "",
+      "title": "Next month"
+    },
+    {
+      "aria": "",
+      "cls": "jr-today",
+      "disabled": false,
+      "i": 116,
+      "pressed": "",
+      "selected": "",
+      "text": "Today",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "jr-savebtn",
+      "disabled": false,
+      "i": 117,
+      "pressed": "",
+      "selected": "",
+      "text": "Save image",
+      "title": "Save your calendar as an image"
+    },
+    {
+      "aria": "",
+      "cls": "jr-cell ",
+      "disabled": false,
+      "i": 118,
+      "pressed": "",
+      "selected": "",
+      "text": "1",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "jr-cell ",
+      "disabled": false,
+      "i": 119,
+      "pressed": "",
+      "selected": "",
+      "text": "2",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "jr-cell ",
+      "disabled": false,
+      "i": 120,
+      "pressed": "",
+      "selected": "",
+      "text": "3",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "jr-cell ",
+      "disabled": false,
+      "i": 121,
+      "pressed": "",
+      "selected": "",
+      "text": "4",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "jr-cell ",
+      "disabled": false,
+      "i": 122,
+      "pressed": "",
+      "selected": "",
+      "text": "5",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "jr-cell ",
+      "disabled": false,
+      "i": 123,
+      "pressed": "",
+      "selected": "",
+      "text": "6",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "jr-cell ",
+      "disabled": false,
+      "i": 124,
+      "pressed": "",
+      "selected": "",
+      "text": "7",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "jr-cell ",
+      "disabled": false,
+      "i": 125,
+      "pressed": "",
+      "selected": "",
+      "text": "8",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "jr-cell ",
+      "disabled": false,
+      "i": 126,
+      "pressed": "",
+      "selected": "",
+      "text": "9",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "jr-cell ",
+      "disabled": false,
+      "i": 127,
+      "pressed": "",
+      "selected": "",
+      "text": "10",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "jr-cell ",
+      "disabled": false,
+      "i": 128,
+      "pressed": "",
+      "selected": "",
+      "text": "11",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "jr-cell ",
+      "disabled": false,
+      "i": 129,
+      "pressed": "",
+      "selected": "",
+      "text": "12",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "jr-cell ",
+      "disabled": false,
+      "i": 130,
+      "pressed": "",
+      "selected": "",
+      "text": "13",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "jr-cell ",
+      "disabled": false,
+      "i": 131,
+      "pressed": "",
+      "selected": "",
+      "text": "14",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "jr-cell profit",
+      "disabled": false,
+      "i": 132,
+      "pressed": "",
+      "selected": "",
+      "text": "15+$616",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "jr-cell profit",
+      "disabled": false,
+      "i": 133,
+      "pressed": "",
+      "selected": "",
+      "text": "16+$400",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "jr-cell ",
+      "disabled": false,
+      "i": 134,
+      "pressed": "",
+      "selected": "",
+      "text": "17",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "jr-cell  today",
+      "disabled": false,
+      "i": 135,
+      "pressed": "",
+      "selected": "",
+      "text": "18",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "jr-cell ",
+      "disabled": false,
+      "i": 136,
+      "pressed": "",
+      "selected": "",
+      "text": "19",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "jr-cell ",
+      "disabled": false,
+      "i": 137,
+      "pressed": "",
+      "selected": "",
+      "text": "20",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "jr-cell ",
+      "disabled": false,
+      "i": 138,
+      "pressed": "",
+      "selected": "",
+      "text": "21",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "jr-cell ",
+      "disabled": false,
+      "i": 139,
+      "pressed": "",
+      "selected": "",
+      "text": "22",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "jr-cell ",
+      "disabled": false,
+      "i": 140,
+      "pressed": "",
+      "selected": "",
+      "text": "23",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "jr-cell ",
+      "disabled": false,
+      "i": 141,
+      "pressed": "",
+      "selected": "",
+      "text": "24",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "jr-cell ",
+      "disabled": false,
+      "i": 142,
+      "pressed": "",
+      "selected": "",
+      "text": "25",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "jr-cell ",
+      "disabled": false,
+      "i": 143,
+      "pressed": "",
+      "selected": "",
+      "text": "26",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "jr-cell ",
+      "disabled": false,
+      "i": 144,
+      "pressed": "",
+      "selected": "",
+      "text": "27",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "jr-cell ",
+      "disabled": false,
+      "i": 145,
+      "pressed": "",
+      "selected": "",
+      "text": "28",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "jr-cell ",
+      "disabled": false,
+      "i": 146,
+      "pressed": "",
+      "selected": "",
+      "text": "29",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "jr-cell ",
+      "disabled": false,
+      "i": 147,
+      "pressed": "",
+      "selected": "",
+      "text": "30",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "jr-cell ",
+      "disabled": false,
+      "i": 148,
+      "pressed": "",
+      "selected": "",
+      "text": "31",
+      "title": ""
+    },
+    {
+      "aria": "Delete saved chart",
+      "cls": "save-del",
+      "disabled": false,
+      "i": 149,
+      "pressed": "",
+      "selected": "",
+      "text": "×",
+      "title": "Delete"
+    },
+    {
+      "aria": "Delete saved chart",
+      "cls": "save-del",
+      "disabled": false,
+      "i": 150,
+      "pressed": "",
+      "selected": "",
+      "text": "×",
+      "title": "Delete"
+    },
+    {
+      "aria": "Delete saved chart",
+      "cls": "save-del",
+      "disabled": false,
+      "i": 151,
+      "pressed": "",
+      "selected": "",
+      "text": "×",
+      "title": "Delete"
+    },
+    {
+      "aria": "Delete saved chart",
+      "cls": "save-del",
+      "disabled": false,
+      "i": 152,
+      "pressed": "",
+      "selected": "",
+      "text": "×",
+      "title": "Delete"
+    },
+    {
+      "aria": "Delete saved chart",
+      "cls": "save-del",
+      "disabled": false,
+      "i": 153,
+      "pressed": "",
+      "selected": "",
+      "text": "×",
+      "title": "Delete"
+    },
+    {
+      "aria": "",
+      "cls": "on",
+      "disabled": false,
+      "i": 154,
+      "pressed": "",
+      "selected": "",
+      "text": "Short term",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "",
+      "disabled": false,
+      "i": 155,
+      "pressed": "",
+      "selected": "",
+      "text": "Long term",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "",
+      "disabled": false,
+      "i": 156,
+      "pressed": "",
+      "selected": "",
+      "text": "LEAP",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "scan-run",
+      "disabled": false,
+      "i": 157,
+      "pressed": "",
+      "selected": "",
+      "text": "Cipher Model Scan",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "scan-run scan-cluster",
+      "disabled": false,
+      "i": 158,
+      "pressed": "",
+      "selected": "",
+      "text": "Liq scan",
+      "title": "Liquidity-vacuum runway: a dominant level far from spot with thin liquidity in between and a second line stacked near it."
+    },
+    {
+      "aria": "",
+      "cls": "scan-run scan-cluster",
+      "disabled": false,
+      "i": 159,
+      "pressed": "",
+      "selected": "",
+      "text": "Cluster scan",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "scan-run scan-daytrade",
+      "disabled": false,
+      "i": 160,
+      "pressed": "",
+      "selected": "",
+      "text": "FlashBETA",
+      "title": "Flash intraday model: nearest-exp GEX/VEX floors & ceilings, session key levels (PMH/PML/PDH/PDL/PWH/PWL), multi-timeframe volume profile, VWAP, momentum, touch/reaction and last-5-min flow across the 12 most-liquid names. First targets are ATR-scaled rungs with the structural wall as the stretch."
+    },
+    {
+      "aria": "",
+      "cls": "scan-run scan-daytrade",
+      "disabled": false,
+      "i": 161,
+      "pressed": "",
+      "selected": "",
+      "text": "Flash IndexBETA",
+      "title": "Flash Index: the same intraday model on the three headline index ETFs (QQQ, SPY, IWM). Not logged."
+    },
+    {
+      "aria": "",
+      "cls": "scan-run scan-agent",
+      "disabled": false,
+      "i": 162,
+      "pressed": "false",
+      "selected": "",
+      "text": "Flash AgenticBETA",
+      "title": "Flash Agentic: a living monitor that watches every name every minute during market hours and only surfaces a setup once it triggers (a confirmed break or reject, or price arming at the trigger). Extends targets rung by rung as each is crushed, greys out finished plays."
+    },
+    {
+      "aria": "",
+      "cls": "scan-csv",
+      "disabled": false,
+      "i": 163,
+      "pressed": "",
+      "selected": "",
+      "text": "Download .CSV",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "scan-csv scan-flash-db",
+      "disabled": false,
+      "i": 164,
+      "pressed": "",
+      "selected": "",
+      "text": "Flash DB .CSV",
+      "title": "Admin: download the full Flash scan capture (every card ever saved to the database, with all 25 factors) as CSV."
+    },
+    {
+      "aria": "",
+      "cls": "scan-csv scan-flash-db",
+      "disabled": false,
+      "i": 165,
+      "pressed": "",
+      "selected": "",
+      "text": "Flash Agent .CSV",
+      "title": "Admin: download the full Flash Agentic capture (every surfaced/cooling card per logged heartbeat, with edge, progress, rolls and how each resolved) as CSV."
+    },
+    {
+      "aria": "",
+      "cls": "on",
+      "disabled": false,
+      "i": 166,
+      "pressed": "",
+      "selected": "",
+      "text": "All",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "",
+      "disabled": false,
+      "i": 167,
+      "pressed": "",
+      "selected": "",
+      "text": "Upside",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "",
+      "disabled": false,
+      "i": 168,
+      "pressed": "",
+      "selected": "",
+      "text": "Downside",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "on",
+      "disabled": false,
+      "i": 169,
+      "pressed": "",
+      "selected": "",
+      "text": "All",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "",
+      "disabled": false,
+      "i": 170,
+      "pressed": "",
+      "selected": "",
+      "text": "Triple",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "",
+      "disabled": false,
+      "i": 171,
+      "pressed": "",
+      "selected": "",
+      "text": "Quad",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "on",
+      "disabled": false,
+      "i": 172,
+      "pressed": "",
+      "selected": "",
+      "text": "All",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "",
+      "disabled": false,
+      "i": 173,
+      "pressed": "",
+      "selected": "",
+      "text": "Upside",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "",
+      "disabled": false,
+      "i": 174,
+      "pressed": "",
+      "selected": "",
+      "text": "Downside",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "on",
+      "disabled": false,
+      "i": 175,
+      "pressed": "",
+      "selected": "",
+      "text": "All",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "",
+      "disabled": false,
+      "i": 176,
+      "pressed": "",
+      "selected": "",
+      "text": "Bullish",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "",
+      "disabled": false,
+      "i": 177,
+      "pressed": "",
+      "selected": "",
+      "text": "Bearish",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "",
+      "disabled": false,
+      "i": 178,
+      "pressed": "",
+      "selected": "",
+      "text": "Neutral",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "agent-refresh",
+      "disabled": false,
+      "i": 179,
+      "pressed": "",
+      "selected": "",
+      "text": "↻ Refresh",
+      "title": "Pull the freshest top setups now, replacing any stale holds if something better has appeared"
+    },
+    {
+      "aria": "Refresh live prices",
+      "cls": "iconbtn",
+      "disabled": false,
+      "i": 180,
+      "pressed": "",
+      "selected": "",
+      "text": "",
+      "title": "Refresh live prices"
+    },
+    {
+      "aria": "",
+      "cls": "iconbtn iconbtn-txt",
+      "disabled": false,
+      "i": 181,
+      "pressed": "",
+      "selected": "",
+      "text": "Auto refresh",
+      "title": "Auto-refresh prices every 15s"
+    },
+    {
+      "aria": "",
+      "cls": "scan-run scan-cluster",
+      "disabled": false,
+      "i": 182,
+      "pressed": "",
+      "selected": "",
+      "text": "Run scan",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "scan-run scan-cluster",
+      "disabled": false,
+      "i": 183,
+      "pressed": "",
+      "selected": "",
+      "text": "Arb",
+      "title": "FACAS — a fast convexity/arb discovery sweep across the FULL universe (~578 names). A Tier-1 screener: promote the best names into this watchlist."
+    },
+    {
+      "aria": "",
+      "cls": "iconbtn iconbtn-txt",
+      "disabled": false,
+      "i": 184,
+      "pressed": "",
+      "selected": "",
+      "text": "Download CSV",
+      "title": "Download the FACAS results as a CSV"
+    },
+    {
+      "aria": "",
+      "cls": "scan-run scan-cluster",
+      "disabled": false,
+      "i": 185,
+      "pressed": "",
+      "selected": "",
+      "text": "RF",
+      "title": "RF — model-free static-arbitrage hunter across the FULL universe. Flags executable no-arb-bound violations (boxes, verticals, flies, calendars, conversions). Most hits are phantom; real ones are rare."
+    },
+    {
+      "aria": "",
+      "cls": "iconbtn iconbtn-txt",
+      "disabled": false,
+      "i": 186,
+      "pressed": "",
+      "selected": "",
+      "text": "Download CSV",
+      "title": "Download the RF anomalies as a CSV"
+    },
+    {
+      "aria": "",
+      "cls": "scan-run scan-cluster",
+      "disabled": false,
+      "i": 187,
+      "pressed": "",
+      "selected": "",
+      "text": "DX",
+      "title": "DX — Directional efficiency. Finds the best ~0.90-delta ITM call/put to express a Cipher cluster move across the FULL universe: cleanest runway, most capital-efficient, tightest spread, cost, and payoff at the golden strike."
+    },
+    {
+      "aria": "",
+      "cls": "iconbtn iconbtn-txt",
+      "disabled": false,
+      "i": 188,
+      "pressed": "",
+      "selected": "",
+      "text": "Download CSV",
+      "title": "Download the DX results as a CSV"
+    },
+    {
+      "aria": "",
+      "cls": "iconbtn iconbtn-txt on",
+      "disabled": false,
+      "i": 189,
+      "pressed": "",
+      "selected": "",
+      "text": "Executable only",
+      "title": "Hide spreads whose live quotes are crossed or unworkable"
+    },
+    {
+      "aria": "",
+      "cls": "audit-f on",
+      "disabled": false,
+      "i": 190,
+      "pressed": "",
+      "selected": "",
+      "text": "All",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "audit-f",
+      "disabled": false,
+      "i": 191,
+      "pressed": "",
+      "selected": "",
+      "text": "New IP",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "audit-f",
+      "disabled": false,
+      "i": 192,
+      "pressed": "",
+      "selected": "",
+      "text": "Logins",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "audit-f",
+      "disabled": false,
+      "i": 193,
+      "pressed": "",
+      "selected": "",
+      "text": "DB writes",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "audit-f",
+      "disabled": false,
+      "i": 194,
+      "pressed": "",
+      "selected": "",
+      "text": "Tamper",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "audit-f",
+      "disabled": false,
+      "i": 195,
+      "pressed": "",
+      "selected": "",
+      "text": "Devtools",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "audit-f",
+      "disabled": false,
+      "i": 196,
+      "pressed": "",
+      "selected": "",
+      "text": "Scrape",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "on",
+      "disabled": false,
+      "i": 197,
+      "pressed": "",
+      "selected": "",
+      "text": "5s",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "",
+      "disabled": false,
+      "i": 198,
+      "pressed": "",
+      "selected": "",
+      "text": "15s",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "",
+      "disabled": false,
+      "i": 199,
+      "pressed": "",
+      "selected": "",
+      "text": "30s",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "set-btn primary",
+      "disabled": false,
+      "i": 200,
+      "pressed": "",
+      "selected": "",
+      "text": "Connect",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "set-btn ghost",
+      "disabled": false,
+      "i": 201,
+      "pressed": "",
+      "selected": "",
+      "text": "Disconnect",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "set-btn primary",
+      "disabled": false,
+      "i": 202,
+      "pressed": "",
+      "selected": "",
+      "text": "Submit",
+      "title": ""
+    },
+    {
+      "aria": "Collapse",
+      "cls": "cc-btn",
+      "disabled": false,
+      "i": 203,
+      "pressed": "",
+      "selected": "",
+      "text": "−",
+      "title": "Collapse"
+    },
+    {
+      "aria": "Close",
+      "cls": "cc-btn",
+      "disabled": false,
+      "i": 204,
+      "pressed": "",
+      "selected": "",
+      "text": "×",
+      "title": "Close"
+    },
+    {
+      "aria": "Close",
+      "cls": "jr-x",
+      "disabled": false,
+      "i": 205,
+      "pressed": "",
+      "selected": "",
+      "text": "×",
+      "title": "Close"
+    },
+    {
+      "aria": "",
+      "cls": "jr-seg-btn profit on",
+      "disabled": false,
+      "i": 206,
+      "pressed": "",
+      "selected": "",
+      "text": "Profit",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "jr-seg-btn loss",
+      "disabled": false,
+      "i": 207,
+      "pressed": "",
+      "selected": "",
+      "text": "Loss",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "jr-clear",
+      "disabled": false,
+      "i": 208,
+      "pressed": "",
+      "selected": "",
+      "text": "Clear day",
+      "title": ""
+    },
+    {
+      "aria": "",
+      "cls": "jr-save",
+      "disabled": false,
+      "i": 209,
+      "pressed": "",
+      "selected": "",
+      "text": "Save day",
+      "title": ""
+    },
+    {
+      "aria": "Close",
+      "cls": "trade-x",
+      "disabled": false,
+      "i": 210,
+      "pressed": "",
+      "selected": "",
+      "text": "×",
+      "title": ""
+    },
+    {
+      "aria": "Close",
+      "cls": "trade-x",
+      "disabled": false,
+      "i": 211,
+      "pressed": "",
+      "selected": "",
+      "text": "×",
+      "title": ""
+    },
+    {
+      "aria": "Close",
+      "cls": "trade-x",
+      "disabled": false,
+      "i": 212,
+      "pressed": "",
+      "selected": "",
+      "text": "×",
+      "title": ""
+    }
+  ],
+  "text": "CIPHER STRIKE MATRIX / SLV $50.78 +0.77% 1 2 Full Compact ±3% ±6% ±12% All GEX VEX Matrix Sniper Auto refresh Welcome Mars! 🚀 Logout WORKSPACE Strike Matrix Night Vision Spyglass My Watchlists Journal CIPHER X Trident CIPHER X Chart Saves CIPHER X Setup Scanner CIPHER X ACCOUNT Settings STRIKE Jul 20 2d Jul 22 4d Jul 24 6d Jul 27 9d Jul 29 11d 125 — — $224 — — 110 — — $335 — — 105 — — $365 — — 100 — — $2.8K — — 95 — — $40 — — 92 — — $208 — — 91 — — $80 — — 90 $0 $3 $289 — — 89 $0 — $53 — — 88 $0 — -$84 — — 87 $0 — $22 — — 86 $0 $58 $6 — — 85 $0 $125 $1.7K — — 84 $0 -$13 $125 -$22 -$24 83 $0 — — — $6 82 $0 — $135 — — 81 $0 — $84 — — 80 $0 -$15 $1.7K — — 79 $0 — $139 — — 78 $0 — $40 — — 77 $0 $641 $940 — — 76 -$119 -$9 $1.0K — — 75 -$147 — $3.0K — — 74 -$119 — $815 — $1.5K 73 -$150 — $939 — — 72.5 — — $1.8K — — 72 $77 — $78.8K — $11 71.5 — — $737 — — 71 -$168 — $1.7K — — 70.5 — — $845 — — 70 $125 $48 $8.0K $6 $13 69.5 — — $298 — — 69 $20 $60 $3.7K $7 — 68.5 — — $440 — — 68 -$187 $9 $3.1K $7 — 67.5 — — $1.9K — — 67 -$241 $8 $2.3K $127 — 66.5 — — $4.0K — — 66 -$123 $170 $4.9K $163 $18 65.5 — — $4.1K — — 65 -$295 $107 $11.1K $213 $899 64.5 — — $5.3K — — 64 $409 -$870 $2.3K $127 $48 63.5 — — $3.5K — — 63 $268 $528 $5.7K $962 — 62.5 $239 -$133 $79.0K — $1.2K 62 $1.3K $555 $7.4K -$102 — 61.5 $431 $19 $1.1K $897 $38 61 -$618 $204 -$3.6K $149 $42 60.5 $950 $468 $146.8K $36 $44 60 $4.5K $4.9K $265.3K $1.7K $879 59.5 $3.7K $139 $3.7K $542 -$122 59 $2.9K $10.1K $18.0K $2.5K $845 58.5 $2.4K $3.7K $4.0K $158 $1.5K 58 $4.8K $2.9K $303.5K $3.6K $4.2K 57.5 $59.1K $216.9K $51.5K $8.2K -$10 57 $7.6K $19.1K $35.3K $2.3K $4.2K 56.5 $42.2K $104.4K -$12.9K $5.3K $1.5K 56 $16.1K $10.4K $200.4K $6.5K $5.1K 55.5 $48.6K $2.7K $60.7K $15.6K $1.3K 55 $79.1K $265.2K $467.8K -$1.6K $15.7K 54.5 $23.4K $39.4K $52.5K -$28.4K $3.1K 54 $135.8K $56.9K -$326.7K $11.4K $54.0K 53.5 $44.0K $3.1K -$604.7K $2.3K $2.8K 53 $665.1K $31.5K $377.8K $23.0K $1.6K 52.5 $95.3K $90.1K $315.5K $14.7K $3.2K 52 $186.4K -$73.3K -$694.9K $55.1K $5.2K 51.5 -$70.9K -$71.1K -$22.8K $8.3K $4.2K 51 -$61.3K -$51.4K $501.8K $10.7K -$15.8K SPOT 50.78 50.5 $11.2K -$1.6M -$175.1K $14.3K -$1.8K 50 -$527.9K -$141.2K $73.6K $37.7K $903 49.5 -$25.8K -$37.8K -$96.2K -$15.1K -$56 49 -$89.1K -$38.1K -$88.0K $2.2K -$3.4K 48.5 -$705.7K -$27.7K -$286.0K $6.0K -$198 48 -$464.4K -$43.8K -$114.1K $9.3K $2.0K 47.5 -$12.3K -$6.6K -$122.1K -$29.6K $4.7K 47 -$20.8K -$19.6K -$28.3K -$3.3K -$2.4K 46.5 — -$6.9K -$3.9K $10.3K $3.4K 46 -$106.7K",
+  "title": "Cipher — Strike Matrix",
+  "url": "https://www.accessobsidian.com/app#SLV"
+}

@@ -1,0 +1,29 @@
+[Unit]
+Description=Cipher preregistered Cluster Kronos prospective watcher
+Wants=network-online.target
+After=network-online.target cipher-browser-folder-sync.service
+
+[Service]
+Type=simple
+User=aarav
+Group=aarav
+WorkingDirectory=/home/aarav/Aarav/cipher/cipher-system
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/home/aarav/.venvs/cipher/bin/python -u -m core.cluster_kronos_forward --root /home/aarav/Aarav/cipher-system/CipherCapture --capture-root /home/aarav/Aarav/cipher/cipher-system/data/browser_ingest/raw_windows/device-windows --registration /home/aarav/Aarav/cipher/cipher-system/config/cluster_kronos_forward_preregistered.json --watch --interval-seconds 60
+Restart=always
+RestartSec=10
+TimeoutStopSec=30
+KillSignal=SIGTERM
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=/home/aarav/Aarav/cipher-system/CipherCapture
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=cipher-cluster-kronos-forward
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cipher.local/schemas/research/factor-candidate.schema.json",
+  "title": "Cipher Safe Factor Candidate",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "name",
+    "version",
+    "expression",
+    "hypothesis",
+    "expected_direction"
+  ],
+  "properties": {
+    "candidate_id": {"type": "string"},
+    "name": {"type": "string", "minLength": 1},
+    "version": {"type": "string", "minLength": 1},
+    "expression": {"type": "string", "minLength": 1},
+    "hypothesis": {"type": "string", "minLength": 1},
+    "expected_direction": {"type": "string", "minLength": 1},
+    "availability_lag_seconds": {"type": "integer", "minimum": 0},
+    "missing_value_policy": {"type": "string"},
+    "allowed_use": {"const": "context"},
+    "metadata": {"type": "object"}
+  }
+}

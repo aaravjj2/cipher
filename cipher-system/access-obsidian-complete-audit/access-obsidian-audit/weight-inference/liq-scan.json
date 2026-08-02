@@ -1,0 +1,498 @@
+{
+  "label": "Liq scan",
+  "capturedAt": "2026-07-19T03:36:13.418Z",
+  "bodyText": "CIPHER SETUP SCANNER / SLV $50.78 +0.77% 1 2 Welcome Mars! 🚀 Logout WORKSPACE Strike Matrix Night Vision Spyglass My Watchlists Journal CIPHER X Trident CIPHER X Chart Saves CIPHER X Setup Scanner CIPHER X ACCOUNT Settings Setup Scanner The Cipher engine ranks the entire universe and surfaces the 30 highest-conviction setups. Powered by the Cipher proprietary model. Short term Long term LEAP Scanning… Liq scan Cluster scan CLUSTER EXP Nearest (1 Exp) Fri Jul 24 Fri Jul 31 Fri Aug 7 Fri Aug 14 Fri Aug 21 Fri Aug 28 Fri Sep 4 Fri Sep 11 Flash BETA Flash Index BETA Flash Agentic BETA LEAP scans options expiring within ~120 market days. Scans aren't saved, so download the .CSV to keep your results. A full-universe scan can take a few minutes; keep this screen open and check back when it finishes. Scanning the universe… 228/578 tickers (39%)",
+  "cards": [
+    {
+      "i": 74,
+      "rect": {
+        "h": 414,
+        "w": 1180,
+        "x": 359,
+        "y": 81
+      },
+      "tag": "div",
+      "text": "Setup Scanner The Cipher engine ranks the entire universe and surfaces the 30 highest-conviction setups. Powered by the Cipher proprietary model. Short term Long term LEAP Scanning… Liq scan Cluster scan CLUSTER EXP Nearest (1 Exp) Fri Jul 24 Fri Jul 31 Fri Aug 7 Fri Aug 14 Fri Aug 21 Fri Aug 28 Fri Sep 4 Fri Sep 11 Flash BETA Flash Index BETA Flash Agentic BETA LEAP scans options expiring within ~120 market days. Scans aren't saved, so download the .CSV to keep your results. A full-universe scan can take a few minutes; keep this screen open and check back when it finishes. Scanning the univer"
+    },
+    {
+      "i": 75,
+      "rect": {
+        "h": 69,
+        "w": 1180,
+        "x": 359,
+        "y": 81
+      },
+      "tag": "div",
+      "text": "Setup Scanner The Cipher engine ranks the entire universe and surfaces the 30 highest-conviction setups. Powered by the Cipher proprietary model."
+    },
+    {
+      "i": 77,
+      "rect": {
+        "h": 35,
+        "w": 720,
+        "x": 359,
+        "y": 115
+      },
+      "tag": "p",
+      "text": "The Cipher engine ranks the entire universe and surfaces the 30 highest-conviction setups. Powered by the Cipher proprietary model."
+    },
+    {
+      "i": 78,
+      "rect": {
+        "h": 145,
+        "w": 1180,
+        "x": 359,
+        "y": 170
+      },
+      "tag": "div",
+      "text": "Short term Long term LEAP Scanning… Liq scan Cluster scan CLUSTER EXP Nearest (1 Exp) Fri Jul 24 Fri Jul 31 Fri Aug 7 Fri Aug 14 Fri Aug 21 Fri Aug 28 Fri Sep 4 Fri Sep 11 Flash BETA Flash Index BETA Flash Agentic BETA"
+    },
+    {
+      "i": 79,
+      "rect": {
+        "h": 33,
+        "w": 1180,
+        "x": 359,
+        "y": 170
+      },
+      "tag": "div",
+      "text": "Short term Long term LEAP Scanning…"
+    },
+    {
+      "i": 80,
+      "rect": {
+        "h": 29,
+        "w": 223,
+        "x": 359,
+        "y": 172
+      },
+      "tag": "div",
+      "text": "Short term Long term LEAP"
+    },
+    {
+      "i": 85,
+      "rect": {
+        "h": 45,
+        "w": 1180,
+        "x": 359,
+        "y": 213
+      },
+      "tag": "div",
+      "text": "Liq scan Cluster scan CLUSTER EXP Nearest (1 Exp) Fri Jul 24 Fri Jul 31 Fri Aug 7 Fri Aug 14 Fri Aug 21 Fri Aug 28 Fri Sep 4 Fri Sep 11"
+    },
+    {
+      "i": 88,
+      "rect": {
+        "h": 33,
+        "w": 235,
+        "x": 600,
+        "y": 225
+      },
+      "tag": "label",
+      "text": "CLUSTER EXP Nearest (1 Exp) Fri Jul 24 Fri Jul 31 Fri Aug 7 Fri Aug 14 Fri Aug 21 Fri Aug 28 Fri Sep 4 Fri Sep 11"
+    },
+    {
+      "i": 90,
+      "rect": {
+        "h": 33,
+        "w": 151,
+        "x": 684,
+        "y": 225
+      },
+      "tag": "select",
+      "text": "Nearest (1 Exp) Fri Jul 24 Fri Jul 31 Fri Aug 7 Fri Aug 14 Fri Aug 21 Fri Aug 28 Fri Sep 4 Fri Sep 11"
+    },
+    {
+      "i": 91,
+      "rect": {
+        "h": 46,
+        "w": 1180,
+        "x": 359,
+        "y": 269
+      },
+      "tag": "div",
+      "text": "Flash BETA Flash Index BETA Flash Agentic BETA"
+    },
+    {
+      "i": 102,
+      "rect": {
+        "h": 15,
+        "w": 1180,
+        "x": 359,
+        "y": 327
+      },
+      "tag": "p",
+      "text": "LEAP scans options expiring within ~120 market days."
+    },
+    {
+      "i": 103,
+      "rect": {
+        "h": 62,
+        "w": 820,
+        "x": 359,
+        "y": 358
+      },
+      "tag": "div",
+      "text": "Scans aren't saved, so download the .CSV to keep your results. A full-universe scan can take a few minutes; keep this screen open and check back when it finishes."
+    },
+    {
+      "i": 106,
+      "rect": {
+        "h": 38,
+        "w": 765,
+        "x": 399,
+        "y": 370
+      },
+      "tag": "span",
+      "text": "Scans aren't saved, so download the .CSV to keep your results. A full-universe scan can take a few minutes; keep this screen open and check back when it finishes."
+    },
+    {
+      "i": 108,
+      "rect": {
+        "h": 31,
+        "w": 820,
+        "x": 359,
+        "y": 440
+      },
+      "tag": "div",
+      "text": "Scanning the universe… 228/578 tickers (39%)"
+    },
+    {
+      "i": 111,
+      "rect": {
+        "h": 15,
+        "w": 820,
+        "x": 359,
+        "y": 456
+      },
+      "tag": "span",
+      "text": "Scanning the universe… 228/578 tickers (39%)"
+    }
+  ],
+  "controls": [
+    {
+      "i": 1,
+      "rect": {
+        "h": 33,
+        "w": 99,
+        "x": 263,
+        "y": 11
+      },
+      "tag": "input",
+      "text": "",
+      "title": "",
+      "value": "SLV",
+      "visible": true
+    },
+    {
+      "i": 3,
+      "rect": {
+        "h": 24,
+        "w": 27,
+        "x": 576,
+        "y": 15
+      },
+      "tag": "button",
+      "text": "1",
+      "title": "Workspace 1",
+      "value": "",
+      "visible": true
+    },
+    {
+      "i": 4,
+      "rect": {
+        "h": 24,
+        "w": 29,
+        "x": 605,
+        "y": 15
+      },
+      "tag": "button",
+      "text": "2",
+      "title": "Workspace 2",
+      "value": "",
+      "visible": true
+    },
+    {
+      "i": 26,
+      "rect": {
+        "h": 24,
+        "w": 24,
+        "x": 146,
+        "y": 76
+      },
+      "tag": "button",
+      "text": "",
+      "title": "Collapse sidebar",
+      "value": "",
+      "visible": true
+    },
+    {
+      "i": 27,
+      "rect": {
+        "h": 34,
+        "w": 169,
+        "x": 10,
+        "y": 125
+      },
+      "tag": "button",
+      "text": "Strike Matrix",
+      "title": "",
+      "value": "",
+      "visible": true
+    },
+    {
+      "i": 28,
+      "rect": {
+        "h": 34,
+        "w": 169,
+        "x": 10,
+        "y": 161
+      },
+      "tag": "button",
+      "text": "Night Vision",
+      "title": "",
+      "value": "",
+      "visible": true
+    },
+    {
+      "i": 29,
+      "rect": {
+        "h": 34,
+        "w": 169,
+        "x": 10,
+        "y": 197
+      },
+      "tag": "button",
+      "text": "Spyglass",
+      "title": "",
+      "value": "",
+      "visible": true
+    },
+    {
+      "i": 30,
+      "rect": {
+        "h": 34,
+        "w": 169,
+        "x": 10,
+        "y": 233
+      },
+      "tag": "button",
+      "text": "My Watchlists",
+      "title": "",
+      "value": "",
+      "visible": true
+    },
+    {
+      "i": 31,
+      "rect": {
+        "h": 34,
+        "w": 169,
+        "x": 10,
+        "y": 269
+      },
+      "tag": "button",
+      "text": "Journal",
+      "title": "",
+      "value": "",
+      "visible": true
+    },
+    {
+      "i": 32,
+      "rect": {
+        "h": 34,
+        "w": 169,
+        "x": 10,
+        "y": 341
+      },
+      "tag": "button",
+      "text": "Trident CIPHER X",
+      "title": "",
+      "value": "",
+      "visible": true
+    },
+    {
+      "i": 33,
+      "rect": {
+        "h": 49,
+        "w": 169,
+        "x": 10,
+        "y": 377
+      },
+      "tag": "button",
+      "text": "Chart Saves CIPHER X",
+      "title": "",
+      "value": "",
+      "visible": true
+    },
+    {
+      "i": 34,
+      "rect": {
+        "h": 49,
+        "w": 169,
+        "x": 10,
+        "y": 428
+      },
+      "tag": "button",
+      "text": "Setup Scanner CIPHER X",
+      "title": "",
+      "value": "",
+      "visible": true
+    },
+    {
+      "i": 37,
+      "rect": {
+        "h": 34,
+        "w": 169,
+        "x": 10,
+        "y": 515
+      },
+      "tag": "button",
+      "text": "Settings",
+      "title": "",
+      "value": "",
+      "visible": true
+    },
+    {
+      "i": 119,
+      "rect": {
+        "h": 24,
+        "w": 84,
+        "x": 361,
+        "y": 175
+      },
+      "tag": "button",
+      "text": "Short term",
+      "title": "",
+      "value": "",
+      "visible": true
+    },
+    {
+      "i": 120,
+      "rect": {
+        "h": 24,
+        "w": 80,
+        "x": 447,
+        "y": 175
+      },
+      "tag": "button",
+      "text": "Long term",
+      "title": "",
+      "value": "",
+      "visible": true
+    },
+    {
+      "i": 121,
+      "rect": {
+        "h": 24,
+        "w": 49,
+        "x": 529,
+        "y": 175
+      },
+      "tag": "button",
+      "text": "LEAP",
+      "title": "",
+      "value": "",
+      "visible": true
+    },
+    {
+      "i": 122,
+      "rect": {
+        "h": 33,
+        "w": 111,
+        "x": 593,
+        "y": 170
+      },
+      "tag": "button",
+      "text": "Scanning…",
+      "title": "",
+      "value": "",
+      "visible": true
+    },
+    {
+      "i": 123,
+      "rect": {
+        "h": 35,
+        "w": 95,
+        "x": 359,
+        "y": 224
+      },
+      "tag": "button",
+      "text": "Liq scan",
+      "title": "Liquidity-vacuum runway: a dominant level far from spot with thin liquidity in between and a second line stacked near it.",
+      "value": "",
+      "visible": true
+    },
+    {
+      "i": 124,
+      "rect": {
+        "h": 35,
+        "w": 122,
+        "x": 466,
+        "y": 224
+      },
+      "tag": "button",
+      "text": "Cluster scan",
+      "title": "",
+      "value": "",
+      "visible": true
+    },
+    {
+      "i": 125,
+      "rect": {
+        "h": 33,
+        "w": 151,
+        "x": 684,
+        "y": 225
+      },
+      "tag": "select",
+      "text": "Nearest (1 Exp) Fri Jul 24 Fri Jul 31 Fri Aug 7 Fri Aug 14 Fri Aug 21 Fri Aug 28 Fri Sep 4 Fri Sep 11",
+      "title": "",
+      "value": "",
+      "visible": true
+    },
+    {
+      "i": 126,
+      "rect": {
+        "h": 35,
+        "w": 117,
+        "x": 359,
+        "y": 279
+      },
+      "tag": "button",
+      "text": "Flash BETA",
+      "title": "Flash intraday model: nearest-exp GEX/VEX floors & ceilings, sniper levels, multi-timeframe volume profile, VWAP, momentum, touch/reaction and last-5-min flow across the 12 most-liquid names. Built for a morning read.",
+      "value": "",
+      "visible": true
+    },
+    {
+      "i": 127,
+      "rect": {
+        "h": 35,
+        "w": 157,
+        "x": 488,
+        "y": 279
+      },
+      "tag": "button",
+      "text": "Flash Index BETA",
+      "title": "Flash Index: the same intraday model on the three headline index ETFs (QQQ, SPY, IWM). Not logged.",
+      "value": "",
+      "visible": true
+    },
+    {
+      "i": 128,
+      "rect": {
+        "h": 35,
+        "w": 188,
+        "x": 657,
+        "y": 279
+      },
+      "tag": "button",
+      "text": "Flash Agentic BETA",
+      "title": "Flash Agentic: a living monitor that surfaces the top 2 setups in real time, rolls targets as moves extend, and greys out finished plays. Runs on a 1-minute heartbeat.",
+      "value": "",
+      "visible": true
+    }
+  ],
+  "title": "Cipher — Strike Matrix",
+  "url": "https://www.accessobsidian.com/app#SLV"
+}

@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cipher.local/schemas/research/experiment-manifest.schema.json",
+  "title": "Cipher Experiment Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "experiment_id",
+    "strategy_id",
+    "dataset_id",
+    "feature_set_id",
+    "parameter_set",
+    "engine",
+    "code_hash",
+    "runtime_environment_id",
+    "random_seed",
+    "started_at",
+    "preregistered"
+  ],
+  "properties": {
+    "experiment_id": {"type": "string", "pattern": "^exp_[a-f0-9]{12,64}$"},
+    "strategy_id": {"type": "string", "pattern": "^strategy_[a-f0-9]{12,64}$"},
+    "dataset_id": {"type": "string", "pattern": "^ds_[a-f0-9]{12,64}$"},
+    "feature_set_id": {"type": "string", "minLength": 1},
+    "parameter_set": {"type": "object"},
+    "engine": {"enum": ["cipher_fast", "lean", "prospective", "paper", "imported"]},
+    "code_hash": {"type": "string", "minLength": 12},
+    "runtime_environment_id": {"type": "string", "minLength": 12},
+    "random_seed": {"type": "integer"},
+    "started_at": {"type": "string", "format": "date-time"},
+    "preregistered": {"type": "boolean"},
+    "hypothesis": {"type": "string"},
+    "parent_experiment_id": {"type": ["string", "null"]}
+  }
+}

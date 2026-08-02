@@ -1,0 +1,257 @@
+#!/usr/bin/env python3
+"""Alert when read-only Cipher market-data collectors become stale.
+
+Checks local SQLite capture databases and sends state-change notifications via
+Hermes.  This is monitoring only; it never calls brokerage trading endpoints.
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import sqlite3
+import subprocess
+import sys
+from datetime import datetime, time, timezone
+from pathlib import Path
+from typing import Any
+from zoneinfo import ZoneInfo
+
+from hermes_delivery import send_hermes_message
+
+
+ROOT = Path(__file__).resolve().parents[1]
+DATA = ROOT / "data"
+DEFAULT_STATE = DATA / "alerts" / "data_health_state.json"
+GOVERNANCE_RUNNER = ROOT.parent / "infra" / "gcp-cipher-vm" / "bin" / "run-governance-catalog.sh"
+ARCHIVE_RUNNER = ROOT / "scripts" / "archive_live_option_chains.py"
+NY = ZoneInfo("America/New_York")
+
+
+def utcnow() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def parse_dt(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00")).astimezone(timezone.utc)
+    except ValueError:
+        return None
+
+
+def market_window(kind: str) -> bool:
+    now = datetime.now(NY)
+    if now.weekday() >= 5:
+        return False
+    current = now.time()
+    if kind == "tradier":
+        return time(7, 30) <= current <= time(17, 0)
+    return time(9, 30) <= current <= time(16, 10)
+
+
+def latest_tradier(db_path: Path) -> dict[str, Any]:
+    if not db_path.is_file():
+        return {"ok": False, "reason": "missing_db", "path": str(db_path)}
+    with sqlite3.connect(db_path) as db:
+        rows = db.execute(
+            "select symbol, updated_at from tradier_latest_quotes order by updated_at desc limit 5"
+        ).fetchall()
+        count = db.execute("select count(*) from tradier_stream_events").fetchone()[0]
+    latest = max((parse_dt(row[1]) for row in rows), default=None)
+    return {"ok": bool(latest), "latest": latest, "rows": rows, "events": count, "path": str(db_path)}
+
+
+def latest_gex(db_path: Path) -> dict[str, Any]:
+    if not db_path.is_file():
+        return {"ok": False, "reason": "missing_db", "path": str(db_path)}
+    with sqlite3.connect(db_path) as db:
+        rows = db.execute(
+            "select ticker, captured_at from gex_snapshots order by captured_at desc limit 5"
+        ).fetchall()
+        count = db.execute("select count(*) from gex_snapshots").fetchone()[0]
+    latest = max((parse_dt(row[1]) for row in rows), default=None)
+    return {"ok": bool(latest), "latest": latest, "rows": rows, "snapshots": count, "path": str(db_path)}
+
+
+def status_from_latest(info: dict[str, Any], *, max_age_minutes: int, active: bool) -> tuple[str, str]:
+    if not active:
+        return "off_hours", "outside capture window"
+    latest = info.get("latest")
+    if not latest:
+        return "stale", info.get("reason") or "no latest timestamp"
+    age = (datetime.now(timezone.utc) - latest).total_seconds() / 60
+    if age > max_age_minutes:
+        return "stale", f"latest {age:.1f} minutes old"
+    return "ok", f"latest {age:.1f} minutes old"
+
+
+def load_state(path: Path) -> dict[str, Any]:
+    if not path.is_file():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        return payload if isinstance(payload, dict) else {}
+    except Exception:
+        return {}
+
+
+def save_state(path: Path, state: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(state, indent=2, default=str), encoding="utf-8")
+
+
+def run_post_market_maintenance(
+    state: dict[str, Any],
+    *,
+    force: bool = False,
+    dry_run: bool = False,
+    now_et: datetime | None = None,
+) -> dict[str, Any]:
+    now = now_et or datetime.now(NY)
+    day_key = now.date().isoformat()
+    maintenance = state.setdefault("maintenance", {})
+    if not force:
+        if now.weekday() >= 5 or now.time() < time(16, 30):
+            return {"status": "not_due", "day": day_key}
+        if maintenance.get("last_successful_day") == day_key:
+            return {"status": "already_completed", "day": day_key}
+    if dry_run:
+        return {"status": "dry_run", "day": day_key}
+
+    commands = [
+        ["/bin/bash", str(GOVERNANCE_RUNNER)],
+        [
+            sys.executable,
+            str(ARCHIVE_RUNNER),
+            "--keep-dates",
+            "2",
+            "--max-files",
+            "4",
+        ],
+    ]
+    results: list[dict[str, Any]] = []
+    for command in commands:
+        completed = subprocess.run(
+            command,
+            cwd=ROOT.parent,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            timeout=1800,
+            check=False,
+        )
+        result = {
+            "command": command,
+            "returncode": completed.returncode,
+            "output_tail": (completed.stdout or "")[-6000:],
+        }
+        results.append(result)
+        if completed.returncode != 0:
+            maintenance.update(
+                {
+                    "last_attempted_day": day_key,
+                    "last_attempted_at": utcnow(),
+                    "status": "failed",
+                    "results": results,
+                }
+            )
+            return {"status": "failed", "day": day_key, "results": results}
+
+    maintenance.update(
+        {
+            "last_attempted_day": day_key,
+            "last_successful_day": day_key,
+            "last_attempted_at": utcnow(),
+            "status": "ok",
+            "results": results,
+        }
+    )
+    return {"status": "ok", "day": day_key, "results": results}
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Send Cipher collector freshness alerts.")
+    parser.add_argument("--state", type=Path, default=DEFAULT_STATE)
+    parser.add_argument("--target", default=os.environ.get("CIPHER_HERMES_TARGET", "telegram"))
+    parser.add_argument("--tradier-db", type=Path, default=DATA / "tradier_stream.sqlite")
+    parser.add_argument("--gex-db", type=Path, default=DATA / "gex_history.sqlite")
+    parser.add_argument("--tradier-max-age", type=int, default=int(os.environ.get("TRADIER_HEALTH_MAX_AGE_MIN", "20")))
+    parser.add_argument("--gex-max-age", type=int, default=int(os.environ.get("GEX_HEALTH_MAX_AGE_MIN", "45")))
+    parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--skip-maintenance", action="store_true")
+    parser.add_argument("--force-maintenance", action="store_true")
+    return parser.parse_args()
+
+
+def main() -> int:
+    args = parse_args()
+    state = load_state(args.state)
+    exit_code = 0
+    checks = {
+        "tradier": (
+            latest_tradier(args.tradier_db),
+            args.tradier_max_age,
+            market_window("tradier"),
+        ),
+        "gex": (
+            latest_gex(args.gex_db),
+            args.gex_max_age,
+            market_window("gex"),
+        ),
+    }
+    changes = []
+    now = utcnow()
+    for name, (info, max_age, active) in checks.items():
+        status, detail = status_from_latest(info, max_age_minutes=max_age, active=active)
+        previous = state.get(name, {}).get("status")
+        state[name] = {
+            "status": status,
+            "detail": detail,
+            "checked_at": now,
+            "latest": info.get("latest").isoformat() if info.get("latest") else None,
+        }
+        if status != previous and status != "off_hours":
+            changes.append((name, status, detail, info))
+
+    if changes:
+        lines = ["Cipher data health change", f"Checked: {now}", ""]
+        for name, status, detail, info in changes:
+            lines.append(f"{name.upper()}: {status.upper()} - {detail}")
+            rows = info.get("rows") or []
+            if rows:
+                lines.append("Latest: " + ", ".join(f"{r[0]} {r[1]}" for r in rows[:3]))
+        message = "\n".join(lines)
+        if args.dry_run:
+            print(message)
+        else:
+            rc = send_hermes_message(message, target=args.target)
+            if rc != 0:
+                exit_code = rc
+    else:
+        print(json.dumps({"ok": True, "changes": 0, "checked_at": now, "state": state}))
+    if not args.skip_maintenance:
+        maintenance = run_post_market_maintenance(
+            state,
+            force=args.force_maintenance,
+            dry_run=args.dry_run,
+        )
+        print(json.dumps({"maintenance": maintenance}, default=str))
+        if maintenance.get("status") == "failed":
+            exit_code = exit_code or 1
+            if not args.dry_run:
+                try:
+                    send_hermes_message(
+                        "Cipher post-market maintenance failed. Check cipher-data-health-alert journal.",
+                        target=args.target,
+                    )
+                except Exception:
+                    pass
+    if not args.dry_run:
+        save_state(args.state, state)
+    return exit_code
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

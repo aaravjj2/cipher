@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "registered_at": "2026-07-30T14:50:00Z",
+  "purpose": "Prospective context-only evaluation of Kronos directional agreement on top-ranked Cluster captures.",
+  "model_id": "NeoQuasar/Kronos-small",
+  "tokenizer_id": "NeoQuasar/Kronos-Tokenizer-base",
+  "data_provider": "tradier_production_timesales",
+  "session_filter": "open",
+  "timeframe": "5min",
+  "context_bars": 64,
+  "prediction_bars": 16,
+  "sample_count": 1,
+  "seed": 42,
+  "maximum_rank": 5,
+  "minimum_absolute_prediction_pct": 0.0,
+  "maximum_generation_delay_minutes": 10,
+  "minimum_scored_sample": 100,
+  "score_rule": "Use only five-minute bars fully completed by the Cluster capture as model context. Forecast timestamps and scoring begin at the first full five-minute regular-session bar strictly after capture. Compare direction with the close of the sixteenth such bar; Cluster directional return uses the final completed context close as reference.",
+  "decision_rule": "Kronos remains context-only. Do not gate Cluster entries, rank exit profiles, or alter sizing before the minimum scored prospective sample is reached and a locked analysis demonstrates stable benefit.",
+  "analysis_groups": [
+    "agreed",
+    "disagreed",
+    "unavailable"
+  ],
+  "notes": [
+    "Only bars whose full five-minute interval completed at or before capture may enter model context.",
+    "Forecast and scoring timestamps begin at the first full five-minute bar strictly after capture.",
+    "The first stored prediction for a capture/ticker/configuration is immutable.",
+    "Predictions generated more than ten minutes after capture are audit-only and excluded from the prospective headline statistics.",
+    "No broker order or account endpoint is used."
+  ]
+}

@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="Read-only options research workspace">
+  <title>Cipher — Strike Matrix</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="app">
+    <header class="top">
+      <button class="header-icon menu-btn" data-action="toggle-rail" aria-label="Toggle navigation" title="Menu">☰</button>
+      <div class="brand"><span class="orb"></span><span id="brandTitle">CIPHER STRIKE MATRIX</span></div>
+      <span class="brand-slash" aria-hidden="true">/</span>
+      <input class="ticker" id="ticker" value="SPY" aria-label="Search ticker" autocomplete="off" spellcheck="false" placeholder="Search ticker">
+      <span class="quote" id="quote"><strong>SPY</strong> —</span>
+      <span class="chg" id="dayChg"></span>
+      <button class="header-action" data-action="watch-current" aria-label="Add to watchlist" title="Add this ticker to your watchlist">+ Watchlist</button>
+      <div class="workspace-btns">
+        <button class="ws-btn active" data-action="workspace" data-ws="1" title="Workspace 1">1</button>
+        <button class="ws-btn" data-action="workspace" data-ws="2" title="Workspace 2">2</button>
+      </div>
+      <button class="header-icon" data-view="night" aria-label="Toggle chart view" title="Chart view">▥</button>
+      <span class="source" id="feedBadge">OPRA + OI</span>
+      <span class="top-spacer"></span>
+      <span class="user-chip" id="userChip" title="Local research session">Welcome Mars! 🚀</span>
+      <button class="logout-btn" data-action="logout" title="Local session — no remote account logout">Logout</button>
+      <span class="status" id="liveStatus"><span class="live" id="liveDot">●</span><span id="liveLabel">Connecting…</span></span>
+    </header>
+    <aside class="rail" id="rail">
+      <div class="rail-label">WORKSPACE</div>
+      <button class="nav active" data-view="matrix"><span class="ico">▦</span><span class="nav-label">Strike Matrix</span></button>
+      <button class="nav" data-view="night"><span class="ico">⌁</span><span class="nav-label">Night Vision</span></button>
+      <button class="nav" data-view="spyglass"><span class="ico">◌</span><span class="nav-label">Spyglass</span></button>
+      <button class="nav" data-view="watchlists"><span class="ico">◈</span><span class="nav-label">My Watchlists</span></button>
+      <button class="nav" data-view="journal"><span class="ico">◇</span><span class="nav-label">Journal</span></button>
+      <div class="rail-label">CIPHER X</div>
+      <button class="nav" data-view="trident"><span class="ico">△</span><span class="nav-label">Trident</span><span class="cx-badge">CIPHER X</span></button>
+      <button class="nav" data-view="saves"><span class="ico">▣</span><span class="nav-label">Chart Saves</span><span class="cx-badge">CIPHER X</span></button>
+      <button class="nav" data-view="scanner"><span class="ico">⌕</span><span class="nav-label">Setup Scanner</span><span class="cx-badge">CIPHER X</span></button>
+      <button class="nav" data-view="woAdmin"><span class="ico">◇</span><span class="nav-label">WO Admin</span></button>
+      <button class="nav" data-view="mispricingAdmin"><span class="ico">◈</span><span class="nav-label">Mispricing Admin</span></button>
+      <div class="rail-label">ACCOUNT</div>
+      <button class="nav" data-view="settings"><span class="ico">⚙</span><span class="nav-label">Settings</span></button>
+      <div class="rail-label local-lab-label">LOCAL LAB</div>
+      <button class="nav local-lab" data-view="rankingLab"><span class="ico">R</span><span class="nav-label">Ranking Lab</span></button>
+      <button class="nav local-lab" data-view="gptAnalyst"><span class="ico">G</span><span class="nav-label">GPT Analyst</span></button>
+      <button class="nav local-lab" data-view="stormAdmin"><span class="ico">◆</span><span class="nav-label">Storm Admin</span></button>
+    </aside>
+    <main class="main">
+      <section class="view active" id="matrixView">
+        <div class="toolbar">
+          <button class="tool" data-density="full" aria-pressed="false">Full</button>
+          <button class="tool active" data-density="compact" aria-pressed="true">Compact</button>
+          <span class="sep"></span>
+          <button class="tool" data-window="0.03">±3%</button>
+          <button class="tool" data-window="0.06">±6%</button>
+          <button class="tool" data-window="0.12">±12%</button>
+          <button class="tool active" data-window="0.25">All</button>
+          <span class="sep"></span>
+          <button class="tool active" data-metric="gex" aria-pressed="true">GEX</button>
+          <button class="tool" data-metric="vex" aria-pressed="false">VEX</button>
+          <span class="sep"></span>
+          <button class="tool active" data-matrix-mode="matrix" aria-pressed="true" title="Full exposure heatmap">Matrix</button>
+          <button class="tool" data-matrix-mode="sniper" aria-pressed="false" title="Actionable levels: floors, ceilings, top-pull">Sniper</button>
+          <span class="sep"></span>
+          <button class="tool quiet matrix-local-extra" data-matrix-exp="1" title="Nearest expiration">1 Exp</button>
+          <button class="tool quiet active matrix-local-extra" data-matrix-exp="5" title="Compact multi-expiration">5 Exp</button>
+          <button class="tool quiet matrix-local-extra" data-matrix-exp="12" title="Full term structure (weeklies + monthlies)">12 Exp</button>
+          <button class="tool quiet matrix-local-extra" data-matrix-exp="36" title="Include LEAPs / deep term structure">Leap</button>
+          <span class="grow"></span>
+          <button class="tool quiet matrix-local-extra" data-action="node-galaxy" aria-pressed="false" title="Node Galaxy — force-directed exposure map">Galaxy</button>
+          <button class="tool quiet matrix-local-extra" data-action="export-matrix" title="Export visible matrix CSV">CSV</button>
+          <button class="tool matrix-local-extra" data-action="snap-spot" title="Scroll to spot">Snap to spot</button>
+          <button class="tool matrix-local-extra" data-action="snap-golden" title="Scroll to top-pull / golden strike">Snap to golden</button>
+          <button class="tool active matrix-local-extra" data-action="toggle-fc" aria-pressed="true" title="Box nearest floor and ceiling">FC</button>
+          <button class="tool" data-action="refresh" title="Refresh matrix">Refresh</button>
+          <label class="toggle"><input id="auto" type="checkbox" checked>Auto refresh</label>
+        </div>
+        <div class="levels-bar" id="levelsBar"></div>
+        <div class="matrix-wrap" id="matrixWrap">
+          <div class="matrix" id="matrix"></div>
+          <canvas class="galaxy-canvas hidden" id="galaxyCanvas" aria-label="Node Galaxy"></canvas>
+          <div class="spot-tag" id="spotTag">Loading</div>
+        </div>
+        <footer class="foot">
+          <strong id="coverage">Loading chain</strong>
+          <span class="foot-caveat" id="provenance" title="Public-OI heuristic — not verified dealer positioning"></span>
+          <span class="grow"></span>
+          <span id="updated">—</span>
+          <span id="cacheAge">server cache 60s</span>
+        </footer>
+      </section>
+      <section class="view" id="nightView">
+        <div class="toolbar night-toolbar">
+          <button class="tool" data-action="toggle-split" aria-pressed="false" title="SPY / QQQ split">SPY/QQQ</button>
+          <button class="tool" data-action="toggle-tape" aria-pressed="false" title="Live trade tape">TS</button>
+          <button class="tool" data-action="toggle-vp" aria-pressed="false" title="Volume Profile ? traded volume by price (POC / HVN / LVN + bounce edges)">VP</button>
+          <button class="tool" data-action="toggle-xray" aria-pressed="false" title="X-Ray ? overlay the strike matrix on the chart">X-Ray</button>
+          <button class="tool" data-action="capture-chart" title="Save chart image to your computer">Capture</button>
+          <button class="tool" data-action="save-chart" title="Save this chart to Chart Saves">Save chart</button>
+          <button class="tool" data-view="bio" aria-label="Open Bio flow scanner" title="Bio / pharma / medtech deep-OTM flow">Bio</button>
+          <button class="tool" data-view="contractSearch" aria-label="Open Contract Search" title="Search loaded option contracts">Contract Search</button>
+          <span class="sep"></span>
+          <button class="tool active" data-night-exp="1" title="Nearest expiration levels">1 Exp</button>
+          <button class="tool" data-night-exp="5" title="Compact multi-expiration">Compact</button>
+          <button class="tool" data-night-exp="12" title="Full term structure (weeklies + monthlies)">Full</button>
+          <button class="tool" data-night-exp="36" title="Include LEAPs / deep term structure">Leap</button>
+          <span class="grow"></span>
+          <button class="tool" data-frame="1d">1D</button>
+          <button class="tool active" data-frame="5m">5m</button>
+          <details class="time-menu">
+            <summary class="tool">More</summary>
+            <div class="time-options">
+              <button class="tool" data-frame="1m">1m</button>
+              <button class="tool" data-frame="15m">15m</button>
+              <button class="tool" data-frame="1h">1H</button>
+              <button class="tool" data-frame="4h">4H</button>
+              <button class="tool" data-frame="1w">1W</button>
+            </div>
+          </details>
+          <button class="tool" data-action="toggle-ghost" aria-pressed="false" title="Ghost ? next ~15 min dealer-hedge projection (SPY/QQQ)">Ghost</button>
+          <button class="tool" data-action="expand-chart" title="Expand chart">Expand</button>
+          <span class="status night-legend">Peak <b class="legend-gold">?</b> Above <b class="legend-purple">?</b> Below <b class="legend-red">?</b></span>
+          <label class="toggle"><input id="nightAuto" type="checkbox" checked>Live</label>
+        </div>
+        <div class="night-body" id="nightBody">
+          <div class="night-charts" id="nightCharts">
+            <div class="chart pane" id="chart">
+              <div class="pane-title" id="paneTitleA">SPY ? daily</div>
+              <canvas id="nvCanvas"></canvas>
+              <div class="watermark">RESEARCH</div>
+              <div class="chart-note" id="chartNote">Loading Night Vision</div>
+            </div>
+            <div class="chart pane hidden" id="chartB">
+              <div class="pane-title" id="paneTitleB">QQQ ? daily</div>
+              <canvas id="nvCanvasB"></canvas>
+              <div class="watermark">RESEARCH</div>
+              <div class="chart-note" id="chartNoteB"></div>
+            </div>
+          </div>
+          <aside class="xray-panel hidden" id="xrayPanel">
+            <header class="xray-head">
+              <strong>X-RAY</strong>
+              <div class="xray-tabs">
+                <button class="tool active" data-xray-metric="gex">GEX</button>
+                <button class="tool" data-xray-metric="vex">VEX</button>
+              </div>
+            </header>
+            <div class="xray-legend">
+              <span><b class="legend-gold">?</b> Top pull</span>
+              <span><b class="legend-purple">?</b> Above spot</span>
+              <span><b class="legend-red">?</b> Below spot</span>
+            </div>
+            <div class="xray-table-wrap">
+              <table class="xray-table">
+                <thead><tr><th>STRIKE</th><th id="xrayMetricHead">GEX</th></tr></thead>
+                <tbody id="xrayBody"></tbody>
+              </table>
+            </div>
+          </aside>
+          <aside class="tape-panel hidden" id="tapePanel">
+            <header class="tape-head">
+              <strong>TRADE TAPE</strong>
+              <div class="tape-filters">
+                <button class="spy-filter active" data-tape-min="5000">&gt;5k</button>
+                <button class="spy-filter" data-tape-min="50000">&gt;50k</button>
+                <button class="spy-filter" data-tape-min="100000">&gt;100k</button>
+                <button class="spy-filter" data-action="toggle-sq" title="Combined SPY+QQQ stream">SQ</button>
+              </div>
+              <button class="mini" data-action="close-tape" title="Close tape">âœ•</button>
+            </header>
+            <div class="tape-list" id="tapeList"></div>
+          </aside>
+        </div>
+      </section>
+      <section class="view" id="tridentView">
+        <div class="toolbar" id="tridentToolbar">
+          <button class="tool" data-density="full" aria-pressed="false">Full</button>
+          <button class="tool active" data-density="compact" aria-pressed="true">Compact</button>
+          <span class="sep"></span>
+          <button class="tool" data-window="0.03">?3%</button>
+          <button class="tool" data-window="0.06">?6%</button>
+          <button class="tool" data-window="0.12">?12%</button>
+          <button class="tool active" data-window="0.25">All</button>
+          <span class="sep"></span>
+          <button class="tool active" data-metric="gex" aria-pressed="true">GEX</button>
+          <button class="tool" data-metric="vex" aria-pressed="false">VEX</button>
+          <span class="sep"></span>
+          <button class="tool active" data-matrix-mode="matrix" aria-pressed="true" title="Full exposure heatmap">Matrix</button>
+          <button class="tool" data-matrix-mode="sniper" aria-pressed="false" title="Actionable levels: floors, ceilings, top-pull">Sniper</button>
+          <span class="sep"></span>
+          <button class="tool quiet" data-matrix-exp="1" title="Nearest expiration">1 Exp</button>
+          <button class="tool quiet active" data-matrix-exp="5" title="Compact multi-expiration">5 Exp</button>
+          <button class="tool quiet" data-matrix-exp="12" title="Full term structure">12 Exp</button>
+          <button class="tool quiet" data-matrix-exp="36" title="Include LEAPs">Leap</button>
+          <span class="grow"></span>
+          <button class="tool quiet" data-action="export-trident" title="Export SPY+QQQ+IWM CSV">CSV</button>
+          <button class="tool" data-action="trident-snap-spot" title="Scroll each column to spot">Snap to spot</button>
+          <button class="tool" data-action="trident-snap-golden" title="Scroll each column to top-pull">Snap to golden</button>
+          <button class="tool active" data-action="toggle-fc" aria-pressed="true" title="Box nearest floor and ceiling">FC</button>
+          <button class="tool" data-action="refresh-trident">Refresh</button>
+        </div>
+        <div class="trident-panes" id="tridentPanes">
+          <article class="trident-pane" data-trident="SPY">
+            <header class="trident-pane-head">
+              <strong>SPY</strong>
+              <span class="trident-pane-actions">
+                <span class="trident-spot" id="tridentSpotSPY">?</span>
+                <button class="mini" data-action="export-trident-pane" data-ticker="SPY" title="Export SPY CSV">CSV</button>
+              </span>
+            </header>
+            <div class="levels-bar trident-levels-bar" id="tridentLevelsSPY"></div>
+            <div class="matrix-wrap trident-wrap" id="tridentWrapSPY"><div class="matrix" id="tridentMatrixSPY"></div></div>
+          </article>
+          <article class="trident-pane" data-trident="QQQ">
+            <header class="trident-pane-head">
+              <strong>QQQ</strong>
+              <span class="trident-pane-actions">
+                <span class="trident-spot" id="tridentSpotQQQ">?</span>
+                <button class="mini" data-action="export-trident-pane" data-ticker="QQQ" title="Export QQQ CSV">CSV</button>
+              </span>
+            </header>
+            <div class="levels-bar trident-levels-bar" id="tridentLevelsQQQ"></div>
+            <div class="matrix-wrap trident-wrap" id="tridentWrapQQQ"><div class="matrix" id="tridentMatrixQQQ"></div></div>
+          </article>
+          <article class="trident-pane" data-trident="IWM">
+            <header class="trident-pane-head">
+              <strong>IWM</strong>
+              <span class="trident-pane-actions">
+                <span class="trident-spot" id="tridentSpotIWM">?</span>
+                <button class="mini" data-action="export-trident-pane" data-ticker="IWM" title="Export IWM CSV">CSV</button>
+              </span>
+            </header>
+            <div class="levels-bar trident-levels-bar" id="tridentLevelsIWM"></div>
+            <div class="matrix-wrap trident-wrap" id="tridentWrapIWM"><div class="matrix" id="tridentMatrixIWM"></div></div>
+          </article>
+        </div>
+        <footer class="foot">
+          <strong id="tridentCoverage">SPY ? QQQ ? IWM</strong>
+          <span class="foot-caveat" id="tridentProvenance" title="Public-OI heuristic ? not verified dealer positioning"></span>
+          <span class="grow"></span>
+          <span id="tridentUpdated">?</span>
+        </footer>
+      </section>
+      <section class="view research-view" id="researchView"><div id="researchContent"></div></section>
+    </main>
+  </div>
+  <script src="/app.js?v=parity-20260721"></script>
+</body>
+</html>

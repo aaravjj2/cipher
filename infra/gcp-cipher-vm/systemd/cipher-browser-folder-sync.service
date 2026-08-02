@@ -1,0 +1,19 @@
+[Unit]
+Description=Mirror Cipher Windows capture folders from GCS during the market-session buffer
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=aarav
+Group=aarav
+WorkingDirectory=/home/aarav/Aarav/cipher/cipher-system
+ExecStart=/usr/local/lib/cipher/sync-browser-folders-from-gcs.sh
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=/home/aarav/Aarav/cipher/cipher-system/data/browser_ingest /home/aarav/.config/gcloud
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=cipher-browser-folder-sync

@@ -1,0 +1,265 @@
+{
+  "scrollY": 0,
+  "text": "CIPHER\nSETUP SCANNER\n/\nSLV\n$50.78\n+0.77%\n1\n2\nWelcome Mars! 🚀\nLogout\nWORKSPACE\nStrike Matrix\nNight Vision\nSpyglass\nMy Watchlists\nJournal\nCIPHER X\nTrident\nCIPHER X\nChart Saves\nCIPHER X\nSetup Scanner\nCIPHER X\nACCOUNT\nSettings\nSetup Scanner\n\nThe Cipher engine ranks the entire universe and surfaces the 30 highest-conviction setups. Powered by the Cipher proprietary model.\n\nShort term\nLong term\nLEAP\nScanning…\nLiq scan\nCluster scan\nCLUSTER EXP\nNearest (1 Exp)\nFri Jul 24\nFri Jul 31\nFri Aug 7\nFri Aug 14\nFri Aug 21\nFri Aug 28\nFri Sep 4\nFri Sep 11\nFlash\nBETA\nFlash Index\nBETA\nFlash Agentic\nBETA\n\nLEAP scans options expiring within ~120 market days.\n\nScans aren't saved, so download the .CSV to keep your results. A full-universe scan can take a few minutes; keep this screen open and check back when it finishes.\nScanning the universe… 217/578 tickers (38%)",
+  "title": "Cipher — Strike Matrix",
+  "url": "https://www.accessobsidian.com/app#SLV",
+  "viewport": {
+    "h": 932,
+    "w": 1707
+  },
+  "visibleButtons": [
+    {
+      "aria": "Search ticker",
+      "h": 33.333335876464844,
+      "i": 1,
+      "tag": "INPUT",
+      "text": "SLV",
+      "visible": true,
+      "w": 99.33333587646484,
+      "x": 262.8020935058594,
+      "y": 10.666666984558104
+    },
+    {
+      "aria": null,
+      "h": 24,
+      "i": 3,
+      "tag": "BUTTON",
+      "text": "1",
+      "visible": true,
+      "w": 27.416667938232425,
+      "x": 576.0625,
+      "y": 15.333333969116213
+    },
+    {
+      "aria": null,
+      "h": 24,
+      "i": 4,
+      "tag": "BUTTON",
+      "text": "2",
+      "visible": true,
+      "w": 28.979167938232425,
+      "x": 605.4791870117188,
+      "y": 15.333333969116213
+    },
+    {
+      "aria": "Toggle sidebar",
+      "h": 24,
+      "i": 26,
+      "tag": "BUTTON",
+      "text": "",
+      "visible": true,
+      "w": 24,
+      "x": 146.03125,
+      "y": 76.33333587646484
+    },
+    {
+      "aria": null,
+      "h": 34,
+      "i": 27,
+      "tag": "BUTTON",
+      "text": "Strike Matrix",
+      "visible": true,
+      "w": 169.03125,
+      "x": 10,
+      "y": 124.66667175292967
+    },
+    {
+      "aria": null,
+      "h": 34,
+      "i": 28,
+      "tag": "BUTTON",
+      "text": "Night Vision",
+      "visible": true,
+      "w": 169.03125,
+      "x": 10,
+      "y": 160.6666717529297
+    },
+    {
+      "aria": null,
+      "h": 34,
+      "i": 29,
+      "tag": "BUTTON",
+      "text": "Spyglass",
+      "visible": true,
+      "w": 169.03125,
+      "x": 10,
+      "y": 196.6666717529297
+    },
+    {
+      "aria": null,
+      "h": 34,
+      "i": 30,
+      "tag": "BUTTON",
+      "text": "My Watchlists",
+      "visible": true,
+      "w": 169.03125,
+      "x": 10,
+      "y": 232.6666717529297
+    },
+    {
+      "aria": null,
+      "h": 34,
+      "i": 31,
+      "tag": "BUTTON",
+      "text": "Journal",
+      "visible": true,
+      "w": 169.03125,
+      "x": 10,
+      "y": 268.66668701171875
+    },
+    {
+      "aria": null,
+      "h": 34,
+      "i": 32,
+      "tag": "BUTTON",
+      "text": "Trident\nCIPHER X",
+      "visible": true,
+      "w": 169.03125,
+      "x": 10,
+      "y": 341
+    },
+    {
+      "aria": null,
+      "h": 48.66666793823242,
+      "i": 33,
+      "tag": "BUTTON",
+      "text": "Chart Saves\nCIPHER X",
+      "visible": true,
+      "w": 169.03125,
+      "x": 10,
+      "y": 377
+    },
+    {
+      "aria": null,
+      "h": 48.66666793823242,
+      "i": 34,
+      "tag": "BUTTON",
+      "text": "Setup Scanner\nCIPHER X",
+      "visible": true,
+      "w": 169.03125,
+      "x": 10,
+      "y": 427.6666870117187
+    },
+    {
+      "aria": null,
+      "h": 34,
+      "i": 37,
+      "tag": "BUTTON",
+      "text": "Settings",
+      "visible": true,
+      "w": 169.03125,
+      "x": 10,
+      "y": 514.6666870117188
+    },
+    {
+      "aria": null,
+      "h": 24,
+      "i": 119,
+      "tag": "BUTTON",
+      "text": "Short term",
+      "visible": true,
+      "w": 83.65625,
+      "x": 361.1770935058594,
+      "y": 174.6666717529297
+    },
+    {
+      "aria": null,
+      "h": 24,
+      "i": 120,
+      "tag": "BUTTON",
+      "text": "Long term",
+      "visible": true,
+      "w": 80.19792175292969,
+      "x": 446.8333435058594,
+      "y": 174.6666717529297
+    },
+    {
+      "aria": null,
+      "h": 24,
+      "i": 121,
+      "tag": "BUTTON",
+      "text": "LEAP",
+      "visible": true,
+      "w": 49.44791793823242,
+      "x": 529.03125,
+      "y": 174.6666717529297
+    },
+    {
+      "aria": null,
+      "h": 33.333335876464844,
+      "i": 122,
+      "tag": "BUTTON",
+      "text": "Scanning…",
+      "visible": true,
+      "w": 111,
+      "x": 593.1458740234375,
+      "y": 170
+    },
+    {
+      "aria": null,
+      "h": 34.66666793823242,
+      "i": 123,
+      "tag": "BUTTON",
+      "text": "Liq scan",
+      "visible": true,
+      "w": 95.38542175292967,
+      "x": 358.51043701171875,
+      "y": 224
+    },
+    {
+      "aria": null,
+      "h": 34.66666793823242,
+      "i": 124,
+      "tag": "BUTTON",
+      "text": "Cluster scan",
+      "visible": true,
+      "w": 122.44792175292967,
+      "x": 465.8958435058594,
+      "y": 224
+    },
+    {
+      "aria": null,
+      "h": 32.66666793823242,
+      "i": 125,
+      "tag": "SELECT",
+      "text": "Nearest (1 Exp)\nFri Jul 24\nFri Jul 31\nFri Aug 7\nFri Aug 14\nFri Aug 21\nFri Aug 28\nFri Sep 4\nFri Sep 11",
+      "visible": true,
+      "w": 151.33334350585938,
+      "x": 684.25,
+      "y": 225
+    },
+    {
+      "aria": null,
+      "h": 35.16666793823242,
+      "i": 126,
+      "tag": "BUTTON",
+      "text": "Flash\nBETA",
+      "visible": true,
+      "w": 117.39583587646484,
+      "x": 358.51043701171875,
+      "y": 279.3333435058594
+    },
+    {
+      "aria": null,
+      "h": 35.16666793823242,
+      "i": 127,
+      "tag": "BUTTON",
+      "text": "Flash Index\nBETA",
+      "visible": true,
+      "w": 156.7604217529297,
+      "x": 487.90625,
+      "y": 279.3333435058594
+    },
+    {
+      "aria": null,
+      "h": 35.16666793823242,
+      "i": 128,
+      "tag": "BUTTON",
+      "text": "Flash Agentic\nBETA",
+      "visible": true,
+      "w": 188.40625,
+      "x": 656.6666870117188,
+      "y": 279.3333435058594
+    }
+  ]
+}

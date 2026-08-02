@@ -1,0 +1,8 @@
+# Active runtime dependencies (cipher-system/core/)
+# The core API uses stdlib http.server — no web framework needed.
+numpy
+scipy
+websockets==16.1.1
+
+# Testing
+pytest>=8.0.0

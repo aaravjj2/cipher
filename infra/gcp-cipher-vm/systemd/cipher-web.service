@@ -1,0 +1,25 @@
+[Unit]
+Description=Cipher browser application
+Requires=cipher-core.service
+After=cipher-core.service
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=aarav
+Group=aarav
+WorkingDirectory=/home/aarav/Aarav/cipher/cipher-system/app
+EnvironmentFile=-/etc/cipher/cipher.env
+ExecStart=/usr/bin/node /home/aarav/Aarav/cipher/cipher-system/app/server.mjs
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+UMask=0077
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=cipher-web
+
+[Install]
+WantedBy=multi-user.target

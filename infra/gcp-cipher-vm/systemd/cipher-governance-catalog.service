@@ -1,0 +1,23 @@
+[Unit]
+Description=Cipher research governance catalog and evidence import
+After=network-online.target cipher-tradier.service cipher-gex.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=aarav
+Group=aarav
+WorkingDirectory=/home/aarav/Aarav/cipher
+ExecStart=/usr/local/lib/cipher/run-governance-catalog.sh
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=/home/aarav/Aarav/cipher/cipher-system/data /home/aarav/Aarav/cipher/cipher-system/logs
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

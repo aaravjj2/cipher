@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cipher.local/schemas/research/dataset-manifest.schema.json",
+  "title": "Cipher Dataset Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "dataset_id",
+    "name",
+    "created_at",
+    "availability_cutoff",
+    "sources",
+    "raw_object_ids",
+    "symbol_universe_id",
+    "corporate_action_version",
+    "normalizer_version",
+    "schema_name",
+    "row_counts",
+    "quality_checks",
+    "frozen",
+    "schema_version"
+  ],
+  "properties": {
+    "dataset_id": {"type": "string", "pattern": "^ds_[a-f0-9]{12,64}$"},
+    "name": {"type": "string", "minLength": 1},
+    "created_at": {"type": "string", "format": "date-time"},
+    "availability_cutoff": {"type": "string", "format": "date-time"},
+    "sources": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"type": "string", "minLength": 1}
+    },
+    "raw_object_ids": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"type": "string", "pattern": "^raw_[a-f0-9]{12,64}$"}
+    },
+    "symbol_universe_id": {"type": "string", "minLength": 1},
+    "corporate_action_version": {"type": "string", "minLength": 1},
+    "normalizer_version": {"type": "string", "minLength": 1},
+    "schema_name": {"type": "string", "minLength": 1},
+    "row_counts": {
+      "type": "object",
+      "additionalProperties": {"type": "integer", "minimum": 0}
+    },
+    "quality_checks": {"type": "object"},
+    "frozen": {"type": "boolean"},
+    "schema_version": {"type": "integer", "minimum": 1}
+  }
+}

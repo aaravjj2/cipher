@@ -1,0 +1,3119 @@
+{
+  "capturedAt": "2026-07-19T03:41:22.998Z",
+  "states": [
+    {
+      "k": 0,
+      "buttons": [
+        {
+          "i": 33,
+          "rect": {
+            "h": 49,
+            "w": 169,
+            "x": 10,
+            "y": 428
+          },
+          "text": "Setup Scanner CIPHER X",
+          "title": "",
+          "visible": true
+        },
+        {
+          "i": 112,
+          "rect": {
+            "h": 33,
+            "w": 111,
+            "x": 593,
+            "y": 170
+          },
+          "text": "Scanning…",
+          "title": "",
+          "visible": true
+        },
+        {
+          "i": 113,
+          "rect": {
+            "h": 35,
+            "w": 95,
+            "x": 359,
+            "y": 224
+          },
+          "text": "Liq scan",
+          "title": "Liquidity-vacuum runway: a dominant level far from spot with thin liquidity in between and a second line stacked near it.",
+          "visible": true
+        },
+        {
+          "i": 114,
+          "rect": {
+            "h": 35,
+            "w": 122,
+            "x": 466,
+            "y": 224
+          },
+          "text": "Cluster scan",
+          "title": "",
+          "visible": true
+        }
+      ],
+      "hasScanning": true,
+      "progress": {
+        "done": 529,
+        "pct": 92,
+        "total": 578
+      },
+      "text": "CIPHER SETUP SCANNER / SLV $50.78 +0.77% 1 2 Welcome Mars! 🚀 Logout WORKSPACE Strike Matrix Night Vision Spyglass My Watchlists Journal CIPHER X Trident CIPHER X Chart Saves CIPHER X Setup Scanner CIPHER X ACCOUNT Settings Setup Scanner The Cipher engine ranks the entire universe and surfaces the 30 highest-conviction setups. Powered by the Cipher proprietary model. Short term Long term LEAP Scanning… Liq scan Cluster scan CLUSTER EXP Nearest (1 Exp) Fri Jul 24 Fri Jul 31 Fri Aug 7 Fri Aug 14 Fri Aug 21 Fri Aug 28 Fri Sep 4 Fri Sep 11 Flash BETA Flash Index BETA Flash Agentic BETA LEAP scans options expiring within ~120 market days. Scans aren't saved, so download the .CSV to keep your results. A full-universe scan can take a few minutes; keep this screen open and check back when it finishes. Scanning the universe… 529/578 tickers (92%)"
+    },
+    {
+      "k": 1,
+      "buttons": [
+        {
+          "i": 33,
+          "rect": {
+            "h": 49,
+            "w": 169,
+            "x": 10,
+            "y": 428
+          },
+          "text": "Setup Scanner CIPHER X",
+          "title": "",
+          "visible": true
+        },
+        {
+          "i": 112,
+          "rect": {
+            "h": 33,
+            "w": 161,
+            "x": 585,
+            "y": 170
+          },
+          "text": "Cipher Model Scan",
+          "title": "",
+          "visible": true
+        },
+        {
+          "i": 113,
+          "rect": {
+            "h": 35,
+            "w": 95,
+            "x": 351,
+            "y": 224
+          },
+          "text": "Liq scan",
+          "title": "Liquidity-vacuum runway: a dominant level far from spot with thin liquidity in between and a second line stacked near it.",
+          "visible": true
+        },
+        {
+          "i": 114,
+          "rect": {
+            "h": 35,
+            "w": 122,
+            "x": 458,
+            "y": 224
+          },
+          "text": "Cluster scan",
+          "title": "",
+          "visible": true
+        },
+        {
+          "i": 118,
+          "rect": {
+            "h": 33,
+            "w": 141,
+            "x": 351,
+            "y": 325
+          },
+          "text": "Download .CSV",
+          "title": "",
+          "visible": true
+        }
+      ],
+      "hasScanning": false,
+      "progress": null,
+      "text": "CIPHER SETUP SCANNER / SLV $50.78 +0.77% 1 2 Welcome Mars! 🚀 Logout WORKSPACE Strike Matrix Night Vision Spyglass My Watchlists Journal CIPHER X Trident CIPHER X Chart Saves CIPHER X Setup Scanner CIPHER X ACCOUNT Settings Setup Scanner The Cipher engine ranks the entire universe and surfaces the 30 highest-conviction setups. Powered by the Cipher proprietary model. Short term Long term LEAP Cipher Model Scan Liq scan Cluster scan CLUSTER EXP Nearest (1 Exp) Fri Jul 24 Fri Jul 31 Fri Aug 7 Fri Aug 14 Fri Aug 21 Fri Aug 28 Fri Sep 4 Fri Sep 11 Flash BETA Flash Index BETA Flash Agentic BETA Download .CSV LEAP scans options expiring within ~120 market days. Scans aren't saved, so download the .CSV to keep your results. A full-universe scan can take a few minutes; keep this screen open and check back when it finishes. #1 $LAES BULLISH 82/100 MAJOR SUPPORTS 2.5, 2 MAJOR RESISTANCES 3, 3.5 PULL TARGET 3 VACUUM TARGETS 3, 3.5 CIPHER READ LAES is holding above support at 2.5 and pressing into the 3 ceiling; a push through opens room toward the 3 pull target, with continuation into 3.5 if it keeps running. A close back under 2.23 would weaken the setup. #2 $PCG BULLISH 79/100 MAJOR SUPPORTS 16.5, 16 MAJOR RESISTANCES 17.5, 18 PULL TARGET 20 VACUUM TARGETS 18, 19, 20, 21 CIPHER READ PCG is holding above support at 16.5 and pressing into the 17.5 ceiling; a push through opens room toward the 20 pull target, with continuation into 21 if it keeps running. A close back under 16.5 would weaken the setup. #3 $IOVA BULLISH 78/100 MAJOR SUPPORTS 4.5, 4 MAJOR RESISTANCES 5.5, 7.5 PULL TARGET 5.5 VACUUM TARGETS 5.5, 6, 7, 7.5 CIPHER READ IOVA is holding above support at 4.5 and pressing into the 5.5 ceiling; a push through opens room toward the 5.5 pull target, with continuation into 7.5 if it keeps running. A close back under 4.5 would weaken the setup. #4 $AXTI BULLISH 76/100 MAJOR SUPPORTS 43, 40 MAJOR RESISTANCES 49.5, 50 PULL TARGET 50 VACUUM TARGETS 50, 55, 57, 60 CIPHER READ AXTI is holding above support at 43 and pressing into the 49.5 ceiling; a push through opens room toward the 50 pull target, with continuation into 60 if it keeps running. A close back under 43 would weaken the setup. #5 $HIVE BULLISH 73/100 MAJOR SUPPORTS 2.5, 2 MAJOR RESISTANCES 3, 3.5 PULL TARGET 4 VACUUM TARGETS 3, 3.5, 4 CIPHER READ HIVE is holding above support at 2.5 and pressing into the 3 ceiling; a push through opens room toward the 4 pull target. A close back under 1.98 would weaken the setup. #6 $NUAI BULLISH 73/100 MAJOR SUPPORTS 4, 3.5 MAJOR RESISTANCES 4.5, 5 PULL TARGET 4.5 VACUUM TARGETS 4.5, 5, 5.5, 6 CIPHER READ NUAI is holding above support at 4 and pressing into the 4.5 ceiling; a push through opens room toward the 4.5 pull target, with continuation into 6 if it keeps running. A close back under 3.22 would weaken the setup. #7 $CSCO BULLISH 72/100 MAJOR SUPPORTS 109, 108 MAJOR RESISTANCES 112, 114 PULL TARGET 120 VACUUM TARGETS 115, 120, 125, 130 CIPHER READ CSCO is holding above support at 109 and pressing into the 112 ceiling; a push through opens room toward the 120 pull target, with continuation into 130 if it keeps running. A close back under 109 would weaken the setup. #8 $CLOV BULLISH 71/100 MAJOR SUPPORTS 4, 4.5 MAJOR RESISTANCES 5, 5.5 PULL TARGET 5 VACUUM TARGETS 5, 5.5, 6, 6.5 CIPHER READ CLOV is holding above support at 4 and pressing into the 5 ceiling; a push through opens room toward the 5 pull target, with continuation into 6.5 if it keeps running. A close back under 4 would weaken the setup. #9 $WULF BULLISH 71/100 MAJOR SUPPORTS 17, 16 MAJOR RESISTANCES 18.5, 19 PULL TARGET 20 VACUUM TARGETS 20, 22, 23, 25 CIPHER READ WULF is holding above support at 17 and pressing into the 18.5 ceiling; a push through opens room toward the 20 pull target, with continuation into 25 if it keeps running. A close back under 17 would weaken the setup. #10 $HIMS BULLISH 70/100 MAJOR SUPPORTS 31, 30.5 MAJOR RESISTANCES 33, 34 PULL TARGET 40 VACUUM TARGETS 35, 36.5, 40, 45 CIPHER READ HIMS is holding above support at 31 and pressing into the 33 ceiling; a push through opens room toward the 40 pull target, with continuation into 45 if it keeps running. A close back under 31 would weaken the setup. #11 $POET BULLISH 70/100 MAJOR SUPPORTS 5, 7 MAJOR RESISTANCES 7.5, 8 PULL TARGET 8 VACUUM TARGETS 8, 9, 9.5, 10 CIPHER READ POET is holding above support at 5 and pressing into the 7.5 ceiling; a push through opens room toward the 8 pull target, with continuation into 10 if it keeps running. A close back under 3.56 would weaken the setup. #12 $PYPL BULLISH 70/100 MAJOR SUPPORTS 54, 53 MAJOR RESISTANCES 57, 57.5 PULL TARGET 60 VACUUM TARGETS 58, 60, 65, 70 CIPHER READ PYPL is holding above support at 54 and pressing into the 57 ceiling; a push through opens room toward the 60 pull target, with continuation into 70 if it keeps running. A close back under 54 would weaken the setup. #13 $SOFI BULLISH 70/100 MAJOR SUPPORTS 16.5, 16 MAJOR RESIST"
+    }
+  ],
+  "doneData": {
+    "bodyText": "CIPHER SETUP SCANNER / SLV $50.78 +0.77% 1 2 Welcome Mars! 🚀 Logout WORKSPACE Strike Matrix Night Vision Spyglass My Watchlists Journal CIPHER X Trident CIPHER X Chart Saves CIPHER X Setup Scanner CIPHER X ACCOUNT Settings Setup Scanner The Cipher engine ranks the entire universe and surfaces the 30 highest-conviction setups. Powered by the Cipher proprietary model. Short term Long term LEAP Cipher Model Scan Liq scan Cluster scan CLUSTER EXP Nearest (1 Exp) Fri Jul 24 Fri Jul 31 Fri Aug 7 Fri Aug 14 Fri Aug 21 Fri Aug 28 Fri Sep 4 Fri Sep 11 Flash BETA Flash Index BETA Flash Agentic BETA Download .CSV LEAP scans options expiring within ~120 market days. Scans aren't saved, so download the .CSV to keep your results. A full-universe scan can take a few minutes; keep this screen open and check back when it finishes. #1 $LAES BULLISH 82/100 MAJOR SUPPORTS 2.5, 2 MAJOR RESISTANCES 3, 3.5 PULL TARGET 3 VACUUM TARGETS 3, 3.5 CIPHER READ LAES is holding above support at 2.5 and pressing into the 3 ceiling; a push through opens room toward the 3 pull target, with continuation into 3.5 if it keeps running. A close back under 2.23 would weaken the setup. #2 $PCG BULLISH 79/100 MAJOR SUPPORTS 16.5, 16 MAJOR RESISTANCES 17.5, 18 PULL TARGET 20 VACUUM TARGETS 18, 19, 20, 21 CIPHER READ PCG is holding above support at 16.5 and pressing into the 17.5 ceiling; a push through opens room toward the 20 pull target, with continuation into 21 if it keeps running. A close back under 16.5 would weaken the setup. #3 $IOVA BULLISH 78/100 MAJOR SUPPORTS 4.5, 4 MAJOR RESISTANCES 5.5, 7.5 PULL TARGET 5.5 VACUUM TARGETS 5.5, 6, 7, 7.5 CIPHER READ IOVA is holding above support at 4.5 and pressing into the 5.5 ceiling; a push through opens room toward the 5.5 pull target, with continuation into 7.5 if it keeps running. A close back under 4.5 would weaken the setup. #4 $AXTI BULLISH 76/100 MAJOR SUPPORTS 43, 40 MAJOR RESISTANCES 49.5, 50 PULL TARGET 50 VACUUM TARGETS 50, 55, 57, 60 CIPHER READ AXTI is holding above support at 43 and pressing into the 49.5 ceiling; a push through opens room toward the 50 pull target, with continuation into 60 if it keeps running. A close back under 43 would weaken the setup. #5 $HIVE BULLISH 73/100 MAJOR SUPPORTS 2.5, 2 MAJOR RESISTANCES 3, 3.5 PULL TARGET 4 VACUUM TARGETS 3, 3.5, 4 CIPHER READ HIVE is holding above support at 2.5 and pressing into the 3 ceiling; a push through opens room toward the 4 pull target. A close back under 1.98 would weaken the setup. #6 $NUAI BULLISH 73/100 MAJOR SUPPORTS 4, 3.5 MAJOR RESISTANCES 4.5, 5 PULL TARGET 4.5 VACUUM TARGETS 4.5, 5, 5.5, 6 CIPHER READ NUAI is holding above support at 4 and pressing into the 4.5 ceiling; a push through opens room toward the 4.5 pull target, with continuation into 6 if it keeps running. A close back under 3.22 would weaken the setup. #7 $CSCO BULLISH 72/100 MAJOR SUPPORTS 109, 108 MAJOR RESISTANCES 112, 114 PULL TARGET 120 VACUUM TARGETS 115, 120, 125, 130 CIPHER READ CSCO is holding above support at 109 and pressing into the 112 ceiling; a push through opens room toward the 120 pull target, with continuation into 130 if it keeps running. A close back under 109 would weaken the setup. #8 $CLOV BULLISH 71/100 MAJOR SUPPORTS 4, 4.5 MAJOR RESISTANCES 5, 5.5 PULL TARGET 5 VACUUM TARGETS 5, 5.5, 6, 6.5 CIPHER READ CLOV is holding above support at 4 and pressing into the 5 ceiling; a push through opens room toward the 5 pull target, with continuation into 6.5 if it keeps running. A close back under 4 would weaken the setup. #9 $WULF BULLISH 71/100 MAJOR SUPPORTS 17, 16 MAJOR RESISTANCES 18.5, 19 PULL TARGET 20 VACUUM TARGETS 20, 22, 23, 25 CIPHER READ WULF is holding above support at 17 and pressing into the 18.5 ceiling; a push through opens room toward the 20 pull target, with continuation into 25 if it keeps running. A close back under 17 would weaken the setup. #10 $HIMS BULLISH 70/100 MAJOR SUPPORTS 31, 30.5 MAJOR RESISTANCES 33, 34 PULL TARGET 40 VACUUM TARGETS 35, 36.5, 40, 45 CIPHER READ HIMS is holding above support at 31 and pressing into the 33 ceiling; a push through opens room toward the 40 pull target, with continuation into 45 if it keeps running. A close back under 31 would weaken the setup. #11 $POET BULLISH 70/100 MAJOR SUPPORTS 5, 7 MAJOR RESISTANCES 7.5, 8 PULL TARGET 8 VACUUM TARGETS 8, 9, 9.5, 10 CIPHER READ POET is holding above support at 5 and pressing into the 7.5 ceiling; a push through opens room toward the 8 pull target, with continuation into 10 if it keeps running. A close back under 3.56 would weaken the setup. #12 $PYPL BULLISH 70/100 MAJOR SUPPORTS 54, 53 MAJOR RESISTANCES 57, 57.5 PULL TARGET 60 VACUUM TARGETS 58, 60, 65, 70 CIPHER READ PYPL is holding above support at 54 and pressing into the 57 ceiling; a push through opens room toward the 60 pull target, with continuation into 70 if it keeps running. A close back under 54 would weaken the setup. #13 $SOFI BULLISH 70/100 MAJOR SUPPORTS 16.5, 16 MAJOR RESISTANCES 17.5, 18 PULL TARGET 20 VACUUM TARGETS 18, 20, 22, 25 CIPHER READ SOFI is holding above support at 16.5 and pressing into the 17.5 ceiling; a push through opens room toward the 20 pull target, with continuation into 25 if it keeps running. A close back under 16.5 would weaken the setup. #14 $GILD BULLISH 69/100 MAJOR SUPPORTS 129, 126 MAJOR RESISTANCES 135, 136 PULL TARGET 150 VACUUM TARGETS 135, 136, 140, 150 CIPHER READ GILD is holding above support at 129 and pressing into the 135 ceiling; a push through opens room toward the 150 pull target. A close back under 129 would weaken the setup. #15 $HAL BULLISH 68/100 MAJOR SUPPORTS 34, 33 MAJOR RESISTANCES 35.5, 36 PULL TARGET 36 VACUUM TARGETS 36, 37, 40, 50 CIPHER READ HAL is holding above support at 34 and pressing into the 35.5 ceiling; a push through opens room toward the 36 pull target, with continuation into 50 if it keeps running. A close back under 34 would weaken the setup. #16 $LUV BULLISH 68/100 MAJOR SUPPORTS 47, 46 MAJOR RESISTANCES 48.5, 49 PULL TARGET 50 VACUUM TARGETS 50, 51, 52.5, 55 CIPHER READ LUV is holding above support at 47 and pressing into the 48.5 ceiling; a push through opens room toward the 50 pull target, with continuation into 55 if it keeps running. A close back under 47 would weaken the setup. #17 $JNJ BULLISH 67/100 MAJOR SUPPORTS 247.5, 245 MAJOR RESISTANCES 255, 257.5 PULL TARGET 260 VACUUM TARGETS 255, 260, 270, 280 CIPHER READ JNJ is holding above support at 247.5 and pressing into the 255 ceiling; a push through opens room toward the 260 pull target, with continuation into 280 if it keeps running. A close back under 247.5 would weaken the setup. #18 $DE BULLISH 66/100 MAJOR SUPPORTS 587.5, 585 MAJOR RESISTANCES 600, 602.5 PULL TARGET 600 VACUUM TARGETS 600, 610, 680, 700 CIPHER READ DE is holding above support at 587.5 and pressing into the 600 ceiling; a push through opens room toward the 600 pull target, with continuation into 700 if it keeps running. A close back under 587.5 would weaken the setup. #19 $GM BULLISH 66/100 MAJOR SUPPORTS 74, 72.5 MAJOR RESISTANCES 77, 77.5 PULL TARGET 80 VACUUM TARGETS 80, 85, 90, 95 CIPHER READ GM is holding above support at 74 and pressing into the 77 ceiling; a push through opens room toward the 80 pull target, with continuation into 95 if it keeps running. A close back under 74 would weaken the setup. #20 $MNKD BULLISH 66/100 MAJOR SUPPORTS 3, 4 MAJOR RESISTANCES 5, 6 PULL TARGET 5 VACUUM TARGETS 4.5, 5, 5.5, 6 CIPHER READ MNKD is holding above support at 3 and pressing into the 5 ceiling; a push through opens room toward the 5 pull target, with continuation into 6 if it keeps running. A close back under 3 would weaken the setup. #21 $BULL BULLISH 65/100 MAJOR SUPPORTS 5, 7 MAJOR RESISTANCES 7.5, 8 PULL TARGET 7.5 VACUUM TARGETS 7.5, 8, 8.5, 10 CIPHER READ BULL is holding above support at 5 and pressing into the 7.5 ceiling; a push through opens room toward the 7.5 pull target, with continuation into 10 if it keeps running. A close back under 5 would weaken the setup. #22 $EOSE BULLISH 65/100 MAJOR SUPPORTS 4, 3.5 MAJOR RESISTANCES 4.5, 5 PULL TARGET 5 VACUUM TARGETS 4.5, 5, 5.5, 6 CIPHER READ EOSE is holding above support at 4 and pressing into the 4.5 ceiling; a push through opens room toward the 5 pull target, with continuation into 6 if it keeps running. A close back under 3.32 would weaken the setup. #23 $ICE BULLISH 65/100 MAJOR SUPPORTS 134, 132 MAJOR RESISTANCES 140, 141 PULL TARGET 145 VACUUM TARGETS 145, 150, 155, 160 CIPHER READ ICE is holding above support at 134 and pressing into the 140 ceiling; a push through opens room toward the 145 pull target, with continuation into 160 if it keeps running. A close back under 134 would weaken the setup. #24 $SHOP BULLISH 65/100 MAJOR SUPPORTS 119, 118 MAJOR RESISTANCES 124, 125 PULL TARGET 160 VACUUM TARGETS 130, 140, 160, 175 CIPHER READ SHOP is holding above support at 119 and pressing into the 124 ceiling; a push through opens room toward the 160 pull target, with continuation into 175 if it keeps running. A close back under 119 would weaken the setup. #25 $CRDO BULLISH 64/100 MAJOR SUPPORTS 175, 170 MAJOR RESISTANCES 202.5, 205 PULL TARGET 250 VACUUM TARGETS 230, 250, 280, 300 CIPHER READ CRDO is holding above support at 175 and pressing into the 202.5 ceiling; a push through opens room toward the 250 pull target, with continuation into 300 if it keeps running. A close back under 175 would weaken the setup. #26 $DELL BULLISH 64/100 MAJOR SUPPORTS 385, 380 MAJOR RESISTANCES 397.5, 400 PULL TARGET 400 VACUUM TARGETS 400, 410, 440, 450 CIPHER READ DELL is holding above support at 385 and pressing into the 397.5 ceiling; a push through opens room toward the 400 pull target, with continuation into 450 if it keeps running. A close back under 385 would weaken the setup. #27 $TWLO BULLISH 64/100 MAJOR SUPPORTS 190, 185 MAJOR RESISTANCES 207.5, 210 PULL TARGET 220 VACUUM TARGETS 210, 220, 230, 240 CIPHER READ TWLO is holding above support at 190 and pressing into the 207.5 ceiling; a push through opens room toward the 220 pull target, with continuation into 240 if it keeps running. A close back under 190 would weaken the setup. #28 $ALAB BULLISH 63/100 MAJOR SUPPORTS 295, 290 MAJOR RESISTANCES 305, 310 PULL TARGET 310 VACUUM TARGETS 310, 350, 360, 450 CIPHER READ ALAB is holding above support at 295 and pressing into the 305 ceiling; a push through opens room toward the 310 pull target, with continuation into 450 if it keeps running. A close back under 295 would weaken the setup. #29 $CNQ BULLISH 63/100 MAJOR SUPPORTS 37.5, 35 MAJOR RESISTANCES 44.5, 45 PULL TARGET 50 VACUUM TARGETS 44.5, 45, 50, 60 CIPHER READ CNQ is holding above support at 37.5 and pressing into the 44.5 ceiling; a push through opens room toward the 50 pull target, with continuation into 60 if it keeps running. A close back under 37.5 would weaken the setup. #30 $HTZ BEARISH 63/100 MAJOR SUPPORTS 1.5 MAJOR RESISTANCES 2, 2.5 PULL TARGET 1.5 VACUUM TARGETS 1.5 CIPHER READ HTZ is capped at resistance around 2 and leaning on 1.5 support; a break of 1.5 opens downside toward the 1.5 pull target. Reclaiming 2.4 would invalidate the setup.",
+    "nodes": [
+      {
+        "i": 74,
+        "rect": {
+          "h": 3588,
+          "w": 1180,
+          "x": 351,
+          "y": 81
+        },
+        "tag": "div",
+        "text": "Setup Scanner The Cipher engine ranks the entire universe and surfaces the 30 highest-conviction setups. Powered by the Cipher proprietary model. Short term Long term LEAP Cipher Model Scan Liq scan Cluster scan CLUSTER EXP Nearest (1 Exp) Fri Jul 24 Fri Jul 31 Fri Aug 7 Fri Aug 14 Fri Aug 21 Fri Aug 28 Fri Sep 4 Fri Sep 11 Flash BETA Flash Index BETA Flash Agentic BETA Download .CSV LEAP scans options expiring within ~120 market days. Scans aren't saved, so download the .CSV to keep your results. A full-universe scan can take a few minutes; keep this screen open and check back when it finishes. #1 $LAES BULLISH 82/100 MAJOR SUPPORTS 2.5, 2 MAJOR RESISTANCES 3, 3.5 PULL TARGET 3 VACUUM TARGETS 3, 3.5 CIPHER READ LAES is holding above support at 2.5 and pressing into the 3 ceiling; a push through opens room toward the 3 pull target, with continuation into 3.5 if it keeps running. A close back under 2.23 would weaken the setup. #2 $PCG BULLISH 79/100 MAJOR SUPPORTS 16.5, 16 MAJOR RESISTANCES 17.5, 18 PULL TARGET 20 VACUUM TARGETS 18, 19, 20, 21 CIPHER READ PCG is holding above support at 16.5 and pressing into the 17.5 ceiling; a push through opens room toward the 20 pull target, with continuation into 21 if it keeps running. A close back under 16.5 would weaken the setup. #3 $IOVA BULLISH 78/100 MAJOR SUPPORTS 4.5, 4 MAJOR RESISTANCES 5.5, 7.5 PULL TARGET 5.5 VACUUM TARGETS 5.5, 6, 7, 7.5 CIPHER READ IOVA is holding above support at 4.5 and pressing into the 5.5 ceiling; a push through opens room toward the 5.5 pull target, with continuation into 7.5 if it keeps running. A close back under 4.5 would weaken the setup. #4 $AXTI BULLISH 76/100 MAJOR SUPPORTS 43, 40 MAJOR RESISTANCES 49.5, 50 PULL TARGET 50 VACUUM TARGETS 50, 55, 57, 60 CIPHER READ AXTI is holding above support at 43 and pressing into the 49.5 ceiling; a push through opens room toward the 50 pull target, with continuation into 60 if it keeps running. A close back under 43 would weaken the setup. #5 $HIVE"
+      },
+      {
+        "i": 75,
+        "rect": {
+          "h": 69,
+          "w": 1180,
+          "x": 351,
+          "y": 81
+        },
+        "tag": "div",
+        "text": "Setup Scanner The Cipher engine ranks the entire universe and surfaces the 30 highest-conviction setups. Powered by the Cipher proprietary model."
+      },
+      {
+        "i": 77,
+        "rect": {
+          "h": 35,
+          "w": 720,
+          "x": 351,
+          "y": 115
+        },
+        "tag": "p",
+        "text": "The Cipher engine ranks the entire universe and surfaces the 30 highest-conviction setups. Powered by the Cipher proprietary model."
+      },
+      {
+        "i": 78,
+        "rect": {
+          "h": 187,
+          "w": 1180,
+          "x": 351,
+          "y": 170
+        },
+        "tag": "div",
+        "text": "Short term Long term LEAP Cipher Model Scan Liq scan Cluster scan CLUSTER EXP Nearest (1 Exp) Fri Jul 24 Fri Jul 31 Fri Aug 7 Fri Aug 14 Fri Aug 21 Fri Aug 28 Fri Sep 4 Fri Sep 11 Flash BETA Flash Index BETA Flash Agentic BETA Download .CSV"
+      },
+      {
+        "i": 79,
+        "rect": {
+          "h": 33,
+          "w": 1180,
+          "x": 351,
+          "y": 170
+        },
+        "tag": "div",
+        "text": "Short term Long term LEAP Cipher Model Scan"
+      },
+      {
+        "i": 80,
+        "rect": {
+          "h": 29,
+          "w": 223,
+          "x": 351,
+          "y": 172
+        },
+        "tag": "div",
+        "text": "Short term Long term LEAP"
+      },
+      {
+        "i": 84,
+        "rect": {
+          "h": 33,
+          "w": 161,
+          "x": 585,
+          "y": 170
+        },
+        "tag": "button",
+        "text": "Cipher Model Scan"
+      },
+      {
+        "i": 85,
+        "rect": {
+          "h": 45,
+          "w": 1180,
+          "x": 351,
+          "y": 213
+        },
+        "tag": "div",
+        "text": "Liq scan Cluster scan CLUSTER EXP Nearest (1 Exp) Fri Jul 24 Fri Jul 31 Fri Aug 7 Fri Aug 14 Fri Aug 21 Fri Aug 28 Fri Sep 4 Fri Sep 11"
+      },
+      {
+        "i": 88,
+        "rect": {
+          "h": 33,
+          "w": 235,
+          "x": 593,
+          "y": 225
+        },
+        "tag": "label",
+        "text": "CLUSTER EXP Nearest (1 Exp) Fri Jul 24 Fri Jul 31 Fri Aug 7 Fri Aug 14 Fri Aug 21 Fri Aug 28 Fri Sep 4 Fri Sep 11"
+      },
+      {
+        "i": 90,
+        "rect": {
+          "h": 33,
+          "w": 151,
+          "x": 677,
+          "y": 225
+        },
+        "tag": "select",
+        "text": "Nearest (1 Exp) Fri Jul 24 Fri Jul 31 Fri Aug 7 Fri Aug 14 Fri Aug 21 Fri Aug 28 Fri Sep 4 Fri Sep 11"
+      },
+      {
+        "i": 91,
+        "rect": {
+          "h": 46,
+          "w": 1180,
+          "x": 351,
+          "y": 269
+        },
+        "tag": "div",
+        "text": "Flash BETA Flash Index BETA Flash Agentic BETA"
+      },
+      {
+        "i": 95,
+        "rect": {
+          "h": 35,
+          "w": 157,
+          "x": 480,
+          "y": 279
+        },
+        "tag": "button",
+        "text": "Flash Index BETA"
+      },
+      {
+        "i": 98,
+        "rect": {
+          "h": 35,
+          "w": 188,
+          "x": 649,
+          "y": 279
+        },
+        "tag": "button",
+        "text": "Flash Agentic BETA"
+      },
+      {
+        "i": 107,
+        "rect": {
+          "h": 15,
+          "w": 1180,
+          "x": 351,
+          "y": 369
+        },
+        "tag": "p",
+        "text": "LEAP scans options expiring within ~120 market days."
+      },
+      {
+        "i": 108,
+        "rect": {
+          "h": 62,
+          "w": 820,
+          "x": 351,
+          "y": 401
+        },
+        "tag": "div",
+        "text": "Scans aren't saved, so download the .CSV to keep your results. A full-universe scan can take a few minutes; keep this screen open and check back when it finishes."
+      },
+      {
+        "i": 111,
+        "rect": {
+          "h": 38,
+          "w": 765,
+          "x": 392,
+          "y": 412
+        },
+        "tag": "span",
+        "text": "Scans aren't saved, so download the .CSV to keep your results. A full-universe scan can take a few minutes; keep this screen open and check back when it finishes."
+      },
+      {
+        "i": 112,
+        "rect": {
+          "h": 17,
+          "w": 115,
+          "x": 532,
+          "y": 413
+        },
+        "tag": "b",
+        "text": "download the .CSV"
+      },
+      {
+        "i": 113,
+        "rect": {
+          "h": 3183,
+          "w": 1180,
+          "x": 351,
+          "y": 486
+        },
+        "tag": "div",
+        "text": "#1 $LAES BULLISH 82/100 MAJOR SUPPORTS 2.5, 2 MAJOR RESISTANCES 3, 3.5 PULL TARGET 3 VACUUM TARGETS 3, 3.5 CIPHER READ LAES is holding above support at 2.5 and pressing into the 3 ceiling; a push through opens room toward the 3 pull target, with continuation into 3.5 if it keeps running. A close back under 2.23 would weaken the setup. #2 $PCG BULLISH 79/100 MAJOR SUPPORTS 16.5, 16 MAJOR RESISTANCES 17.5, 18 PULL TARGET 20 VACUUM TARGETS 18, 19, 20, 21 CIPHER READ PCG is holding above support at 16.5 and pressing into the 17.5 ceiling; a push through opens room toward the 20 pull target, with continuation into 21 if it keeps running. A close back under 16.5 would weaken the setup. #3 $IOVA BULLISH 78/100 MAJOR SUPPORTS 4.5, 4 MAJOR RESISTANCES 5.5, 7.5 PULL TARGET 5.5 VACUUM TARGETS 5.5, 6, 7, 7.5 CIPHER READ IOVA is holding above support at 4.5 and pressing into the 5.5 ceiling; a push through opens room toward the 5.5 pull target, with continuation into 7.5 if it keeps running. A close back under 4.5 would weaken the setup. #4 $AXTI BULLISH 76/100 MAJOR SUPPORTS 43, 40 MAJOR RESISTANCES 49.5, 50 PULL TARGET 50 VACUUM TARGETS 50, 55, 57, 60 CIPHER READ AXTI is holding above support at 43 and pressing into the 49.5 ceiling; a push through opens room toward the 50 pull target, with continuation into 60 if it keeps running. A close back under 43 would weaken the setup. #5 $HIVE BULLISH 73/100 MAJOR SUPPORTS 2.5, 2 MAJOR RESISTANCES 3, 3.5 PULL TARGET 4 VACUUM TARGETS 3, 3.5, 4 CIPHER READ HIVE is holding above support at 2.5 and pressing into the 3 ceiling; a push through opens room toward the 4 pull target. A close back under 1.98 would weaken the setup. #6 $NUAI BULLISH 73/100 MAJOR SUPPORTS 4, 3.5 MAJOR RESISTANCES 4.5, 5 PULL TARGET 4.5 VACUUM TARGETS 4.5, 5, 5.5, 6 CIPHER READ NUAI is holding above support at 4 and pressing into the 4.5 ceiling; a push through opens room toward the 4.5 pull target, with continuation into 6 if it keeps running. A close back under 3"
+      },
+      {
+        "i": 114,
+        "rect": {
+          "h": 310,
+          "w": 383,
+          "x": 351,
+          "y": 486
+        },
+        "tag": "article",
+        "text": "#1 $LAES BULLISH 82/100 MAJOR SUPPORTS 2.5, 2 MAJOR RESISTANCES 3, 3.5 PULL TARGET 3 VACUUM TARGETS 3, 3.5 CIPHER READ LAES is holding above support at 2.5 and pressing into the 3 ceiling; a push through opens room toward the 3 pull target, with continuation into 3.5 if it keeps running. A close back under 2.23 would weaken the setup."
+      },
+      {
+        "i": 115,
+        "rect": {
+          "h": 25,
+          "w": 349,
+          "x": 368,
+          "y": 502
+        },
+        "tag": "header",
+        "text": "#1 $LAES BULLISH 82/100"
+      },
+      {
+        "i": 121,
+        "rect": {
+          "h": 96,
+          "w": 349,
+          "x": 368,
+          "y": 540
+        },
+        "tag": "div",
+        "text": "MAJOR SUPPORTS 2.5, 2 MAJOR RESISTANCES 3, 3.5 PULL TARGET 3 VACUUM TARGETS 3, 3.5"
+      },
+      {
+        "i": 122,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 368,
+          "y": 540
+        },
+        "tag": "div",
+        "text": "MAJOR SUPPORTS 2.5, 2"
+      },
+      {
+        "i": 125,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 368,
+          "y": 566
+        },
+        "tag": "div",
+        "text": "MAJOR RESISTANCES 3, 3.5"
+      },
+      {
+        "i": 126,
+        "rect": {
+          "h": 13,
+          "w": 117,
+          "x": 368,
+          "y": 570
+        },
+        "tag": "span",
+        "text": "MAJOR RESISTANCES"
+      },
+      {
+        "i": 131,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 368,
+          "y": 618
+        },
+        "tag": "div",
+        "text": "VACUUM TARGETS 3, 3.5"
+      },
+      {
+        "i": 134,
+        "rect": {
+          "h": 109,
+          "w": 349,
+          "x": 368,
+          "y": 650
+        },
+        "tag": "p",
+        "text": "CIPHER READ LAES is holding above support at 2.5 and pressing into the 3 ceiling; a push through opens room toward the 3 pull target, with continuation into 3.5 if it keeps running. A close back under 2.23 would weaken the setup."
+      },
+      {
+        "i": 136,
+        "rect": {
+          "h": 310,
+          "w": 383,
+          "x": 750,
+          "y": 486
+        },
+        "tag": "article",
+        "text": "#2 $PCG BULLISH 79/100 MAJOR SUPPORTS 16.5, 16 MAJOR RESISTANCES 17.5, 18 PULL TARGET 20 VACUUM TARGETS 18, 19, 20, 21 CIPHER READ PCG is holding above support at 16.5 and pressing into the 17.5 ceiling; a push through opens room toward the 20 pull target, with continuation into 21 if it keeps running. A close back under 16.5 would weaken the setup."
+      },
+      {
+        "i": 137,
+        "rect": {
+          "h": 25,
+          "w": 349,
+          "x": 766,
+          "y": 502
+        },
+        "tag": "header",
+        "text": "#2 $PCG BULLISH 79/100"
+      },
+      {
+        "i": 143,
+        "rect": {
+          "h": 96,
+          "w": 349,
+          "x": 766,
+          "y": 540
+        },
+        "tag": "div",
+        "text": "MAJOR SUPPORTS 16.5, 16 MAJOR RESISTANCES 17.5, 18 PULL TARGET 20 VACUUM TARGETS 18, 19, 20, 21"
+      },
+      {
+        "i": 144,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 766,
+          "y": 540
+        },
+        "tag": "div",
+        "text": "MAJOR SUPPORTS 16.5, 16"
+      },
+      {
+        "i": 147,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 766,
+          "y": 566
+        },
+        "tag": "div",
+        "text": "MAJOR RESISTANCES 17.5, 18"
+      },
+      {
+        "i": 148,
+        "rect": {
+          "h": 13,
+          "w": 117,
+          "x": 766,
+          "y": 570
+        },
+        "tag": "span",
+        "text": "MAJOR RESISTANCES"
+      },
+      {
+        "i": 153,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 766,
+          "y": 618
+        },
+        "tag": "div",
+        "text": "VACUUM TARGETS 18, 19, 20, 21"
+      },
+      {
+        "i": 156,
+        "rect": {
+          "h": 129,
+          "w": 349,
+          "x": 766,
+          "y": 650
+        },
+        "tag": "p",
+        "text": "CIPHER READ PCG is holding above support at 16.5 and pressing into the 17.5 ceiling; a push through opens room toward the 20 pull target, with continuation into 21 if it keeps running. A close back under 16.5 would weaken the setup."
+      },
+      {
+        "i": 158,
+        "rect": {
+          "h": 310,
+          "w": 383,
+          "x": 1148,
+          "y": 486
+        },
+        "tag": "article",
+        "text": "#3 $IOVA BULLISH 78/100 MAJOR SUPPORTS 4.5, 4 MAJOR RESISTANCES 5.5, 7.5 PULL TARGET 5.5 VACUUM TARGETS 5.5, 6, 7, 7.5 CIPHER READ IOVA is holding above support at 4.5 and pressing into the 5.5 ceiling; a push through opens room toward the 5.5 pull target, with continuation into 7.5 if it keeps running. A close back under 4.5 would weaken the setup."
+      },
+      {
+        "i": 159,
+        "rect": {
+          "h": 25,
+          "w": 349,
+          "x": 1165,
+          "y": 502
+        },
+        "tag": "header",
+        "text": "#3 $IOVA BULLISH 78/100"
+      },
+      {
+        "i": 165,
+        "rect": {
+          "h": 96,
+          "w": 349,
+          "x": 1165,
+          "y": 540
+        },
+        "tag": "div",
+        "text": "MAJOR SUPPORTS 4.5, 4 MAJOR RESISTANCES 5.5, 7.5 PULL TARGET 5.5 VACUUM TARGETS 5.5, 6, 7, 7.5"
+      },
+      {
+        "i": 166,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 1165,
+          "y": 540
+        },
+        "tag": "div",
+        "text": "MAJOR SUPPORTS 4.5, 4"
+      },
+      {
+        "i": 169,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 1165,
+          "y": 566
+        },
+        "tag": "div",
+        "text": "MAJOR RESISTANCES 5.5, 7.5"
+      },
+      {
+        "i": 170,
+        "rect": {
+          "h": 13,
+          "w": 117,
+          "x": 1165,
+          "y": 570
+        },
+        "tag": "span",
+        "text": "MAJOR RESISTANCES"
+      },
+      {
+        "i": 175,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 1165,
+          "y": 618
+        },
+        "tag": "div",
+        "text": "VACUUM TARGETS 5.5, 6, 7, 7.5"
+      },
+      {
+        "i": 178,
+        "rect": {
+          "h": 129,
+          "w": 349,
+          "x": 1165,
+          "y": 650
+        },
+        "tag": "p",
+        "text": "CIPHER READ IOVA is holding above support at 4.5 and pressing into the 5.5 ceiling; a push through opens room toward the 5.5 pull target, with continuation into 7.5 if it keeps running. A close back under 4.5 would weaken the setup."
+      },
+      {
+        "i": 180,
+        "rect": {
+          "h": 290,
+          "w": 383,
+          "x": 351,
+          "y": 812
+        },
+        "tag": "article",
+        "text": "#4 $AXTI BULLISH 76/100 MAJOR SUPPORTS 43, 40 MAJOR RESISTANCES 49.5, 50 PULL TARGET 50 VACUUM TARGETS 50, 55, 57, 60 CIPHER READ AXTI is holding above support at 43 and pressing into the 49.5 ceiling; a push through opens room toward the 50 pull target, with continuation into 60 if it keeps running. A close back under 43 would weaken the setup."
+      },
+      {
+        "i": 181,
+        "rect": {
+          "h": 25,
+          "w": 349,
+          "x": 368,
+          "y": 828
+        },
+        "tag": "header",
+        "text": "#4 $AXTI BULLISH 76/100"
+      },
+      {
+        "i": 187,
+        "rect": {
+          "h": 96,
+          "w": 349,
+          "x": 368,
+          "y": 866
+        },
+        "tag": "div",
+        "text": "MAJOR SUPPORTS 43, 40 MAJOR RESISTANCES 49.5, 50 PULL TARGET 50 VACUUM TARGETS 50, 55, 57, 60"
+      },
+      {
+        "i": 188,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 368,
+          "y": 866
+        },
+        "tag": "div",
+        "text": "MAJOR SUPPORTS 43, 40"
+      },
+      {
+        "i": 191,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 368,
+          "y": 892
+        },
+        "tag": "div",
+        "text": "MAJOR RESISTANCES 49.5, 50"
+      },
+      {
+        "i": 192,
+        "rect": {
+          "h": 13,
+          "w": 117,
+          "x": 368,
+          "y": 896
+        },
+        "tag": "span",
+        "text": "MAJOR RESISTANCES"
+      },
+      {
+        "i": 197,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 368,
+          "y": 944
+        },
+        "tag": "div",
+        "text": "VACUUM TARGETS 50, 55, 57, 60"
+      },
+      {
+        "i": 200,
+        "rect": {
+          "h": 109,
+          "w": 349,
+          "x": 368,
+          "y": 976
+        },
+        "tag": "p",
+        "text": "CIPHER READ AXTI is holding above support at 43 and pressing into the 49.5 ceiling; a push through opens room toward the 50 pull target, with continuation into 60 if it keeps running. A close back under 43 would weaken the setup."
+      },
+      {
+        "i": 202,
+        "rect": {
+          "h": 290,
+          "w": 383,
+          "x": 750,
+          "y": 812
+        },
+        "tag": "article",
+        "text": "#5 $HIVE BULLISH 73/100 MAJOR SUPPORTS 2.5, 2 MAJOR RESISTANCES 3, 3.5 PULL TARGET 4 VACUUM TARGETS 3, 3.5, 4 CIPHER READ HIVE is holding above support at 2.5 and pressing into the 3 ceiling; a push through opens room toward the 4 pull target. A close back under 1.98 would weaken the setup."
+      },
+      {
+        "i": 203,
+        "rect": {
+          "h": 25,
+          "w": 349,
+          "x": 766,
+          "y": 828
+        },
+        "tag": "header",
+        "text": "#5 $HIVE BULLISH 73/100"
+      },
+      {
+        "i": 209,
+        "rect": {
+          "h": 96,
+          "w": 349,
+          "x": 766,
+          "y": 866
+        },
+        "tag": "div",
+        "text": "MAJOR SUPPORTS 2.5, 2 MAJOR RESISTANCES 3, 3.5 PULL TARGET 4 VACUUM TARGETS 3, 3.5, 4"
+      },
+      {
+        "i": 210,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 766,
+          "y": 866
+        },
+        "tag": "div",
+        "text": "MAJOR SUPPORTS 2.5, 2"
+      },
+      {
+        "i": 213,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 766,
+          "y": 892
+        },
+        "tag": "div",
+        "text": "MAJOR RESISTANCES 3, 3.5"
+      },
+      {
+        "i": 214,
+        "rect": {
+          "h": 13,
+          "w": 117,
+          "x": 766,
+          "y": 896
+        },
+        "tag": "span",
+        "text": "MAJOR RESISTANCES"
+      },
+      {
+        "i": 219,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 766,
+          "y": 944
+        },
+        "tag": "div",
+        "text": "VACUUM TARGETS 3, 3.5, 4"
+      },
+      {
+        "i": 222,
+        "rect": {
+          "h": 109,
+          "w": 349,
+          "x": 766,
+          "y": 976
+        },
+        "tag": "p",
+        "text": "CIPHER READ HIVE is holding above support at 2.5 and pressing into the 3 ceiling; a push through opens room toward the 4 pull target. A close back under 1.98 would weaken the setup."
+      },
+      {
+        "i": 224,
+        "rect": {
+          "h": 290,
+          "w": 383,
+          "x": 1148,
+          "y": 812
+        },
+        "tag": "article",
+        "text": "#6 $NUAI BULLISH 73/100 MAJOR SUPPORTS 4, 3.5 MAJOR RESISTANCES 4.5, 5 PULL TARGET 4.5 VACUUM TARGETS 4.5, 5, 5.5, 6 CIPHER READ NUAI is holding above support at 4 and pressing into the 4.5 ceiling; a push through opens room toward the 4.5 pull target, with continuation into 6 if it keeps running. A close back under 3.22 would weaken the setup."
+      },
+      {
+        "i": 225,
+        "rect": {
+          "h": 25,
+          "w": 349,
+          "x": 1165,
+          "y": 828
+        },
+        "tag": "header",
+        "text": "#6 $NUAI BULLISH 73/100"
+      },
+      {
+        "i": 231,
+        "rect": {
+          "h": 96,
+          "w": 349,
+          "x": 1165,
+          "y": 866
+        },
+        "tag": "div",
+        "text": "MAJOR SUPPORTS 4, 3.5 MAJOR RESISTANCES 4.5, 5 PULL TARGET 4.5 VACUUM TARGETS 4.5, 5, 5.5, 6"
+      },
+      {
+        "i": 232,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 1165,
+          "y": 866
+        },
+        "tag": "div",
+        "text": "MAJOR SUPPORTS 4, 3.5"
+      },
+      {
+        "i": 235,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 1165,
+          "y": 892
+        },
+        "tag": "div",
+        "text": "MAJOR RESISTANCES 4.5, 5"
+      },
+      {
+        "i": 236,
+        "rect": {
+          "h": 13,
+          "w": 117,
+          "x": 1165,
+          "y": 896
+        },
+        "tag": "span",
+        "text": "MAJOR RESISTANCES"
+      },
+      {
+        "i": 241,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 1165,
+          "y": 944
+        },
+        "tag": "div",
+        "text": "VACUUM TARGETS 4.5, 5, 5.5, 6"
+      },
+      {
+        "i": 244,
+        "rect": {
+          "h": 109,
+          "w": 349,
+          "x": 1165,
+          "y": 976
+        },
+        "tag": "p",
+        "text": "CIPHER READ NUAI is holding above support at 4 and pressing into the 4.5 ceiling; a push through opens room toward the 4.5 pull target, with continuation into 6 if it keeps running. A close back under 3.22 would weaken the setup."
+      },
+      {
+        "i": 246,
+        "rect": {
+          "h": 310,
+          "w": 383,
+          "x": 351,
+          "y": 1118
+        },
+        "tag": "article",
+        "text": "#7 $CSCO BULLISH 72/100 MAJOR SUPPORTS 109, 108 MAJOR RESISTANCES 112, 114 PULL TARGET 120 VACUUM TARGETS 115, 120, 125, 130 CIPHER READ CSCO is holding above support at 109 and pressing into the 112 ceiling; a push through opens room toward the 120 pull target, with continuation into 130 if it keeps running. A close back under 109 would weaken the setup."
+      },
+      {
+        "i": 247,
+        "rect": {
+          "h": 25,
+          "w": 349,
+          "x": 368,
+          "y": 1134
+        },
+        "tag": "header",
+        "text": "#7 $CSCO BULLISH 72/100"
+      },
+      {
+        "i": 253,
+        "rect": {
+          "h": 96,
+          "w": 349,
+          "x": 368,
+          "y": 1172
+        },
+        "tag": "div",
+        "text": "MAJOR SUPPORTS 109, 108 MAJOR RESISTANCES 112, 114 PULL TARGET 120 VACUUM TARGETS 115, 120, 125, 130"
+      },
+      {
+        "i": 254,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 368,
+          "y": 1172
+        },
+        "tag": "div",
+        "text": "MAJOR SUPPORTS 109, 108"
+      },
+      {
+        "i": 257,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 368,
+          "y": 1198
+        },
+        "tag": "div",
+        "text": "MAJOR RESISTANCES 112, 114"
+      },
+      {
+        "i": 258,
+        "rect": {
+          "h": 13,
+          "w": 117,
+          "x": 368,
+          "y": 1202
+        },
+        "tag": "span",
+        "text": "MAJOR RESISTANCES"
+      },
+      {
+        "i": 263,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 368,
+          "y": 1250
+        },
+        "tag": "div",
+        "text": "VACUUM TARGETS 115, 120, 125, 130"
+      },
+      {
+        "i": 265,
+        "rect": {
+          "h": 18,
+          "w": 146,
+          "x": 571,
+          "y": 1250
+        },
+        "tag": "span",
+        "text": "115, 120, 125, 130"
+      },
+      {
+        "i": 266,
+        "rect": {
+          "h": 129,
+          "w": 349,
+          "x": 368,
+          "y": 1282
+        },
+        "tag": "p",
+        "text": "CIPHER READ CSCO is holding above support at 109 and pressing into the 112 ceiling; a push through opens room toward the 120 pull target, with continuation into 130 if it keeps running. A close back under 109 would weaken the setup."
+      },
+      {
+        "i": 268,
+        "rect": {
+          "h": 310,
+          "w": 383,
+          "x": 750,
+          "y": 1118
+        },
+        "tag": "article",
+        "text": "#8 $CLOV BULLISH 71/100 MAJOR SUPPORTS 4, 4.5 MAJOR RESISTANCES 5, 5.5 PULL TARGET 5 VACUUM TARGETS 5, 5.5, 6, 6.5 CIPHER READ CLOV is holding above support at 4 and pressing into the 5 ceiling; a push through opens room toward the 5 pull target, with continuation into 6.5 if it keeps running. A close back under 4 would weaken the setup."
+      },
+      {
+        "i": 269,
+        "rect": {
+          "h": 25,
+          "w": 349,
+          "x": 766,
+          "y": 1134
+        },
+        "tag": "header",
+        "text": "#8 $CLOV BULLISH 71/100"
+      },
+      {
+        "i": 275,
+        "rect": {
+          "h": 96,
+          "w": 349,
+          "x": 766,
+          "y": 1172
+        },
+        "tag": "div",
+        "text": "MAJOR SUPPORTS 4, 4.5 MAJOR RESISTANCES 5, 5.5 PULL TARGET 5 VACUUM TARGETS 5, 5.5, 6, 6.5"
+      },
+      {
+        "i": 276,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 766,
+          "y": 1172
+        },
+        "tag": "div",
+        "text": "MAJOR SUPPORTS 4, 4.5"
+      },
+      {
+        "i": 279,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 766,
+          "y": 1198
+        },
+        "tag": "div",
+        "text": "MAJOR RESISTANCES 5, 5.5"
+      },
+      {
+        "i": 280,
+        "rect": {
+          "h": 13,
+          "w": 117,
+          "x": 766,
+          "y": 1202
+        },
+        "tag": "span",
+        "text": "MAJOR RESISTANCES"
+      },
+      {
+        "i": 285,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 766,
+          "y": 1250
+        },
+        "tag": "div",
+        "text": "VACUUM TARGETS 5, 5.5, 6, 6.5"
+      },
+      {
+        "i": 288,
+        "rect": {
+          "h": 109,
+          "w": 349,
+          "x": 766,
+          "y": 1282
+        },
+        "tag": "p",
+        "text": "CIPHER READ CLOV is holding above support at 4 and pressing into the 5 ceiling; a push through opens room toward the 5 pull target, with continuation into 6.5 if it keeps running. A close back under 4 would weaken the setup."
+      },
+      {
+        "i": 290,
+        "rect": {
+          "h": 310,
+          "w": 383,
+          "x": 1148,
+          "y": 1118
+        },
+        "tag": "article",
+        "text": "#9 $WULF BULLISH 71/100 MAJOR SUPPORTS 17, 16 MAJOR RESISTANCES 18.5, 19 PULL TARGET 20 VACUUM TARGETS 20, 22, 23, 25 CIPHER READ WULF is holding above support at 17 and pressing into the 18.5 ceiling; a push through opens room toward the 20 pull target, with continuation into 25 if it keeps running. A close back under 17 would weaken the setup."
+      },
+      {
+        "i": 291,
+        "rect": {
+          "h": 25,
+          "w": 349,
+          "x": 1165,
+          "y": 1134
+        },
+        "tag": "header",
+        "text": "#9 $WULF BULLISH 71/100"
+      },
+      {
+        "i": 297,
+        "rect": {
+          "h": 96,
+          "w": 349,
+          "x": 1165,
+          "y": 1172
+        },
+        "tag": "div",
+        "text": "MAJOR SUPPORTS 17, 16 MAJOR RESISTANCES 18.5, 19 PULL TARGET 20 VACUUM TARGETS 20, 22, 23, 25"
+      },
+      {
+        "i": 298,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 1165,
+          "y": 1172
+        },
+        "tag": "div",
+        "text": "MAJOR SUPPORTS 17, 16"
+      },
+      {
+        "i": 301,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 1165,
+          "y": 1198
+        },
+        "tag": "div",
+        "text": "MAJOR RESISTANCES 18.5, 19"
+      },
+      {
+        "i": 302,
+        "rect": {
+          "h": 13,
+          "w": 117,
+          "x": 1165,
+          "y": 1202
+        },
+        "tag": "span",
+        "text": "MAJOR RESISTANCES"
+      },
+      {
+        "i": 307,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 1165,
+          "y": 1250
+        },
+        "tag": "div",
+        "text": "VACUUM TARGETS 20, 22, 23, 25"
+      },
+      {
+        "i": 310,
+        "rect": {
+          "h": 109,
+          "w": 349,
+          "x": 1165,
+          "y": 1282
+        },
+        "tag": "p",
+        "text": "CIPHER READ WULF is holding above support at 17 and pressing into the 18.5 ceiling; a push through opens room toward the 20 pull target, with continuation into 25 if it keeps running. A close back under 17 would weaken the setup."
+      },
+      {
+        "i": 312,
+        "rect": {
+          "h": 290,
+          "w": 383,
+          "x": 351,
+          "y": 1444
+        },
+        "tag": "article",
+        "text": "#10 $HIMS BULLISH 70/100 MAJOR SUPPORTS 31, 30.5 MAJOR RESISTANCES 33, 34 PULL TARGET 40 VACUUM TARGETS 35, 36.5, 40, 45 CIPHER READ HIMS is holding above support at 31 and pressing into the 33 ceiling; a push through opens room toward the 40 pull target, with continuation into 45 if it keeps running. A close back under 31 would weaken the setup."
+      },
+      {
+        "i": 313,
+        "rect": {
+          "h": 25,
+          "w": 349,
+          "x": 368,
+          "y": 1460
+        },
+        "tag": "header",
+        "text": "#10 $HIMS BULLISH 70/100"
+      },
+      {
+        "i": 319,
+        "rect": {
+          "h": 96,
+          "w": 349,
+          "x": 368,
+          "y": 1498
+        },
+        "tag": "div",
+        "text": "MAJOR SUPPORTS 31, 30.5 MAJOR RESISTANCES 33, 34 PULL TARGET 40 VACUUM TARGETS 35, 36.5, 40, 45"
+      },
+      {
+        "i": 320,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 368,
+          "y": 1498
+        },
+        "tag": "div",
+        "text": "MAJOR SUPPORTS 31, 30.5"
+      },
+      {
+        "i": 323,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 368,
+          "y": 1524
+        },
+        "tag": "div",
+        "text": "MAJOR RESISTANCES 33, 34"
+      },
+      {
+        "i": 324,
+        "rect": {
+          "h": 13,
+          "w": 117,
+          "x": 368,
+          "y": 1528
+        },
+        "tag": "span",
+        "text": "MAJOR RESISTANCES"
+      },
+      {
+        "i": 329,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 368,
+          "y": 1576
+        },
+        "tag": "div",
+        "text": "VACUUM TARGETS 35, 36.5, 40, 45"
+      },
+      {
+        "i": 331,
+        "rect": {
+          "h": 18,
+          "w": 130,
+          "x": 587,
+          "y": 1576
+        },
+        "tag": "span",
+        "text": "35, 36.5, 40, 45"
+      },
+      {
+        "i": 332,
+        "rect": {
+          "h": 109,
+          "w": 349,
+          "x": 368,
+          "y": 1608
+        },
+        "tag": "p",
+        "text": "CIPHER READ HIMS is holding above support at 31 and pressing into the 33 ceiling; a push through opens room toward the 40 pull target, with continuation into 45 if it keeps running. A close back under 31 would weaken the setup."
+      },
+      {
+        "i": 334,
+        "rect": {
+          "h": 290,
+          "w": 383,
+          "x": 750,
+          "y": 1444
+        },
+        "tag": "article",
+        "text": "#11 $POET BULLISH 70/100 MAJOR SUPPORTS 5, 7 MAJOR RESISTANCES 7.5, 8 PULL TARGET 8 VACUUM TARGETS 8, 9, 9.5, 10 CIPHER READ POET is holding above support at 5 and pressing into the 7.5 ceiling; a push through opens room toward the 8 pull target, with continuation into 10 if it keeps running. A close back under 3.56 would weaken the setup."
+      },
+      {
+        "i": 335,
+        "rect": {
+          "h": 25,
+          "w": 349,
+          "x": 766,
+          "y": 1460
+        },
+        "tag": "header",
+        "text": "#11 $POET BULLISH 70/100"
+      },
+      {
+        "i": 341,
+        "rect": {
+          "h": 96,
+          "w": 349,
+          "x": 766,
+          "y": 1498
+        },
+        "tag": "div",
+        "text": "MAJOR SUPPORTS 5, 7 MAJOR RESISTANCES 7.5, 8 PULL TARGET 8 VACUUM TARGETS 8, 9, 9.5, 10"
+      },
+      {
+        "i": 342,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 766,
+          "y": 1498
+        },
+        "tag": "div",
+        "text": "MAJOR SUPPORTS 5, 7"
+      },
+      {
+        "i": 345,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 766,
+          "y": 1524
+        },
+        "tag": "div",
+        "text": "MAJOR RESISTANCES 7.5, 8"
+      },
+      {
+        "i": 346,
+        "rect": {
+          "h": 13,
+          "w": 117,
+          "x": 766,
+          "y": 1528
+        },
+        "tag": "span",
+        "text": "MAJOR RESISTANCES"
+      },
+      {
+        "i": 351,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 766,
+          "y": 1576
+        },
+        "tag": "div",
+        "text": "VACUUM TARGETS 8, 9, 9.5, 10"
+      },
+      {
+        "i": 354,
+        "rect": {
+          "h": 109,
+          "w": 349,
+          "x": 766,
+          "y": 1608
+        },
+        "tag": "p",
+        "text": "CIPHER READ POET is holding above support at 5 and pressing into the 7.5 ceiling; a push through opens room toward the 8 pull target, with continuation into 10 if it keeps running. A close back under 3.56 would weaken the setup."
+      },
+      {
+        "i": 356,
+        "rect": {
+          "h": 290,
+          "w": 383,
+          "x": 1148,
+          "y": 1444
+        },
+        "tag": "article",
+        "text": "#12 $PYPL BULLISH 70/100 MAJOR SUPPORTS 54, 53 MAJOR RESISTANCES 57, 57.5 PULL TARGET 60 VACUUM TARGETS 58, 60, 65, 70 CIPHER READ PYPL is holding above support at 54 and pressing into the 57 ceiling; a push through opens room toward the 60 pull target, with continuation into 70 if it keeps running. A close back under 54 would weaken the setup."
+      },
+      {
+        "i": 357,
+        "rect": {
+          "h": 25,
+          "w": 349,
+          "x": 1165,
+          "y": 1460
+        },
+        "tag": "header",
+        "text": "#12 $PYPL BULLISH 70/100"
+      },
+      {
+        "i": 363,
+        "rect": {
+          "h": 96,
+          "w": 349,
+          "x": 1165,
+          "y": 1498
+        },
+        "tag": "div",
+        "text": "MAJOR SUPPORTS 54, 53 MAJOR RESISTANCES 57, 57.5 PULL TARGET 60 VACUUM TARGETS 58, 60, 65, 70"
+      },
+      {
+        "i": 364,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 1165,
+          "y": 1498
+        },
+        "tag": "div",
+        "text": "MAJOR SUPPORTS 54, 53"
+      },
+      {
+        "i": 367,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 1165,
+          "y": 1524
+        },
+        "tag": "div",
+        "text": "MAJOR RESISTANCES 57, 57.5"
+      },
+      {
+        "i": 368,
+        "rect": {
+          "h": 13,
+          "w": 117,
+          "x": 1165,
+          "y": 1528
+        },
+        "tag": "span",
+        "text": "MAJOR RESISTANCES"
+      },
+      {
+        "i": 373,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 1165,
+          "y": 1576
+        },
+        "tag": "div",
+        "text": "VACUUM TARGETS 58, 60, 65, 70"
+      },
+      {
+        "i": 376,
+        "rect": {
+          "h": 109,
+          "w": 349,
+          "x": 1165,
+          "y": 1608
+        },
+        "tag": "p",
+        "text": "CIPHER READ PYPL is holding above support at 54 and pressing into the 57 ceiling; a push through opens room toward the 60 pull target, with continuation into 70 if it keeps running. A close back under 54 would weaken the setup."
+      },
+      {
+        "i": 378,
+        "rect": {
+          "h": 310,
+          "w": 383,
+          "x": 351,
+          "y": 1750
+        },
+        "tag": "article",
+        "text": "#13 $SOFI BULLISH 70/100 MAJOR SUPPORTS 16.5, 16 MAJOR RESISTANCES 17.5, 18 PULL TARGET 20 VACUUM TARGETS 18, 20, 22, 25 CIPHER READ SOFI is holding above support at 16.5 and pressing into the 17.5 ceiling; a push through opens room toward the 20 pull target, with continuation into 25 if it keeps running. A close back under 16.5 would weaken the setup."
+      },
+      {
+        "i": 379,
+        "rect": {
+          "h": 25,
+          "w": 349,
+          "x": 368,
+          "y": 1766
+        },
+        "tag": "header",
+        "text": "#13 $SOFI BULLISH 70/100"
+      },
+      {
+        "i": 385,
+        "rect": {
+          "h": 96,
+          "w": 349,
+          "x": 368,
+          "y": 1804
+        },
+        "tag": "div",
+        "text": "MAJOR SUPPORTS 16.5, 16 MAJOR RESISTANCES 17.5, 18 PULL TARGET 20 VACUUM TARGETS 18, 20, 22, 25"
+      },
+      {
+        "i": 386,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 368,
+          "y": 1804
+        },
+        "tag": "div",
+        "text": "MAJOR SUPPORTS 16.5, 16"
+      },
+      {
+        "i": 389,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 368,
+          "y": 1830
+        },
+        "tag": "div",
+        "text": "MAJOR RESISTANCES 17.5, 18"
+      },
+      {
+        "i": 390,
+        "rect": {
+          "h": 13,
+          "w": 117,
+          "x": 368,
+          "y": 1834
+        },
+        "tag": "span",
+        "text": "MAJOR RESISTANCES"
+      },
+      {
+        "i": 395,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 368,
+          "y": 1882
+        },
+        "tag": "div",
+        "text": "VACUUM TARGETS 18, 20, 22, 25"
+      },
+      {
+        "i": 398,
+        "rect": {
+          "h": 129,
+          "w": 349,
+          "x": 368,
+          "y": 1914
+        },
+        "tag": "p",
+        "text": "CIPHER READ SOFI is holding above support at 16.5 and pressing into the 17.5 ceiling; a push through opens room toward the 20 pull target, with continuation into 25 if it keeps running. A close back under 16.5 would weaken the setup."
+      },
+      {
+        "i": 400,
+        "rect": {
+          "h": 310,
+          "w": 383,
+          "x": 750,
+          "y": 1750
+        },
+        "tag": "article",
+        "text": "#14 $GILD BULLISH 69/100 MAJOR SUPPORTS 129, 126 MAJOR RESISTANCES 135, 136 PULL TARGET 150 VACUUM TARGETS 135, 136, 140, 150 CIPHER READ GILD is holding above support at 129 and pressing into the 135 ceiling; a push through opens room toward the 150 pull target. A close back under 129 would weaken the setup."
+      },
+      {
+        "i": 401,
+        "rect": {
+          "h": 25,
+          "w": 349,
+          "x": 766,
+          "y": 1766
+        },
+        "tag": "header",
+        "text": "#14 $GILD BULLISH 69/100"
+      },
+      {
+        "i": 407,
+        "rect": {
+          "h": 96,
+          "w": 349,
+          "x": 766,
+          "y": 1804
+        },
+        "tag": "div",
+        "text": "MAJOR SUPPORTS 129, 126 MAJOR RESISTANCES 135, 136 PULL TARGET 150 VACUUM TARGETS 135, 136, 140, 150"
+      },
+      {
+        "i": 408,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 766,
+          "y": 1804
+        },
+        "tag": "div",
+        "text": "MAJOR SUPPORTS 129, 126"
+      },
+      {
+        "i": 411,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 766,
+          "y": 1830
+        },
+        "tag": "div",
+        "text": "MAJOR RESISTANCES 135, 136"
+      },
+      {
+        "i": 412,
+        "rect": {
+          "h": 13,
+          "w": 117,
+          "x": 766,
+          "y": 1834
+        },
+        "tag": "span",
+        "text": "MAJOR RESISTANCES"
+      },
+      {
+        "i": 417,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 766,
+          "y": 1882
+        },
+        "tag": "div",
+        "text": "VACUUM TARGETS 135, 136, 140, 150"
+      },
+      {
+        "i": 419,
+        "rect": {
+          "h": 18,
+          "w": 146,
+          "x": 970,
+          "y": 1882
+        },
+        "tag": "span",
+        "text": "135, 136, 140, 150"
+      },
+      {
+        "i": 420,
+        "rect": {
+          "h": 109,
+          "w": 349,
+          "x": 766,
+          "y": 1914
+        },
+        "tag": "p",
+        "text": "CIPHER READ GILD is holding above support at 129 and pressing into the 135 ceiling; a push through opens room toward the 150 pull target. A close back under 129 would weaken the setup."
+      },
+      {
+        "i": 422,
+        "rect": {
+          "h": 310,
+          "w": 383,
+          "x": 1148,
+          "y": 1750
+        },
+        "tag": "article",
+        "text": "#15 $HAL BULLISH 68/100 MAJOR SUPPORTS 34, 33 MAJOR RESISTANCES 35.5, 36 PULL TARGET 36 VACUUM TARGETS 36, 37, 40, 50 CIPHER READ HAL is holding above support at 34 and pressing into the 35.5 ceiling; a push through opens room toward the 36 pull target, with continuation into 50 if it keeps running. A close back under 34 would weaken the setup."
+      },
+      {
+        "i": 423,
+        "rect": {
+          "h": 25,
+          "w": 349,
+          "x": 1165,
+          "y": 1766
+        },
+        "tag": "header",
+        "text": "#15 $HAL BULLISH 68/100"
+      },
+      {
+        "i": 429,
+        "rect": {
+          "h": 96,
+          "w": 349,
+          "x": 1165,
+          "y": 1804
+        },
+        "tag": "div",
+        "text": "MAJOR SUPPORTS 34, 33 MAJOR RESISTANCES 35.5, 36 PULL TARGET 36 VACUUM TARGETS 36, 37, 40, 50"
+      },
+      {
+        "i": 430,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 1165,
+          "y": 1804
+        },
+        "tag": "div",
+        "text": "MAJOR SUPPORTS 34, 33"
+      },
+      {
+        "i": 433,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 1165,
+          "y": 1830
+        },
+        "tag": "div",
+        "text": "MAJOR RESISTANCES 35.5, 36"
+      },
+      {
+        "i": 434,
+        "rect": {
+          "h": 13,
+          "w": 117,
+          "x": 1165,
+          "y": 1834
+        },
+        "tag": "span",
+        "text": "MAJOR RESISTANCES"
+      },
+      {
+        "i": 439,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 1165,
+          "y": 1882
+        },
+        "tag": "div",
+        "text": "VACUUM TARGETS 36, 37, 40, 50"
+      },
+      {
+        "i": 442,
+        "rect": {
+          "h": 109,
+          "w": 349,
+          "x": 1165,
+          "y": 1914
+        },
+        "tag": "p",
+        "text": "CIPHER READ HAL is holding above support at 34 and pressing into the 35.5 ceiling; a push through opens room toward the 36 pull target, with continuation into 50 if it keeps running. A close back under 34 would weaken the setup."
+      },
+      {
+        "i": 444,
+        "rect": {
+          "h": 310,
+          "w": 383,
+          "x": 351,
+          "y": 2076
+        },
+        "tag": "article",
+        "text": "#16 $LUV BULLISH 68/100 MAJOR SUPPORTS 47, 46 MAJOR RESISTANCES 48.5, 49 PULL TARGET 50 VACUUM TARGETS 50, 51, 52.5, 55 CIPHER READ LUV is holding above support at 47 and pressing into the 48.5 ceiling; a push through opens room toward the 50 pull target, with continuation into 55 if it keeps running. A close back under 47 would weaken the setup."
+      },
+      {
+        "i": 445,
+        "rect": {
+          "h": 25,
+          "w": 349,
+          "x": 368,
+          "y": 2091
+        },
+        "tag": "header",
+        "text": "#16 $LUV BULLISH 68/100"
+      },
+      {
+        "i": 451,
+        "rect": {
+          "h": 96,
+          "w": 349,
+          "x": 368,
+          "y": 2130
+        },
+        "tag": "div",
+        "text": "MAJOR SUPPORTS 47, 46 MAJOR RESISTANCES 48.5, 49 PULL TARGET 50 VACUUM TARGETS 50, 51, 52.5, 55"
+      },
+      {
+        "i": 452,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 368,
+          "y": 2130
+        },
+        "tag": "div",
+        "text": "MAJOR SUPPORTS 47, 46"
+      },
+      {
+        "i": 455,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 368,
+          "y": 2156
+        },
+        "tag": "div",
+        "text": "MAJOR RESISTANCES 48.5, 49"
+      },
+      {
+        "i": 456,
+        "rect": {
+          "h": 13,
+          "w": 117,
+          "x": 368,
+          "y": 2160
+        },
+        "tag": "span",
+        "text": "MAJOR RESISTANCES"
+      },
+      {
+        "i": 461,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 368,
+          "y": 2208
+        },
+        "tag": "div",
+        "text": "VACUUM TARGETS 50, 51, 52.5, 55"
+      },
+      {
+        "i": 463,
+        "rect": {
+          "h": 18,
+          "w": 130,
+          "x": 587,
+          "y": 2208
+        },
+        "tag": "span",
+        "text": "50, 51, 52.5, 55"
+      },
+      {
+        "i": 464,
+        "rect": {
+          "h": 109,
+          "w": 349,
+          "x": 368,
+          "y": 2240
+        },
+        "tag": "p",
+        "text": "CIPHER READ LUV is holding above support at 47 and pressing into the 48.5 ceiling; a push through opens room toward the 50 pull target, with continuation into 55 if it keeps running. A close back under 47 would weaken the setup."
+      },
+      {
+        "i": 466,
+        "rect": {
+          "h": 310,
+          "w": 383,
+          "x": 750,
+          "y": 2076
+        },
+        "tag": "article",
+        "text": "#17 $JNJ BULLISH 67/100 MAJOR SUPPORTS 247.5, 245 MAJOR RESISTANCES 255, 257.5 PULL TARGET 260 VACUUM TARGETS 255, 260, 270, 280 CIPHER READ JNJ is holding above support at 247.5 and pressing into the 255 ceiling; a push through opens room toward the 260 pull target, with continuation into 280 if it keeps running. A close back under 247.5 would weaken the setup."
+      },
+      {
+        "i": 467,
+        "rect": {
+          "h": 25,
+          "w": 349,
+          "x": 766,
+          "y": 2091
+        },
+        "tag": "header",
+        "text": "#17 $JNJ BULLISH 67/100"
+      },
+      {
+        "i": 473,
+        "rect": {
+          "h": 96,
+          "w": 349,
+          "x": 766,
+          "y": 2130
+        },
+        "tag": "div",
+        "text": "MAJOR SUPPORTS 247.5, 245 MAJOR RESISTANCES 255, 257.5 PULL TARGET 260 VACUUM TARGETS 255, 260, 270, 280"
+      },
+      {
+        "i": 474,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 766,
+          "y": 2130
+        },
+        "tag": "div",
+        "text": "MAJOR SUPPORTS 247.5, 245"
+      },
+      {
+        "i": 477,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 766,
+          "y": 2156
+        },
+        "tag": "div",
+        "text": "MAJOR RESISTANCES 255, 257.5"
+      },
+      {
+        "i": 478,
+        "rect": {
+          "h": 13,
+          "w": 117,
+          "x": 766,
+          "y": 2160
+        },
+        "tag": "span",
+        "text": "MAJOR RESISTANCES"
+      },
+      {
+        "i": 483,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 766,
+          "y": 2208
+        },
+        "tag": "div",
+        "text": "VACUUM TARGETS 255, 260, 270, 280"
+      },
+      {
+        "i": 485,
+        "rect": {
+          "h": 18,
+          "w": 146,
+          "x": 970,
+          "y": 2208
+        },
+        "tag": "span",
+        "text": "255, 260, 270, 280"
+      },
+      {
+        "i": 486,
+        "rect": {
+          "h": 129,
+          "w": 349,
+          "x": 766,
+          "y": 2240
+        },
+        "tag": "p",
+        "text": "CIPHER READ JNJ is holding above support at 247.5 and pressing into the 255 ceiling; a push through opens room toward the 260 pull target, with continuation into 280 if it keeps running. A close back under 247.5 would weaken the setup."
+      },
+      {
+        "i": 488,
+        "rect": {
+          "h": 310,
+          "w": 383,
+          "x": 1148,
+          "y": 2076
+        },
+        "tag": "article",
+        "text": "#18 $DE BULLISH 66/100 MAJOR SUPPORTS 587.5, 585 MAJOR RESISTANCES 600, 602.5 PULL TARGET 600 VACUUM TARGETS 600, 610, 680, 700 CIPHER READ DE is holding above support at 587.5 and pressing into the 600 ceiling; a push through opens room toward the 600 pull target, with continuation into 700 if it keeps running. A close back under 587.5 would weaken the setup."
+      },
+      {
+        "i": 489,
+        "rect": {
+          "h": 25,
+          "w": 349,
+          "x": 1165,
+          "y": 2091
+        },
+        "tag": "header",
+        "text": "#18 $DE BULLISH 66/100"
+      },
+      {
+        "i": 495,
+        "rect": {
+          "h": 96,
+          "w": 349,
+          "x": 1165,
+          "y": 2130
+        },
+        "tag": "div",
+        "text": "MAJOR SUPPORTS 587.5, 585 MAJOR RESISTANCES 600, 602.5 PULL TARGET 600 VACUUM TARGETS 600, 610, 680, 700"
+      },
+      {
+        "i": 496,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 1165,
+          "y": 2130
+        },
+        "tag": "div",
+        "text": "MAJOR SUPPORTS 587.5, 585"
+      },
+      {
+        "i": 499,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 1165,
+          "y": 2156
+        },
+        "tag": "div",
+        "text": "MAJOR RESISTANCES 600, 602.5"
+      },
+      {
+        "i": 500,
+        "rect": {
+          "h": 13,
+          "w": 117,
+          "x": 1165,
+          "y": 2160
+        },
+        "tag": "span",
+        "text": "MAJOR RESISTANCES"
+      },
+      {
+        "i": 505,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 1165,
+          "y": 2208
+        },
+        "tag": "div",
+        "text": "VACUUM TARGETS 600, 610, 680, 700"
+      },
+      {
+        "i": 507,
+        "rect": {
+          "h": 18,
+          "w": 146,
+          "x": 1368,
+          "y": 2208
+        },
+        "tag": "span",
+        "text": "600, 610, 680, 700"
+      },
+      {
+        "i": 508,
+        "rect": {
+          "h": 129,
+          "w": 349,
+          "x": 1165,
+          "y": 2240
+        },
+        "tag": "p",
+        "text": "CIPHER READ DE is holding above support at 587.5 and pressing into the 600 ceiling; a push through opens room toward the 600 pull target, with continuation into 700 if it keeps running. A close back under 587.5 would weaken the setup."
+      },
+      {
+        "i": 510,
+        "rect": {
+          "h": 290,
+          "w": 383,
+          "x": 351,
+          "y": 2402
+        },
+        "tag": "article",
+        "text": "#19 $GM BULLISH 66/100 MAJOR SUPPORTS 74, 72.5 MAJOR RESISTANCES 77, 77.5 PULL TARGET 80 VACUUM TARGETS 80, 85, 90, 95 CIPHER READ GM is holding above support at 74 and pressing into the 77 ceiling; a push through opens room toward the 80 pull target, with continuation into 95 if it keeps running. A close back under 74 would weaken the setup."
+      },
+      {
+        "i": 511,
+        "rect": {
+          "h": 25,
+          "w": 349,
+          "x": 368,
+          "y": 2417
+        },
+        "tag": "header",
+        "text": "#19 $GM BULLISH 66/100"
+      },
+      {
+        "i": 517,
+        "rect": {
+          "h": 96,
+          "w": 349,
+          "x": 368,
+          "y": 2456
+        },
+        "tag": "div",
+        "text": "MAJOR SUPPORTS 74, 72.5 MAJOR RESISTANCES 77, 77.5 PULL TARGET 80 VACUUM TARGETS 80, 85, 90, 95"
+      },
+      {
+        "i": 518,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 368,
+          "y": 2456
+        },
+        "tag": "div",
+        "text": "MAJOR SUPPORTS 74, 72.5"
+      },
+      {
+        "i": 521,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 368,
+          "y": 2482
+        },
+        "tag": "div",
+        "text": "MAJOR RESISTANCES 77, 77.5"
+      },
+      {
+        "i": 522,
+        "rect": {
+          "h": 13,
+          "w": 117,
+          "x": 368,
+          "y": 2486
+        },
+        "tag": "span",
+        "text": "MAJOR RESISTANCES"
+      },
+      {
+        "i": 527,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 368,
+          "y": 2534
+        },
+        "tag": "div",
+        "text": "VACUUM TARGETS 80, 85, 90, 95"
+      },
+      {
+        "i": 530,
+        "rect": {
+          "h": 109,
+          "w": 349,
+          "x": 368,
+          "y": 2566
+        },
+        "tag": "p",
+        "text": "CIPHER READ GM is holding above support at 74 and pressing into the 77 ceiling; a push through opens room toward the 80 pull target, with continuation into 95 if it keeps running. A close back under 74 would weaken the setup."
+      },
+      {
+        "i": 532,
+        "rect": {
+          "h": 290,
+          "w": 383,
+          "x": 750,
+          "y": 2402
+        },
+        "tag": "article",
+        "text": "#20 $MNKD BULLISH 66/100 MAJOR SUPPORTS 3, 4 MAJOR RESISTANCES 5, 6 PULL TARGET 5 VACUUM TARGETS 4.5, 5, 5.5, 6 CIPHER READ MNKD is holding above support at 3 and pressing into the 5 ceiling; a push through opens room toward the 5 pull target, with continuation into 6 if it keeps running. A close back under 3 would weaken the setup."
+      },
+      {
+        "i": 533,
+        "rect": {
+          "h": 25,
+          "w": 349,
+          "x": 766,
+          "y": 2417
+        },
+        "tag": "header",
+        "text": "#20 $MNKD BULLISH 66/100"
+      },
+      {
+        "i": 539,
+        "rect": {
+          "h": 96,
+          "w": 349,
+          "x": 766,
+          "y": 2456
+        },
+        "tag": "div",
+        "text": "MAJOR SUPPORTS 3, 4 MAJOR RESISTANCES 5, 6 PULL TARGET 5 VACUUM TARGETS 4.5, 5, 5.5, 6"
+      },
+      {
+        "i": 540,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 766,
+          "y": 2456
+        },
+        "tag": "div",
+        "text": "MAJOR SUPPORTS 3, 4"
+      },
+      {
+        "i": 543,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 766,
+          "y": 2482
+        },
+        "tag": "div",
+        "text": "MAJOR RESISTANCES 5, 6"
+      },
+      {
+        "i": 544,
+        "rect": {
+          "h": 13,
+          "w": 117,
+          "x": 766,
+          "y": 2486
+        },
+        "tag": "span",
+        "text": "MAJOR RESISTANCES"
+      },
+      {
+        "i": 549,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 766,
+          "y": 2534
+        },
+        "tag": "div",
+        "text": "VACUUM TARGETS 4.5, 5, 5.5, 6"
+      },
+      {
+        "i": 552,
+        "rect": {
+          "h": 109,
+          "w": 349,
+          "x": 766,
+          "y": 2566
+        },
+        "tag": "p",
+        "text": "CIPHER READ MNKD is holding above support at 3 and pressing into the 5 ceiling; a push through opens room toward the 5 pull target, with continuation into 6 if it keeps running. A close back under 3 would weaken the setup."
+      },
+      {
+        "i": 554,
+        "rect": {
+          "h": 290,
+          "w": 383,
+          "x": 1148,
+          "y": 2402
+        },
+        "tag": "article",
+        "text": "#21 $BULL BULLISH 65/100 MAJOR SUPPORTS 5, 7 MAJOR RESISTANCES 7.5, 8 PULL TARGET 7.5 VACUUM TARGETS 7.5, 8, 8.5, 10 CIPHER READ BULL is holding above support at 5 and pressing into the 7.5 ceiling; a push through opens room toward the 7.5 pull target, with continuation into 10 if it keeps running. A close back under 5 would weaken the setup."
+      },
+      {
+        "i": 555,
+        "rect": {
+          "h": 25,
+          "w": 349,
+          "x": 1165,
+          "y": 2417
+        },
+        "tag": "header",
+        "text": "#21 $BULL BULLISH 65/100"
+      },
+      {
+        "i": 561,
+        "rect": {
+          "h": 96,
+          "w": 349,
+          "x": 1165,
+          "y": 2456
+        },
+        "tag": "div",
+        "text": "MAJOR SUPPORTS 5, 7 MAJOR RESISTANCES 7.5, 8 PULL TARGET 7.5 VACUUM TARGETS 7.5, 8, 8.5, 10"
+      },
+      {
+        "i": 562,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 1165,
+          "y": 2456
+        },
+        "tag": "div",
+        "text": "MAJOR SUPPORTS 5, 7"
+      },
+      {
+        "i": 565,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 1165,
+          "y": 2482
+        },
+        "tag": "div",
+        "text": "MAJOR RESISTANCES 7.5, 8"
+      },
+      {
+        "i": 566,
+        "rect": {
+          "h": 13,
+          "w": 117,
+          "x": 1165,
+          "y": 2486
+        },
+        "tag": "span",
+        "text": "MAJOR RESISTANCES"
+      },
+      {
+        "i": 571,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 1165,
+          "y": 2534
+        },
+        "tag": "div",
+        "text": "VACUUM TARGETS 7.5, 8, 8.5, 10"
+      },
+      {
+        "i": 574,
+        "rect": {
+          "h": 109,
+          "w": 349,
+          "x": 1165,
+          "y": 2566
+        },
+        "tag": "p",
+        "text": "CIPHER READ BULL is holding above support at 5 and pressing into the 7.5 ceiling; a push through opens room toward the 7.5 pull target, with continuation into 10 if it keeps running. A close back under 5 would weaken the setup."
+      },
+      {
+        "i": 576,
+        "rect": {
+          "h": 310,
+          "w": 383,
+          "x": 351,
+          "y": 2708
+        },
+        "tag": "article",
+        "text": "#22 $EOSE BULLISH 65/100 MAJOR SUPPORTS 4, 3.5 MAJOR RESISTANCES 4.5, 5 PULL TARGET 5 VACUUM TARGETS 4.5, 5, 5.5, 6 CIPHER READ EOSE is holding above support at 4 and pressing into the 4.5 ceiling; a push through opens room toward the 5 pull target, with continuation into 6 if it keeps running. A close back under 3.32 would weaken the setup."
+      },
+      {
+        "i": 577,
+        "rect": {
+          "h": 25,
+          "w": 349,
+          "x": 368,
+          "y": 2723
+        },
+        "tag": "header",
+        "text": "#22 $EOSE BULLISH 65/100"
+      },
+      {
+        "i": 583,
+        "rect": {
+          "h": 96,
+          "w": 349,
+          "x": 368,
+          "y": 2762
+        },
+        "tag": "div",
+        "text": "MAJOR SUPPORTS 4, 3.5 MAJOR RESISTANCES 4.5, 5 PULL TARGET 5 VACUUM TARGETS 4.5, 5, 5.5, 6"
+      },
+      {
+        "i": 584,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 368,
+          "y": 2762
+        },
+        "tag": "div",
+        "text": "MAJOR SUPPORTS 4, 3.5"
+      },
+      {
+        "i": 587,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 368,
+          "y": 2788
+        },
+        "tag": "div",
+        "text": "MAJOR RESISTANCES 4.5, 5"
+      },
+      {
+        "i": 588,
+        "rect": {
+          "h": 13,
+          "w": 117,
+          "x": 368,
+          "y": 2792
+        },
+        "tag": "span",
+        "text": "MAJOR RESISTANCES"
+      },
+      {
+        "i": 593,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 368,
+          "y": 2840
+        },
+        "tag": "div",
+        "text": "VACUUM TARGETS 4.5, 5, 5.5, 6"
+      },
+      {
+        "i": 596,
+        "rect": {
+          "h": 109,
+          "w": 349,
+          "x": 368,
+          "y": 2872
+        },
+        "tag": "p",
+        "text": "CIPHER READ EOSE is holding above support at 4 and pressing into the 4.5 ceiling; a push through opens room toward the 5 pull target, with continuation into 6 if it keeps running. A close back under 3.32 would weaken the setup."
+      },
+      {
+        "i": 598,
+        "rect": {
+          "h": 310,
+          "w": 383,
+          "x": 750,
+          "y": 2708
+        },
+        "tag": "article",
+        "text": "#23 $ICE BULLISH 65/100 MAJOR SUPPORTS 134, 132 MAJOR RESISTANCES 140, 141 PULL TARGET 145 VACUUM TARGETS 145, 150, 155, 160 CIPHER READ ICE is holding above support at 134 and pressing into the 140 ceiling; a push through opens room toward the 145 pull target, with continuation into 160 if it keeps running. A close back under 134 would weaken the setup."
+      },
+      {
+        "i": 599,
+        "rect": {
+          "h": 25,
+          "w": 349,
+          "x": 766,
+          "y": 2723
+        },
+        "tag": "header",
+        "text": "#23 $ICE BULLISH 65/100"
+      },
+      {
+        "i": 605,
+        "rect": {
+          "h": 96,
+          "w": 349,
+          "x": 766,
+          "y": 2762
+        },
+        "tag": "div",
+        "text": "MAJOR SUPPORTS 134, 132 MAJOR RESISTANCES 140, 141 PULL TARGET 145 VACUUM TARGETS 145, 150, 155, 160"
+      },
+      {
+        "i": 606,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 766,
+          "y": 2762
+        },
+        "tag": "div",
+        "text": "MAJOR SUPPORTS 134, 132"
+      },
+      {
+        "i": 609,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 766,
+          "y": 2788
+        },
+        "tag": "div",
+        "text": "MAJOR RESISTANCES 140, 141"
+      },
+      {
+        "i": 610,
+        "rect": {
+          "h": 13,
+          "w": 117,
+          "x": 766,
+          "y": 2792
+        },
+        "tag": "span",
+        "text": "MAJOR RESISTANCES"
+      },
+      {
+        "i": 615,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 766,
+          "y": 2840
+        },
+        "tag": "div",
+        "text": "VACUUM TARGETS 145, 150, 155, 160"
+      },
+      {
+        "i": 617,
+        "rect": {
+          "h": 18,
+          "w": 146,
+          "x": 970,
+          "y": 2840
+        },
+        "tag": "span",
+        "text": "145, 150, 155, 160"
+      },
+      {
+        "i": 618,
+        "rect": {
+          "h": 129,
+          "w": 349,
+          "x": 766,
+          "y": 2872
+        },
+        "tag": "p",
+        "text": "CIPHER READ ICE is holding above support at 134 and pressing into the 140 ceiling; a push through opens room toward the 145 pull target, with continuation into 160 if it keeps running. A close back under 134 would weaken the setup."
+      },
+      {
+        "i": 620,
+        "rect": {
+          "h": 310,
+          "w": 383,
+          "x": 1148,
+          "y": 2708
+        },
+        "tag": "article",
+        "text": "#24 $SHOP BULLISH 65/100 MAJOR SUPPORTS 119, 118 MAJOR RESISTANCES 124, 125 PULL TARGET 160 VACUUM TARGETS 130, 140, 160, 175 CIPHER READ SHOP is holding above support at 119 and pressing into the 124 ceiling; a push through opens room toward the 160 pull target, with continuation into 175 if it keeps running. A close back under 119 would weaken the setup."
+      },
+      {
+        "i": 621,
+        "rect": {
+          "h": 25,
+          "w": 349,
+          "x": 1165,
+          "y": 2723
+        },
+        "tag": "header",
+        "text": "#24 $SHOP BULLISH 65/100"
+      },
+      {
+        "i": 627,
+        "rect": {
+          "h": 96,
+          "w": 349,
+          "x": 1165,
+          "y": 2762
+        },
+        "tag": "div",
+        "text": "MAJOR SUPPORTS 119, 118 MAJOR RESISTANCES 124, 125 PULL TARGET 160 VACUUM TARGETS 130, 140, 160, 175"
+      },
+      {
+        "i": 628,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 1165,
+          "y": 2762
+        },
+        "tag": "div",
+        "text": "MAJOR SUPPORTS 119, 118"
+      },
+      {
+        "i": 631,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 1165,
+          "y": 2788
+        },
+        "tag": "div",
+        "text": "MAJOR RESISTANCES 124, 125"
+      },
+      {
+        "i": 632,
+        "rect": {
+          "h": 13,
+          "w": 117,
+          "x": 1165,
+          "y": 2792
+        },
+        "tag": "span",
+        "text": "MAJOR RESISTANCES"
+      },
+      {
+        "i": 637,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 1165,
+          "y": 2840
+        },
+        "tag": "div",
+        "text": "VACUUM TARGETS 130, 140, 160, 175"
+      },
+      {
+        "i": 639,
+        "rect": {
+          "h": 18,
+          "w": 146,
+          "x": 1368,
+          "y": 2840
+        },
+        "tag": "span",
+        "text": "130, 140, 160, 175"
+      },
+      {
+        "i": 640,
+        "rect": {
+          "h": 129,
+          "w": 349,
+          "x": 1165,
+          "y": 2872
+        },
+        "tag": "p",
+        "text": "CIPHER READ SHOP is holding above support at 119 and pressing into the 124 ceiling; a push through opens room toward the 160 pull target, with continuation into 175 if it keeps running. A close back under 119 would weaken the setup."
+      },
+      {
+        "i": 642,
+        "rect": {
+          "h": 310,
+          "w": 383,
+          "x": 351,
+          "y": 3033
+        },
+        "tag": "article",
+        "text": "#25 $CRDO BULLISH 64/100 MAJOR SUPPORTS 175, 170 MAJOR RESISTANCES 202.5, 205 PULL TARGET 250 VACUUM TARGETS 230, 250, 280, 300 CIPHER READ CRDO is holding above support at 175 and pressing into the 202.5 ceiling; a push through opens room toward the 250 pull target, with continuation into 300 if it keeps running. A close back under 175 would weaken the setup."
+      },
+      {
+        "i": 643,
+        "rect": {
+          "h": 25,
+          "w": 349,
+          "x": 368,
+          "y": 3049
+        },
+        "tag": "header",
+        "text": "#25 $CRDO BULLISH 64/100"
+      },
+      {
+        "i": 649,
+        "rect": {
+          "h": 96,
+          "w": 349,
+          "x": 368,
+          "y": 3087
+        },
+        "tag": "div",
+        "text": "MAJOR SUPPORTS 175, 170 MAJOR RESISTANCES 202.5, 205 PULL TARGET 250 VACUUM TARGETS 230, 250, 280, 300"
+      },
+      {
+        "i": 650,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 368,
+          "y": 3087
+        },
+        "tag": "div",
+        "text": "MAJOR SUPPORTS 175, 170"
+      },
+      {
+        "i": 653,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 368,
+          "y": 3113
+        },
+        "tag": "div",
+        "text": "MAJOR RESISTANCES 202.5, 205"
+      },
+      {
+        "i": 654,
+        "rect": {
+          "h": 13,
+          "w": 117,
+          "x": 368,
+          "y": 3117
+        },
+        "tag": "span",
+        "text": "MAJOR RESISTANCES"
+      },
+      {
+        "i": 659,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 368,
+          "y": 3165
+        },
+        "tag": "div",
+        "text": "VACUUM TARGETS 230, 250, 280, 300"
+      },
+      {
+        "i": 661,
+        "rect": {
+          "h": 18,
+          "w": 146,
+          "x": 571,
+          "y": 3165
+        },
+        "tag": "span",
+        "text": "230, 250, 280, 300"
+      },
+      {
+        "i": 662,
+        "rect": {
+          "h": 129,
+          "w": 349,
+          "x": 368,
+          "y": 3197
+        },
+        "tag": "p",
+        "text": "CIPHER READ CRDO is holding above support at 175 and pressing into the 202.5 ceiling; a push through opens room toward the 250 pull target, with continuation into 300 if it keeps running. A close back under 175 would weaken the setup."
+      },
+      {
+        "i": 664,
+        "rect": {
+          "h": 310,
+          "w": 383,
+          "x": 750,
+          "y": 3033
+        },
+        "tag": "article",
+        "text": "#26 $DELL BULLISH 64/100 MAJOR SUPPORTS 385, 380 MAJOR RESISTANCES 397.5, 400 PULL TARGET 400 VACUUM TARGETS 400, 410, 440, 450 CIPHER READ DELL is holding above support at 385 and pressing into the 397.5 ceiling; a push through opens room toward the 400 pull target, with continuation into 450 if it keeps running. A close back under 385 would weaken the setup."
+      },
+      {
+        "i": 665,
+        "rect": {
+          "h": 25,
+          "w": 349,
+          "x": 766,
+          "y": 3049
+        },
+        "tag": "header",
+        "text": "#26 $DELL BULLISH 64/100"
+      },
+      {
+        "i": 671,
+        "rect": {
+          "h": 96,
+          "w": 349,
+          "x": 766,
+          "y": 3087
+        },
+        "tag": "div",
+        "text": "MAJOR SUPPORTS 385, 380 MAJOR RESISTANCES 397.5, 400 PULL TARGET 400 VACUUM TARGETS 400, 410, 440, 450"
+      },
+      {
+        "i": 672,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 766,
+          "y": 3087
+        },
+        "tag": "div",
+        "text": "MAJOR SUPPORTS 385, 380"
+      },
+      {
+        "i": 675,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 766,
+          "y": 3113
+        },
+        "tag": "div",
+        "text": "MAJOR RESISTANCES 397.5, 400"
+      },
+      {
+        "i": 676,
+        "rect": {
+          "h": 13,
+          "w": 117,
+          "x": 766,
+          "y": 3117
+        },
+        "tag": "span",
+        "text": "MAJOR RESISTANCES"
+      },
+      {
+        "i": 681,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 766,
+          "y": 3165
+        },
+        "tag": "div",
+        "text": "VACUUM TARGETS 400, 410, 440, 450"
+      },
+      {
+        "i": 683,
+        "rect": {
+          "h": 18,
+          "w": 146,
+          "x": 970,
+          "y": 3165
+        },
+        "tag": "span",
+        "text": "400, 410, 440, 450"
+      },
+      {
+        "i": 684,
+        "rect": {
+          "h": 129,
+          "w": 349,
+          "x": 766,
+          "y": 3197
+        },
+        "tag": "p",
+        "text": "CIPHER READ DELL is holding above support at 385 and pressing into the 397.5 ceiling; a push through opens room toward the 400 pull target, with continuation into 450 if it keeps running. A close back under 385 would weaken the setup."
+      },
+      {
+        "i": 686,
+        "rect": {
+          "h": 310,
+          "w": 383,
+          "x": 1148,
+          "y": 3033
+        },
+        "tag": "article",
+        "text": "#27 $TWLO BULLISH 64/100 MAJOR SUPPORTS 190, 185 MAJOR RESISTANCES 207.5, 210 PULL TARGET 220 VACUUM TARGETS 210, 220, 230, 240 CIPHER READ TWLO is holding above support at 190 and pressing into the 207.5 ceiling; a push through opens room toward the 220 pull target, with continuation into 240 if it keeps running. A close back under 190 would weaken the setup."
+      },
+      {
+        "i": 687,
+        "rect": {
+          "h": 25,
+          "w": 349,
+          "x": 1165,
+          "y": 3049
+        },
+        "tag": "header",
+        "text": "#27 $TWLO BULLISH 64/100"
+      },
+      {
+        "i": 693,
+        "rect": {
+          "h": 96,
+          "w": 349,
+          "x": 1165,
+          "y": 3087
+        },
+        "tag": "div",
+        "text": "MAJOR SUPPORTS 190, 185 MAJOR RESISTANCES 207.5, 210 PULL TARGET 220 VACUUM TARGETS 210, 220, 230, 240"
+      },
+      {
+        "i": 694,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 1165,
+          "y": 3087
+        },
+        "tag": "div",
+        "text": "MAJOR SUPPORTS 190, 185"
+      },
+      {
+        "i": 697,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 1165,
+          "y": 3113
+        },
+        "tag": "div",
+        "text": "MAJOR RESISTANCES 207.5, 210"
+      },
+      {
+        "i": 698,
+        "rect": {
+          "h": 13,
+          "w": 117,
+          "x": 1165,
+          "y": 3117
+        },
+        "tag": "span",
+        "text": "MAJOR RESISTANCES"
+      },
+      {
+        "i": 703,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 1165,
+          "y": 3165
+        },
+        "tag": "div",
+        "text": "VACUUM TARGETS 210, 220, 230, 240"
+      },
+      {
+        "i": 705,
+        "rect": {
+          "h": 18,
+          "w": 146,
+          "x": 1368,
+          "y": 3165
+        },
+        "tag": "span",
+        "text": "210, 220, 230, 240"
+      },
+      {
+        "i": 706,
+        "rect": {
+          "h": 129,
+          "w": 349,
+          "x": 1165,
+          "y": 3197
+        },
+        "tag": "p",
+        "text": "CIPHER READ TWLO is holding above support at 190 and pressing into the 207.5 ceiling; a push through opens room toward the 220 pull target, with continuation into 240 if it keeps running. A close back under 190 would weaken the setup."
+      },
+      {
+        "i": 708,
+        "rect": {
+          "h": 310,
+          "w": 383,
+          "x": 351,
+          "y": 3359
+        },
+        "tag": "article",
+        "text": "#28 $ALAB BULLISH 63/100 MAJOR SUPPORTS 295, 290 MAJOR RESISTANCES 305, 310 PULL TARGET 310 VACUUM TARGETS 310, 350, 360, 450 CIPHER READ ALAB is holding above support at 295 and pressing into the 305 ceiling; a push through opens room toward the 310 pull target, with continuation into 450 if it keeps running. A close back under 295 would weaken the setup."
+      },
+      {
+        "i": 709,
+        "rect": {
+          "h": 25,
+          "w": 349,
+          "x": 368,
+          "y": 3375
+        },
+        "tag": "header",
+        "text": "#28 $ALAB BULLISH 63/100"
+      },
+      {
+        "i": 715,
+        "rect": {
+          "h": 96,
+          "w": 349,
+          "x": 368,
+          "y": 3413
+        },
+        "tag": "div",
+        "text": "MAJOR SUPPORTS 295, 290 MAJOR RESISTANCES 305, 310 PULL TARGET 310 VACUUM TARGETS 310, 350, 360, 450"
+      },
+      {
+        "i": 716,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 368,
+          "y": 3413
+        },
+        "tag": "div",
+        "text": "MAJOR SUPPORTS 295, 290"
+      },
+      {
+        "i": 719,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 368,
+          "y": 3439
+        },
+        "tag": "div",
+        "text": "MAJOR RESISTANCES 305, 310"
+      },
+      {
+        "i": 720,
+        "rect": {
+          "h": 13,
+          "w": 117,
+          "x": 368,
+          "y": 3443
+        },
+        "tag": "span",
+        "text": "MAJOR RESISTANCES"
+      },
+      {
+        "i": 725,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 368,
+          "y": 3491
+        },
+        "tag": "div",
+        "text": "VACUUM TARGETS 310, 350, 360, 450"
+      },
+      {
+        "i": 727,
+        "rect": {
+          "h": 18,
+          "w": 146,
+          "x": 571,
+          "y": 3491
+        },
+        "tag": "span",
+        "text": "310, 350, 360, 450"
+      },
+      {
+        "i": 728,
+        "rect": {
+          "h": 129,
+          "w": 349,
+          "x": 368,
+          "y": 3523
+        },
+        "tag": "p",
+        "text": "CIPHER READ ALAB is holding above support at 295 and pressing into the 305 ceiling; a push through opens room toward the 310 pull target, with continuation into 450 if it keeps running. A close back under 295 would weaken the setup."
+      },
+      {
+        "i": 730,
+        "rect": {
+          "h": 310,
+          "w": 383,
+          "x": 750,
+          "y": 3359
+        },
+        "tag": "article",
+        "text": "#29 $CNQ BULLISH 63/100 MAJOR SUPPORTS 37.5, 35 MAJOR RESISTANCES 44.5, 45 PULL TARGET 50 VACUUM TARGETS 44.5, 45, 50, 60 CIPHER READ CNQ is holding above support at 37.5 and pressing into the 44.5 ceiling; a push through opens room toward the 50 pull target, with continuation into 60 if it keeps running. A close back under 37.5 would weaken the setup."
+      },
+      {
+        "i": 731,
+        "rect": {
+          "h": 25,
+          "w": 349,
+          "x": 766,
+          "y": 3375
+        },
+        "tag": "header",
+        "text": "#29 $CNQ BULLISH 63/100"
+      },
+      {
+        "i": 737,
+        "rect": {
+          "h": 96,
+          "w": 349,
+          "x": 766,
+          "y": 3413
+        },
+        "tag": "div",
+        "text": "MAJOR SUPPORTS 37.5, 35 MAJOR RESISTANCES 44.5, 45 PULL TARGET 50 VACUUM TARGETS 44.5, 45, 50, 60"
+      },
+      {
+        "i": 738,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 766,
+          "y": 3413
+        },
+        "tag": "div",
+        "text": "MAJOR SUPPORTS 37.5, 35"
+      },
+      {
+        "i": 741,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 766,
+          "y": 3439
+        },
+        "tag": "div",
+        "text": "MAJOR RESISTANCES 44.5, 45"
+      },
+      {
+        "i": 742,
+        "rect": {
+          "h": 13,
+          "w": 117,
+          "x": 766,
+          "y": 3443
+        },
+        "tag": "span",
+        "text": "MAJOR RESISTANCES"
+      },
+      {
+        "i": 747,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 766,
+          "y": 3491
+        },
+        "tag": "div",
+        "text": "VACUUM TARGETS 44.5, 45, 50, 60"
+      },
+      {
+        "i": 749,
+        "rect": {
+          "h": 18,
+          "w": 130,
+          "x": 986,
+          "y": 3491
+        },
+        "tag": "span",
+        "text": "44.5, 45, 50, 60"
+      },
+      {
+        "i": 750,
+        "rect": {
+          "h": 129,
+          "w": 349,
+          "x": 766,
+          "y": 3523
+        },
+        "tag": "p",
+        "text": "CIPHER READ CNQ is holding above support at 37.5 and pressing into the 44.5 ceiling; a push through opens room toward the 50 pull target, with continuation into 60 if it keeps running. A close back under 37.5 would weaken the setup."
+      },
+      {
+        "i": 752,
+        "rect": {
+          "h": 310,
+          "w": 383,
+          "x": 1148,
+          "y": 3359
+        },
+        "tag": "article",
+        "text": "#30 $HTZ BEARISH 63/100 MAJOR SUPPORTS 1.5 MAJOR RESISTANCES 2, 2.5 PULL TARGET 1.5 VACUUM TARGETS 1.5 CIPHER READ HTZ is capped at resistance around 2 and leaning on 1.5 support; a break of 1.5 opens downside toward the 1.5 pull target. Reclaiming 2.4 would invalidate the setup."
+      },
+      {
+        "i": 753,
+        "rect": {
+          "h": 25,
+          "w": 349,
+          "x": 1165,
+          "y": 3375
+        },
+        "tag": "header",
+        "text": "#30 $HTZ BEARISH 63/100"
+      },
+      {
+        "i": 759,
+        "rect": {
+          "h": 96,
+          "w": 349,
+          "x": 1165,
+          "y": 3413
+        },
+        "tag": "div",
+        "text": "MAJOR SUPPORTS 1.5 MAJOR RESISTANCES 2, 2.5 PULL TARGET 1.5 VACUUM TARGETS 1.5"
+      },
+      {
+        "i": 760,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 1165,
+          "y": 3413
+        },
+        "tag": "div",
+        "text": "MAJOR SUPPORTS 1.5"
+      },
+      {
+        "i": 763,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 1165,
+          "y": 3439
+        },
+        "tag": "div",
+        "text": "MAJOR RESISTANCES 2, 2.5"
+      },
+      {
+        "i": 764,
+        "rect": {
+          "h": 13,
+          "w": 117,
+          "x": 1165,
+          "y": 3443
+        },
+        "tag": "span",
+        "text": "MAJOR RESISTANCES"
+      },
+      {
+        "i": 769,
+        "rect": {
+          "h": 18,
+          "w": 349,
+          "x": 1165,
+          "y": 3491
+        },
+        "tag": "div",
+        "text": "VACUUM TARGETS 1.5"
+      },
+      {
+        "i": 772,
+        "rect": {
+          "h": 90,
+          "w": 349,
+          "x": 1165,
+          "y": 3523
+        },
+        "tag": "p",
+        "text": "CIPHER READ HTZ is capped at resistance around 2 and leaning on 1.5 support; a break of 1.5 opens downside toward the 1.5 pull target. Reclaiming 2.4 would invalidate the setup."
+      }
+    ]
+  }
+}

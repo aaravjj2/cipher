@@ -1,0 +1,25 @@
+[Unit]
+Description=DevSpace remote coding server
+Wants=network-online.target
+After=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=aarav
+Group=aarav
+Environment=HOME=/home/aarav
+Environment=NODE_ENV=production
+WorkingDirectory=/home/aarav
+ExecStart=/usr/bin/npx --yes @waishnav/devspace@1.0.4 serve
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=cipher-devspace
+
+[Install]
+WantedBy=multi-user.target

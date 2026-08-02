@@ -1,0 +1,407 @@
+{
+  "label": "Setup lower scroll 2",
+  "controls": [
+    {
+      "aria": "Search ticker",
+      "href": "",
+      "i": 1,
+      "placeholder": "Search ticker",
+      "rect": {
+        "h": 33,
+        "w": 99,
+        "x": 263,
+        "y": 11
+      },
+      "tag": "input",
+      "text": "",
+      "title": "",
+      "visible": true
+    },
+    {
+      "aria": "",
+      "href": "",
+      "i": 3,
+      "placeholder": "",
+      "rect": {
+        "h": 24,
+        "w": 27,
+        "x": 576,
+        "y": 15
+      },
+      "tag": "button",
+      "text": "1",
+      "title": "Workspace 1",
+      "visible": true
+    },
+    {
+      "aria": "",
+      "href": "",
+      "i": 4,
+      "placeholder": "",
+      "rect": {
+        "h": 24,
+        "w": 29,
+        "x": 605,
+        "y": 15
+      },
+      "tag": "button",
+      "text": "2",
+      "title": "Workspace 2",
+      "visible": true
+    },
+    {
+      "aria": "",
+      "href": "/auth/logout",
+      "i": 26,
+      "placeholder": "",
+      "rect": {
+        "h": 26,
+        "w": 61,
+        "x": 1630,
+        "y": 14
+      },
+      "tag": "a",
+      "text": "Logout",
+      "title": "Log out",
+      "visible": true
+    },
+    {
+      "aria": "Toggle sidebar",
+      "href": "",
+      "i": 27,
+      "placeholder": "",
+      "rect": {
+        "h": 24,
+        "w": 24,
+        "x": 146,
+        "y": 76
+      },
+      "tag": "button",
+      "text": "",
+      "title": "Collapse sidebar",
+      "visible": true
+    },
+    {
+      "aria": "",
+      "href": "",
+      "i": 28,
+      "placeholder": "",
+      "rect": {
+        "h": 34,
+        "w": 169,
+        "x": 10,
+        "y": 125
+      },
+      "tag": "button",
+      "text": "Strike Matrix",
+      "title": "",
+      "visible": true
+    },
+    {
+      "aria": "",
+      "href": "",
+      "i": 29,
+      "placeholder": "",
+      "rect": {
+        "h": 34,
+        "w": 169,
+        "x": 10,
+        "y": 161
+      },
+      "tag": "button",
+      "text": "Night Vision",
+      "title": "",
+      "visible": true
+    },
+    {
+      "aria": "",
+      "href": "",
+      "i": 30,
+      "placeholder": "",
+      "rect": {
+        "h": 34,
+        "w": 169,
+        "x": 10,
+        "y": 197
+      },
+      "tag": "button",
+      "text": "Spyglass",
+      "title": "",
+      "visible": true
+    },
+    {
+      "aria": "",
+      "href": "",
+      "i": 31,
+      "placeholder": "",
+      "rect": {
+        "h": 34,
+        "w": 169,
+        "x": 10,
+        "y": 233
+      },
+      "tag": "button",
+      "text": "My Watchlists",
+      "title": "",
+      "visible": true
+    },
+    {
+      "aria": "",
+      "href": "",
+      "i": 32,
+      "placeholder": "",
+      "rect": {
+        "h": 34,
+        "w": 169,
+        "x": 10,
+        "y": 269
+      },
+      "tag": "button",
+      "text": "Journal",
+      "title": "",
+      "visible": true
+    },
+    {
+      "aria": "",
+      "href": "",
+      "i": 33,
+      "placeholder": "",
+      "rect": {
+        "h": 34,
+        "w": 169,
+        "x": 10,
+        "y": 341
+      },
+      "tag": "button",
+      "text": "Trident CIPHER X",
+      "title": "",
+      "visible": true
+    },
+    {
+      "aria": "",
+      "href": "",
+      "i": 34,
+      "placeholder": "",
+      "rect": {
+        "h": 49,
+        "w": 169,
+        "x": 10,
+        "y": 377
+      },
+      "tag": "button",
+      "text": "Chart Saves CIPHER X",
+      "title": "",
+      "visible": true
+    },
+    {
+      "aria": "",
+      "href": "",
+      "i": 35,
+      "placeholder": "",
+      "rect": {
+        "h": 49,
+        "w": 169,
+        "x": 10,
+        "y": 428
+      },
+      "tag": "button",
+      "text": "Setup Scanner CIPHER X",
+      "title": "",
+      "visible": true
+    },
+    {
+      "aria": "",
+      "href": "",
+      "i": 38,
+      "placeholder": "",
+      "rect": {
+        "h": 34,
+        "w": 169,
+        "x": 10,
+        "y": 515
+      },
+      "tag": "button",
+      "text": "Settings",
+      "title": "",
+      "visible": true
+    },
+    {
+      "aria": "",
+      "href": "",
+      "i": 165,
+      "placeholder": "",
+      "rect": {
+        "h": 24,
+        "w": 84,
+        "x": 361,
+        "y": 175
+      },
+      "tag": "button",
+      "text": "Short term",
+      "title": "",
+      "visible": true
+    },
+    {
+      "aria": "",
+      "href": "",
+      "i": 166,
+      "placeholder": "",
+      "rect": {
+        "h": 24,
+        "w": 80,
+        "x": 447,
+        "y": 175
+      },
+      "tag": "button",
+      "text": "Long term",
+      "title": "",
+      "visible": true
+    },
+    {
+      "aria": "",
+      "href": "",
+      "i": 167,
+      "placeholder": "",
+      "rect": {
+        "h": 24,
+        "w": 49,
+        "x": 529,
+        "y": 175
+      },
+      "tag": "button",
+      "text": "LEAP",
+      "title": "",
+      "visible": true
+    },
+    {
+      "aria": "",
+      "href": "",
+      "i": 168,
+      "placeholder": "",
+      "rect": {
+        "h": 33,
+        "w": 111,
+        "x": 593,
+        "y": 170
+      },
+      "tag": "button",
+      "text": "Scanning…",
+      "title": "",
+      "visible": true
+    },
+    {
+      "aria": "",
+      "href": "",
+      "i": 169,
+      "placeholder": "",
+      "rect": {
+        "h": 35,
+        "w": 95,
+        "x": 359,
+        "y": 224
+      },
+      "tag": "button",
+      "text": "Liq scan",
+      "title": "Liquidity-vacuum runway: a dominant level far from spot with thin liquidity in between and a second line stacked near it.",
+      "visible": true
+    },
+    {
+      "aria": "",
+      "href": "",
+      "i": 170,
+      "placeholder": "",
+      "rect": {
+        "h": 35,
+        "w": 122,
+        "x": 466,
+        "y": 224
+      },
+      "tag": "button",
+      "text": "Cluster scan",
+      "title": "",
+      "visible": true
+    },
+    {
+      "aria": "",
+      "href": "",
+      "i": 171,
+      "placeholder": "",
+      "rect": {
+        "h": 33,
+        "w": 151,
+        "x": 684,
+        "y": 225
+      },
+      "tag": "select",
+      "text": "Nearest (1 Exp) Fri Jul 24 Fri Jul 31 Fri Aug 7 Fri Aug 14 Fri Aug 21 Fri Aug 28 Fri Sep 4 Fri Sep 1",
+      "title": "",
+      "visible": true
+    },
+    {
+      "aria": "",
+      "href": "",
+      "i": 172,
+      "placeholder": "",
+      "rect": {
+        "h": 35,
+        "w": 117,
+        "x": 359,
+        "y": 279
+      },
+      "tag": "button",
+      "text": "Flash BETA",
+      "title": "Flash intraday model: nearest-exp GEX/VEX floors & ceilings, session key levels (PMH/PML/PDH/PDL/PWH/PWL), multi-timeframe volume profile, VWAP, momentum, touch/reaction and last-5-min flow across the 12 most-liquid names. First targets are ATR-scaled rungs with the structural wall as the stretch.",
+      "visible": true
+    },
+    {
+      "aria": "",
+      "href": "",
+      "i": 173,
+      "placeholder": "",
+      "rect": {
+        "h": 35,
+        "w": 157,
+        "x": 488,
+        "y": 279
+      },
+      "tag": "button",
+      "text": "Flash Index BETA",
+      "title": "Flash Index: the same intraday model on the three headline index ETFs (QQQ, SPY, IWM). Not logged.",
+      "visible": true
+    },
+    {
+      "aria": "",
+      "href": "",
+      "i": 174,
+      "placeholder": "",
+      "rect": {
+        "h": 35,
+        "w": 188,
+        "x": 657,
+        "y": 279
+      },
+      "tag": "button",
+      "text": "Flash Agentic BETA",
+      "title": "Flash Agentic: a living monitor that watches every name every minute during market hours and only surfaces a setup once it triggers (a confirmed break or reject, or price arming at the trigger). Extends targets rung by rung as each is crushed, greys out finished plays.",
+      "visible": true
+    },
+    {
+      "aria": "",
+      "href": "",
+      "i": 191,
+      "placeholder": "",
+      "rect": {
+        "h": 25,
+        "w": 87,
+        "x": 1452,
+        "y": 415
+      },
+      "tag": "button",
+      "text": "↻ REFRESH",
+      "title": "Pull the freshest top setups now, replacing any stale holds if something better has appeared",
+      "visible": true
+    }
+  ],
+  "scrollY": 0,
+  "text": "CIPHER SETUP SCANNER / SLV $50.78 +0.77% 1 2 Welcome Mars! 🚀 Logout WORKSPACE Strike Matrix Night Vision Spyglass My Watchlists Journal CIPHER X Trident CIPHER X Chart Saves CIPHER X Setup Scanner CIPHER X ACCOUNT Settings Setup Scanner The Cipher engine ranks the entire universe and surfaces the 30 highest-conviction setups. Powered by the Cipher proprietary model. Short term Long term LEAP Scanning… Liq scan Cluster scan CLUSTER EXP Nearest (1 Exp) Fri Jul 24 Fri Jul 31 Fri Aug 7 Fri Aug 14 Fri Aug 21 Fri Aug 28 Fri Sep 4 Fri Sep 11 Flash BETA Flash Index BETA Flash Agentic BETA LEAP scans options expiring within ~120 market days. Scanning the universe… 339/578 tickers (59%) LIVE Flash Agentic BETA market closed · cycle 0 ↻ REFRESH Market closed. The agent resumes at the next open (9:30 ET) and only surfaces a setup once it triggers."
+}

@@ -1,0 +1,347 @@
+[
+  {
+    "aria": "Search ticker",
+    "i": 1,
+    "rect": {
+      "h": 33,
+      "w": 99,
+      "x": 263,
+      "y": 11
+    },
+    "tag": "input",
+    "text": "",
+    "title": "",
+    "value": "SLV",
+    "visible": true
+  },
+  {
+    "aria": "",
+    "i": 3,
+    "rect": {
+      "h": 24,
+      "w": 27,
+      "x": 576,
+      "y": 15
+    },
+    "tag": "button",
+    "text": "1",
+    "title": "Workspace 1",
+    "value": "",
+    "visible": true
+  },
+  {
+    "aria": "",
+    "i": 4,
+    "rect": {
+      "h": 24,
+      "w": 29,
+      "x": 605,
+      "y": 15
+    },
+    "tag": "button",
+    "text": "2",
+    "title": "Workspace 2",
+    "value": "",
+    "visible": true
+  },
+  {
+    "aria": "Toggle sidebar",
+    "i": 26,
+    "rect": {
+      "h": 24,
+      "w": 24,
+      "x": 146,
+      "y": 76
+    },
+    "tag": "button",
+    "text": "",
+    "title": "Collapse sidebar",
+    "value": "",
+    "visible": true
+  },
+  {
+    "aria": "",
+    "i": 27,
+    "rect": {
+      "h": 34,
+      "w": 169,
+      "x": 10,
+      "y": 125
+    },
+    "tag": "button",
+    "text": "Strike Matrix",
+    "title": "",
+    "value": "",
+    "visible": true
+  },
+  {
+    "aria": "",
+    "i": 28,
+    "rect": {
+      "h": 34,
+      "w": 169,
+      "x": 10,
+      "y": 161
+    },
+    "tag": "button",
+    "text": "Night Vision",
+    "title": "",
+    "value": "",
+    "visible": true
+  },
+  {
+    "aria": "",
+    "i": 29,
+    "rect": {
+      "h": 34,
+      "w": 169,
+      "x": 10,
+      "y": 197
+    },
+    "tag": "button",
+    "text": "Spyglass",
+    "title": "",
+    "value": "",
+    "visible": true
+  },
+  {
+    "aria": "",
+    "i": 30,
+    "rect": {
+      "h": 34,
+      "w": 169,
+      "x": 10,
+      "y": 233
+    },
+    "tag": "button",
+    "text": "My Watchlists",
+    "title": "",
+    "value": "",
+    "visible": true
+  },
+  {
+    "aria": "",
+    "i": 31,
+    "rect": {
+      "h": 34,
+      "w": 169,
+      "x": 10,
+      "y": 269
+    },
+    "tag": "button",
+    "text": "Journal",
+    "title": "",
+    "value": "",
+    "visible": true
+  },
+  {
+    "aria": "",
+    "i": 32,
+    "rect": {
+      "h": 34,
+      "w": 169,
+      "x": 10,
+      "y": 341
+    },
+    "tag": "button",
+    "text": "Trident CIPHER X",
+    "title": "",
+    "value": "",
+    "visible": true
+  },
+  {
+    "aria": "",
+    "i": 33,
+    "rect": {
+      "h": 49,
+      "w": 169,
+      "x": 10,
+      "y": 377
+    },
+    "tag": "button",
+    "text": "Chart Saves CIPHER X",
+    "title": "",
+    "value": "",
+    "visible": true
+  },
+  {
+    "aria": "",
+    "i": 34,
+    "rect": {
+      "h": 49,
+      "w": 169,
+      "x": 10,
+      "y": 428
+    },
+    "tag": "button",
+    "text": "Setup Scanner CIPHER X",
+    "title": "",
+    "value": "",
+    "visible": true
+  },
+  {
+    "aria": "",
+    "i": 37,
+    "rect": {
+      "h": 34,
+      "w": 169,
+      "x": 10,
+      "y": 515
+    },
+    "tag": "button",
+    "text": "Settings",
+    "title": "",
+    "value": "",
+    "visible": true
+  },
+  {
+    "aria": "",
+    "i": 164,
+    "rect": {
+      "h": 24,
+      "w": 84,
+      "x": 361,
+      "y": 175
+    },
+    "tag": "button",
+    "text": "Short term",
+    "title": "",
+    "value": "",
+    "visible": true
+  },
+  {
+    "aria": "",
+    "i": 165,
+    "rect": {
+      "h": 24,
+      "w": 80,
+      "x": 447,
+      "y": 175
+    },
+    "tag": "button",
+    "text": "Long term",
+    "title": "",
+    "value": "",
+    "visible": true
+  },
+  {
+    "aria": "",
+    "i": 166,
+    "rect": {
+      "h": 24,
+      "w": 49,
+      "x": 529,
+      "y": 175
+    },
+    "tag": "button",
+    "text": "LEAP",
+    "title": "",
+    "value": "",
+    "visible": true
+  },
+  {
+    "aria": "",
+    "i": 167,
+    "rect": {
+      "h": 33,
+      "w": 161,
+      "x": 593,
+      "y": 170
+    },
+    "tag": "button",
+    "text": "Cipher Model Scan",
+    "title": "",
+    "value": "",
+    "visible": true
+  },
+  {
+    "aria": "",
+    "i": 168,
+    "rect": {
+      "h": 35,
+      "w": 95,
+      "x": 359,
+      "y": 224
+    },
+    "tag": "button",
+    "text": "Liq scan",
+    "title": "Liquidity-vacuum runway: a dominant level far from spot with thin liquidity in between and a second line stacked near it.",
+    "value": "",
+    "visible": true
+  },
+  {
+    "aria": "",
+    "i": 169,
+    "rect": {
+      "h": 35,
+      "w": 122,
+      "x": 466,
+      "y": 224
+    },
+    "tag": "button",
+    "text": "Cluster scan",
+    "title": "",
+    "value": "",
+    "visible": true
+  },
+  {
+    "aria": "",
+    "i": 170,
+    "rect": {
+      "h": 33,
+      "w": 151,
+      "x": 684,
+      "y": 225
+    },
+    "tag": "select",
+    "text": "Nearest (1 Exp) Fri Jul 24 Fri Jul 31 Fri Aug 7 Fri Aug 14 Fri Aug 21 Fri Aug 28 Fri Sep 4 Fri Sep 11",
+    "title": "",
+    "value": "",
+    "visible": true
+  },
+  {
+    "aria": "",
+    "i": 171,
+    "rect": {
+      "h": 35,
+      "w": 117,
+      "x": 359,
+      "y": 279
+    },
+    "tag": "button",
+    "text": "Flash BETA",
+    "title": "Flash intraday model: nearest-exp GEX/VEX floors & ceilings, session key levels (PMH/PML/PDH/PDL/PWH/PWL), multi-timeframe volume profile, VWAP, momentum, touch/reaction and last-5-min flow across the 12 most-liquid names. First targets are ATR-scaled rungs with the structural wall as the stretch.",
+    "value": "",
+    "visible": true
+  },
+  {
+    "aria": "",
+    "i": 172,
+    "rect": {
+      "h": 35,
+      "w": 157,
+      "x": 488,
+      "y": 279
+    },
+    "tag": "button",
+    "text": "Flash Index BETA",
+    "title": "Flash Index: the same intraday model on the three headline index ETFs (QQQ, SPY, IWM). Not logged.",
+    "value": "",
+    "visible": true
+  },
+  {
+    "aria": "",
+    "i": 173,
+    "rect": {
+      "h": 35,
+      "w": 188,
+      "x": 657,
+      "y": 279
+    },
+    "tag": "button",
+    "text": "Flash Agentic BETA",
+    "title": "Flash Agentic: a living monitor that watches every name every minute during market hours and only surfaces a setup once it triggers (a confirmed break or reject, or price arming at the trigger). Extends targets rung by rung as each is crushed, greys out finished plays.",
+    "value": "",
+    "visible": true
+  }
+]

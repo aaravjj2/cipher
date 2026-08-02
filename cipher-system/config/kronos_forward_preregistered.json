@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "registered_at": "2026-07-30T14:32:00Z",
+  "purpose": "Prospective context-only evaluation of Kronos directional agreement on primary flow-cluster candidates.",
+  "model_id": "NeoQuasar/Kronos-small",
+  "tokenizer_id": "NeoQuasar/Kronos-Tokenizer-base",
+  "timeframe": "5m",
+  "lookback": 64,
+  "pred_bars": 16,
+  "sample_count": 1,
+  "seed": 42,
+  "horizon_sessions": 2,
+  "minimum_flow_premium": 25000.0,
+  "maximum_dte": 45,
+  "minimum_flow_prints": 20,
+  "latest_scan_ticker_limit": 5,
+  "minimum_absolute_prediction_pct": 0.0,
+  "stop_pct": 0.03,
+  "minimum_target_distance_pct": 0.3,
+  "maximum_target_distance_pct": 5.0,
+  "primary_only": true,
+  "minimum_scored_sample": 100,
+  "decision_rule": "Kronos remains context-only. Do not gate entries or alter sizing before the minimum scored sample is reached and a locked analysis shows stable benefit.",
+  "analysis_groups": [
+    "agreed",
+    "disagreed",
+    "unavailable"
+  ],
+  "notes": [
+    "The zero prediction threshold is direction-only and was chosen to avoid adopting the exploratory 0.025 percent threshold from the historical review.",
+    "Every distance-eligible candidate must be scored regardless of Kronos agreement.",
+    "The first stored prediction for a candidate/configuration is immutable."
+  ]
+}

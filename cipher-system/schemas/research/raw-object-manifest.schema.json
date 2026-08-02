@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cipher.local/schemas/research/raw-object-manifest.schema.json",
+  "title": "Cipher Raw Object Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "raw_object_id",
+    "source",
+    "dataset",
+    "uri",
+    "checksum",
+    "checksum_method",
+    "size_bytes",
+    "received_at",
+    "available_at",
+    "ingestion_run_id",
+    "content_type",
+    "disposition",
+    "schema_version"
+  ],
+  "properties": {
+    "raw_object_id": {"type": "string", "pattern": "^raw_[a-f0-9]{12,64}$"},
+    "source": {"type": "string", "minLength": 1},
+    "dataset": {"type": "string", "minLength": 1},
+    "uri": {"type": "string", "minLength": 1},
+    "checksum": {"type": "string", "minLength": 16},
+    "checksum_method": {"enum": ["sha256", "sampled_sha256"]},
+    "size_bytes": {"type": "integer", "minimum": 0},
+    "received_at": {"type": "string", "format": "date-time"},
+    "available_at": {"type": "string", "format": "date-time"},
+    "ingestion_run_id": {"type": "string", "minLength": 1},
+    "content_type": {"type": "string", "minLength": 1},
+    "event_time_start": {"type": ["string", "null"], "format": "date-time"},
+    "event_time_end": {"type": ["string", "null"], "format": "date-time"},
+    "request_metadata": {"type": "object"},
+    "disposition": {
+      "enum": ["immutable_raw", "frozen_snapshot", "mutable_operational", "derived_research"]
+    },
+    "schema_version": {"type": "integer", "minimum": 1}
+  }
+}

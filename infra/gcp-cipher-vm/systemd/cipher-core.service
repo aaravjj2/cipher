@@ -1,0 +1,24 @@
+[Unit]
+Description=Cipher read-only market-data core
+Requires=cipher-secrets.service
+After=network-online.target cipher-secrets.service
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=aarav
+Group=aarav
+WorkingDirectory=/home/aarav/Aarav/cipher/cipher-system
+EnvironmentFile=-/etc/cipher/cipher.env
+ExecStart=/home/aarav/.venvs/cipher/bin/python -u /home/aarav/Aarav/cipher/cipher-system/core/app.py
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=cipher-core
+
+[Install]
+WantedBy=multi-user.target

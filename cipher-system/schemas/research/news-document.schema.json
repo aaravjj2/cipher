@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cipher.local/schemas/research/news-document.schema.json",
+  "title": "Cipher Point-in-Time News Document",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "source",
+    "external_id",
+    "title",
+    "text",
+    "publication_time",
+    "received_at",
+    "available_at",
+    "symbols"
+  ],
+  "properties": {
+    "source": {"type": "string", "minLength": 1},
+    "external_id": {"type": "string", "minLength": 1},
+    "title": {"type": "string"},
+    "text": {"type": "string", "minLength": 1},
+    "publication_time": {"type": "string", "format": "date-time"},
+    "received_at": {"type": "string", "format": "date-time"},
+    "available_at": {"type": "string", "format": "date-time"},
+    "symbols": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"type": "string", "minLength": 1}
+    },
+    "url_hash": {"type": ["string", "null"]},
+    "raw_object_id": {"type": ["string", "null"]},
+    "metadata": {"type": "object"}
+  }
+}

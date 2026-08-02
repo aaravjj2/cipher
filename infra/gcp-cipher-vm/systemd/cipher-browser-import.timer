@@ -1,0 +1,12 @@
+[Unit]
+Description=Import new Cipher browser batches every minute
+
+[Timer]
+OnBootSec=45
+OnUnitActiveSec=60
+AccuracySec=5
+Persistent=true
+Unit=cipher-browser-import.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,20 @@
+[Unit]
+Description=Import mirrored Cipher browser batches into scanner-ingest v2
+Requires=cipher-web.service
+After=network-online.target cipher-web.service cipher-browser-folder-sync.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=aarav
+Group=aarav
+WorkingDirectory=/home/aarav/Aarav/cipher
+ExecStart=/home/aarav/.venvs/cipher/bin/python /home/aarav/Aarav/cipher/cipher-system/scripts/import_browser_gcs_payloads.py --market-hours-only --market-start 09:25 --market-end 16:25
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=/home/aarav/Aarav/cipher/cipher-system/data/browser_ingest
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=cipher-browser-import

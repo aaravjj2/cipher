@@ -1,0 +1,21 @@
+{
+  "tradier": {
+    "status": "stale",
+    "detail": "no latest timestamp; threshold <5 min",
+    "latest": null,
+    "checked_at": "2026-07-29T15:41:57+00:00"
+  },
+  "gex": {
+    "status": "stale",
+    "detail": "no latest timestamp; threshold <15 min",
+    "latest": null,
+    "checked_at": "2026-07-29T15:41:57+00:00"
+  },
+  "live_option_chains": {
+    "status": "stale",
+    "detail": "stale/missing: NVDA missing, MSFT missing, AAPL missing, AVGO missing, AMZN missing, IBIT missing, GOOGL missing, TSLA missing, META missing, MU missing, AMD missing, QQQ missing; threshold <15 min",
+    "latest_min": null,
+    "latest_max": null,
+    "checked_at": "2026-07-29T15:41:57+00:00"
+  }
+}

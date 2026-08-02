@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily Cipher operational backup
+
+[Timer]
+OnCalendar=*-*-* 03:15:00 America/New_York
+Persistent=true
+RandomizedDelaySec=900
+Unit=cipher-backup.service
+
+[Install]
+WantedBy=timers.target

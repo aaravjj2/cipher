@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cipher.local/schemas/research/lean-audit.schema.json",
+  "title": "Cipher LEAN Replication Audit",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "schema_version",
+    "generated_at",
+    "lean_version",
+    "strategy_id",
+    "dataset_id",
+    "code_hash",
+    "date_range",
+    "metrics",
+    "trades",
+    "quality_checks",
+    "reconciliation",
+    "research_grade"
+  ],
+  "properties": {
+    "schema_version": {"type": "integer", "minimum": 1},
+    "generated_at": {"type": "string", "format": "date-time"},
+    "lean_version": {"type": "string", "minLength": 1},
+    "strategy_id": {"type": "string", "pattern": "^strategy_[a-f0-9]{12,64}$"},
+    "dataset_id": {"type": "string", "pattern": "^ds_[a-f0-9]{12,64}$"},
+    "feature_set_id": {"type": "string"},
+    "code_hash": {"type": "string", "minLength": 12},
+    "runtime_environment_id": {"type": "string"},
+    "random_seed": {"type": "integer"},
+    "preregistered": {"type": "boolean"},
+    "research_grade": {"type": "boolean"},
+    "date_range": {
+      "type": "object",
+      "required": ["start", "end"],
+      "properties": {
+        "start": {"type": "string", "format": "date-time"},
+        "end": {"type": "string", "format": "date-time"}
+      }
+    },
+    "metrics": {"type": "object"},
+    "trades": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "trade_id",
+          "symbol",
+          "entry_time",
+          "entry_price",
+          "entry_bid",
+          "entry_ask",
+          "quantity"
+        ]
+      }
+    },
+    "quality_checks": {
+      "type": "object",
+      "required": [
+        "point_in_time_data",
+        "chronological_event_loop",
+        "contract_selection_audited",
+        "fill_evidence_observed",
+        "corporate_actions_handled",
+        "survivorship_bias_controlled"
+      ]
+    },
+    "reconciliation": {
+      "type": "object",
+      "required": [
+        "passed",
+        "cash_ledger_balanced",
+        "position_ledger_balanced",
+        "order_fill_counts_match",
+        "fees_included",
+        "slippage_included"
+      ]
+    }
+  }
+}

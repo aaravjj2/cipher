@@ -1,0 +1,12 @@
+{
+  "registry_path": "cipher-system/data/governance/research_registry.sqlite",
+  "artifact_root": "cipher-system/data/governance/artifacts",
+  "raw_lake_root": "cipher-system/data/raw_lake",
+  "snapshot_root": "cipher-system/data/research_snapshots",
+  "warehouse_export_root": "cipher-system/data/warehouse_exports",
+  "inventory_output_path": "cipher-system/data/governance/latest_system_inventory.json",
+  "bigquery_project": "project-eec91607-77a2-4be6-837",
+  "bigquery_dataset": "cipher_research",
+  "gcs_bucket": "project-eec91607-77a2-4be6-837-cipher-runtime",
+  "cloud_writes_enabled": false
+}

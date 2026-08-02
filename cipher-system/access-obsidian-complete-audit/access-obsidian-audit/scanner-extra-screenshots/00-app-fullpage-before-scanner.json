@@ -1,0 +1,1682 @@
+{
+  "controls": [
+    {
+      "aria": "Toggle navigation",
+      "disabled": null,
+      "i": 0,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "",
+      "type": "button"
+    },
+    {
+      "aria": "Search ticker",
+      "disabled": null,
+      "i": 1,
+      "selected": null,
+      "tag": "INPUT",
+      "text": "SLV",
+      "type": "text"
+    },
+    {
+      "aria": "Add to watchlist",
+      "disabled": null,
+      "i": 2,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "+ Watchlist",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 3,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "1",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 4,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "2",
+      "type": null
+    },
+    {
+      "aria": "Toggle chart view",
+      "disabled": null,
+      "i": 5,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "",
+      "type": null
+    },
+    {
+      "aria": "Toggle SPY/QQQ split view",
+      "disabled": null,
+      "i": 6,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "SPY/QQQ",
+      "type": null
+    },
+    {
+      "aria": "Toggle live trade tape",
+      "disabled": null,
+      "i": 7,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "TS",
+      "type": null
+    },
+    {
+      "aria": "Toggle volume profile",
+      "disabled": null,
+      "i": 8,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "VP",
+      "type": null
+    },
+    {
+      "aria": "Toggle X-Ray matrix overlay",
+      "disabled": null,
+      "i": 9,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "X-Ray",
+      "type": null
+    },
+    {
+      "aria": "Capture chart image",
+      "disabled": null,
+      "i": 10,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "Capture",
+      "type": null
+    },
+    {
+      "aria": "Save chart",
+      "disabled": null,
+      "i": 11,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "Save chart",
+      "type": null
+    },
+    {
+      "aria": "Open Bio flow scanner",
+      "disabled": null,
+      "i": 12,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "Bio",
+      "type": null
+    },
+    {
+      "aria": "Open Contract Search",
+      "disabled": null,
+      "i": 13,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "Contract Search",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 14,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "Full",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 15,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "Compact",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 16,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "±3%",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 17,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "±6%",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 18,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "±12%",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 19,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "All",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 20,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "GEX",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 21,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "VEX",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 22,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "Matrix",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 23,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "Sniper",
+      "type": null
+    },
+    {
+      "aria": "Refresh the Strike Matrix",
+      "disabled": null,
+      "i": 24,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "",
+      "type": null
+    },
+    {
+      "aria": "Toggle matrix auto-refresh",
+      "disabled": null,
+      "i": 25,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "Auto refresh",
+      "type": null
+    },
+    {
+      "aria": "Toggle sidebar",
+      "disabled": null,
+      "i": 26,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "",
+      "type": "button"
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 27,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "Strike Matrix",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 28,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "Night Vision",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 29,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "Spyglass",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 30,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "My Watchlists",
+      "type": "button"
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 31,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "Journal",
+      "type": "button"
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 32,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "Trident\nCIPHER X",
+      "type": "button"
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 33,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "Chart Saves\nCIPHER X",
+      "type": "button"
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 34,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "Setup Scanner\nCIPHER X",
+      "type": "button"
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 35,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "WO\n          Admin",
+      "type": "button"
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 36,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "Mispricing\n          Admin",
+      "type": "button"
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 37,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "Settings",
+      "type": "button"
+    },
+    {
+      "aria": "Download matrix CSV",
+      "disabled": null,
+      "i": 38,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "",
+      "type": null
+    },
+    {
+      "aria": "Toggle Node Galaxy view",
+      "disabled": null,
+      "i": 39,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 40,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "GEX",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 41,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "VEX",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 42,
+      "selected": null,
+      "tag": "SELECT",
+      "text": "",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 43,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "Snap to spot",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 44,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "Snap to golden",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 45,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "FC",
+      "type": null
+    },
+    {
+      "aria": "Refresh",
+      "disabled": null,
+      "i": 46,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 47,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "Auto",
+      "type": null
+    },
+    {
+      "aria": "Back to scan results",
+      "disabled": null,
+      "i": 48,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "Back to scan",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 49,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "1 Exp",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 50,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "Compact",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 51,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "Full",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 52,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "Leap",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 53,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "1D",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 54,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "5m",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 55,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "More",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 56,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "1m",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 57,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "15m",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 58,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "1H",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 59,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "4H",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 60,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "1W",
+      "type": null
+    },
+    {
+      "aria": "Refresh hot strikes",
+      "disabled": null,
+      "i": 61,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "",
+      "type": null
+    },
+    {
+      "aria": "Toggle auto-refresh",
+      "disabled": null,
+      "i": 62,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "Auto refresh",
+      "type": null
+    },
+    {
+      "aria": "Toggle Ghost projection",
+      "disabled": null,
+      "i": 63,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "Ghost",
+      "type": null
+    },
+    {
+      "aria": "Expand chart to full screen",
+      "disabled": null,
+      "i": 64,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "Expand",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 65,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": ">5k",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 66,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": ">50k",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 67,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": ">100k",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 68,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "SQ",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 69,
+      "selected": null,
+      "tag": "SELECT",
+      "text": "",
+      "type": null
+    },
+    {
+      "aria": "Exit full screen",
+      "disabled": null,
+      "i": 70,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "✕",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 71,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "GEX",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 72,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "VEX",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 73,
+      "selected": null,
+      "tag": "INPUT",
+      "text": "",
+      "type": "date"
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 74,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "≤$0.50",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 75,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "≤$0.25",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 76,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "≤$0.10",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 77,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "All px",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 78,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "$5k",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 79,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "$10k",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 80,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "$25k",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 81,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "$50k",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 82,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "$100k",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 83,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "All",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 84,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "Calls",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 85,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "Puts",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 86,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "Bid/Ask",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 87,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "Ask",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 88,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "Bid",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 89,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "Moneyness",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 90,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "OTM",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 91,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "ITM",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 92,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "Expirations",
+      "type": "button"
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 93,
+      "selected": null,
+      "tag": "INPUT",
+      "text": "",
+      "type": "date"
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 94,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "≥5% OTM",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 95,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "≥10%",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 96,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "≥25%",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 97,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "≥50%",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 98,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "$5k",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 99,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "$10k",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 100,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "$25k",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 101,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "$50k",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 102,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "All",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 103,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "Calls",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 104,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "Puts",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 105,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "Rescan",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 106,
+      "selected": null,
+      "tag": "INPUT",
+      "text": "",
+      "type": "text"
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 107,
+      "selected": null,
+      "tag": "INPUT",
+      "text": "",
+      "type": "number"
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 108,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "Call",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 109,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "Put",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 110,
+      "selected": null,
+      "tag": "SELECT",
+      "text": "",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 111,
+      "selected": null,
+      "tag": "INPUT",
+      "text": "",
+      "type": "date"
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 112,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "Search",
+      "type": "button"
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 113,
+      "selected": null,
+      "tag": "INPUT",
+      "text": "",
+      "type": "text"
+    },
+    {
+      "aria": "Add ticker",
+      "disabled": null,
+      "i": 114,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "+",
+      "type": "submit"
+    },
+    {
+      "aria": "Previous month",
+      "disabled": null,
+      "i": 115,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "",
+      "type": "button"
+    },
+    {
+      "aria": "Next month",
+      "disabled": null,
+      "i": 116,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "",
+      "type": "button"
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 117,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "Today",
+      "type": "button"
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 118,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "Save image",
+      "type": "button"
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 119,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "Short term",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 120,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "Long term",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 121,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "LEAP",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 122,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "Cipher Model Scan",
+      "type": "button"
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 123,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "Liq scan",
+      "type": "button"
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 124,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "Cluster scan",
+      "type": "button"
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 125,
+      "selected": null,
+      "tag": "SELECT",
+      "text": "Nearest (1 Exp)Fri Jul 24Fri Jul 31Fri Aug 7Fri Aug 14Fri Aug 21Fri Aug 28Fri Sep 4Fri Sep 11",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 126,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "FlashBETA",
+      "type": "button"
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 127,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "Flash IndexBETA",
+      "type": "button"
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 128,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "Flash AgenticBETA",
+      "type": "button"
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 129,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "Download .CSV",
+      "type": "button"
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 130,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "Flash DB .CSV",
+      "type": "button"
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 131,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "Flash Agent .CSV",
+      "type": "button"
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 132,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "All",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 133,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "Upside",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 134,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "Downside",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 135,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "All",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 136,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "Triple",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 137,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "Quad",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 138,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "All",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 139,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "Upside",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 140,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "Downside",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 141,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "All",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 142,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "Bullish",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 143,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "Bearish",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 144,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "Neutral",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 145,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "↻ Refresh",
+      "type": "button"
+    },
+    {
+      "aria": "Refresh live prices",
+      "disabled": null,
+      "i": 146,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 147,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "Auto refresh",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 148,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "Run scan",
+      "type": "button"
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 149,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "Arb",
+      "type": "button"
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 150,
+      "selected": null,
+      "tag": "SELECT",
+      "text": "Nearest weeklyFri Jul 24Fri Jul 31Fri Aug 7Fri Aug 14Fri Aug 21Fri Aug 28Fri Sep 4Fri Sep 11",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 151,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "Download CSV",
+      "type": "button"
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 152,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "RF",
+      "type": "button"
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 153,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "Download CSV",
+      "type": "button"
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 154,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "DX",
+      "type": "button"
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 155,
+      "selected": null,
+      "tag": "SELECT",
+      "text": "Nearest weeklyFri Jul 24Fri Jul 31Fri Aug 7Fri Aug 14Fri Aug 21Fri Aug 28Fri Sep 4Fri Sep 11",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 156,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "Download CSV",
+      "type": "button"
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 157,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "Executable only",
+      "type": "button"
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 158,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "All",
+      "type": "button"
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 159,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "New IP",
+      "type": "button"
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 160,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "Logins",
+      "type": "button"
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 161,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "DB writes",
+      "type": "button"
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 162,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "Tamper",
+      "type": "button"
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 163,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "Devtools",
+      "type": "button"
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 164,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "Scrape",
+      "type": "button"
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 165,
+      "selected": null,
+      "tag": "SELECT",
+      "text": "Auto · match this device\n                Eastern · New York (ET)\n                Central · Chicago (CT)\n                Mountain · Denver (MT)\n                Pacific · Los Angeles (PT)\n              ",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 166,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "5s",
+      "type": "button"
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 167,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "15s",
+      "type": "button"
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 168,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "30s",
+      "type": "button"
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 169,
+      "selected": null,
+      "tag": "INPUT",
+      "text": "[REDACTED_HISTORICAL_CREDENTIAL]",
+      "type": "text"
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 170,
+      "selected": null,
+      "tag": "INPUT",
+      "text": "",
+      "type": "password"
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 171,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "Connect",
+      "type": "button"
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 172,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "Disconnect",
+      "type": "button"
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 173,
+      "selected": null,
+      "tag": "SELECT",
+      "text": "Bugs / Issues\n                Feature Request\n                Feedback\n                Leave a Review",
+      "type": null
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 174,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "Submit",
+      "type": "button"
+    },
+    {
+      "aria": "Collapse",
+      "disabled": null,
+      "i": 175,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "−",
+      "type": "button"
+    },
+    {
+      "aria": "Close",
+      "disabled": null,
+      "i": 176,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "×",
+      "type": "button"
+    },
+    {
+      "aria": "Close",
+      "disabled": null,
+      "i": 177,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "×",
+      "type": "button"
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 178,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "Profit",
+      "type": "button"
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 179,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "Loss",
+      "type": "button"
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 180,
+      "selected": null,
+      "tag": "INPUT",
+      "text": "",
+      "type": "number"
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 181,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "Clear day",
+      "type": "button"
+    },
+    {
+      "aria": null,
+      "disabled": null,
+      "i": 182,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "Save day",
+      "type": "button"
+    },
+    {
+      "aria": "Close",
+      "disabled": null,
+      "i": 183,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "×",
+      "type": "button"
+    },
+    {
+      "aria": "Close",
+      "disabled": null,
+      "i": 184,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "×",
+      "type": "button"
+    },
+    {
+      "aria": "Close",
+      "disabled": null,
+      "i": 185,
+      "selected": null,
+      "tag": "BUTTON",
+      "text": "×",
+      "type": "button"
+    }
+  ],
+  "scrollY": 0,
+  "text": "CIPHER\nNIGHT VISION\n/\nSLV\n$50.78\n+0.77%\n+ Watchlist\n1\n2\nSPY/QQQ\nTS\nVP\nX-Ray\nCapture\nSave chart\nWelcome Mars! 🚀\nLogout\nWORKSPACE\nStrike Matrix\nNight Vision\nSpyglass\nMy Watchlists\nJournal\nCIPHER X\nTrident\nCIPHER X\nChart Saves\nCIPHER X\nSetup Scanner\nCIPHER X\nACCOUNT\nSettings\n1 Exp\nCompact\nFull\nLeap\n1D\n5m\nMore\nSLV · daily · sniper Jul 20\nTop pull\nAbove spot\nBelow spot\nAuto refresh",
+  "title": "Cipher — Strike Matrix",
+  "url": "https://www.accessobsidian.com/app#SLV"
+}

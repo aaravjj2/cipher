@@ -1,0 +1,18 @@
+[Unit]
+Description=Back up Cipher operational data to Google Cloud Storage
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=aarav
+Group=aarav
+Environment=GOOGLE_CLOUD_PROJECT=project-eec91607-77a2-4be6-837
+Environment=CIPHER_BACKUP_BUCKET=project-eec91607-77a2-4be6-837-cipher-runtime
+ExecStart=/home/aarav/.venvs/cipher/bin/python /usr/local/lib/cipher/backup-to-gcs.py
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=cipher-backup

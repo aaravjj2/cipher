@@ -1,0 +1,12 @@
+[Unit]
+Description=Run Cipher governance catalog after each market day
+
+[Timer]
+OnCalendar=Mon..Fri *-*-* 17:30:00 America/New_York
+Persistent=true
+RandomizedDelaySec=300
+AccuracySec=1min
+Unit=cipher-governance-catalog.service
+
+[Install]
+WantedBy=timers.target
