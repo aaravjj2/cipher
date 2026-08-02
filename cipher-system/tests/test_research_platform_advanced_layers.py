@@ -30,6 +30,7 @@ from core.research_platform.local_capabilities import build_local_capability_rep
 from core.research_platform.local_scheduler import run_due
 from core.research_platform.engine_adapters import EngineGateError, screen_vectorbt_buy_and_hold
 from core.research_platform.market_quality import HoldoutCohortEligibility
+from core.research_platform.repair_boundary import RepairBoundaryViolation, RepairRequest, authorize_repair
 from core.research_platform.model_context import (
     ModelContextValidationError,
     build_model_context_assessment,
@@ -425,6 +426,17 @@ def test_vectorbt_adapter_refuses_uncleared_holdout_c(tmp_path: Path):
     cohort = HoldoutCohortEligibility(source_count=1, common_tickers=9, strict_independent_origins=6)
     with pytest.raises(EngineGateError, match="Holdout C gate"):
         screen_vectorbt_buy_and_hold([100.0, 101.0], cohort, ArtifactStore(tmp_path / "artifacts"))
+
+
+@pytest.mark.parametrize("changes", [
+    {"cohort_id": "replacement"},
+    {"promotion_decision": "PAPER_ELIGIBLE"},
+    {"replacement_data": "alternate_vendor"},
+    {"minimum_strict_independent_origins": 6},
+])
+def test_repair_boundary_rejects_evidence_and_gate_mutation(changes):
+    with pytest.raises(RepairBoundaryViolation):
+        authorize_repair(RepairRequest("retry_transient_delivery", "market_bars", changes))
 
 
 def test_base_timesfm_context_is_never_promotion_eligible():
