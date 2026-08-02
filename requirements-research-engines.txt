@@ -1,0 +1,6 @@
+# Pinned optional engines. Install into .venv-research-py312, not the core app venv.
+transformers==4.57.6
+vectorbt==0.28.5
+pyqlib==0.9.7
+Riskfolio-Lib==7.3.0
+rdagent==0.8.0

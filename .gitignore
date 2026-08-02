@@ -1,5 +1,6 @@
 # Local environments and credentials
 .venv/
+.venv-research-py312/
 .env
 .env.*
 !.env.example

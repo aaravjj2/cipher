@@ -66,6 +66,24 @@ It records whether each guarded job is ready or blocked in
 subprocesses, brokers, or orders. A system scheduler may call this command only
 after the relevant runtime and evidence prerequisites have been met.
 
+## Optional Engine Runtime
+
+Core service dependencies remain intentionally small. Install research engines
+in the separate, pinned Python 3.12 environment so model/backtest packages do
+not alter the local ingestion or UI runtime:
+
+```bash
+cd /home/aarav/Aarav/cipher
+/home/aarav/.local/bin/python3.12 -m venv .venv-research-py312
+.venv-research-py312/bin/python -m pip install -r requirements-research-engines.txt
+.venv-research-py312/bin/python cipher-system/scripts/check_research_engine_runtime.py
+```
+
+An importable engine is only runtime-ready. Qlib/RD-Agent factor runs and
+VectorBT screens remain blocked until the unchanged Holdout C cohort has a
+qualified source with its required independent origins. LEAN is separately
+available through its CLI and remains subject to `LeanAuditValidator`.
+
 ## Validation
 
 The implementation is covered by `test_research_platform_advanced_layers.py` and `test_research_platform_data_plane.py`.
