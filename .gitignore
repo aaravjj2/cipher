@@ -20,3 +20,15 @@ cipher-system/data/**
 !cipher-system/data/.gitkeep
 cipher-system/app/node_modules/
 *.log
+
+# Local runtime state, locks, databases, and temporary exports
+*.sqlite
+*.sqlite-*
+*.db
+*.db-*
+*.tmp
+*.temp
+*.swp
+cipher-system/.scanner-ingest-token
+cipher-system/exports/**
+cipher-system/access-obsidian-complete-audit/access-obsidian-audit/scanner-extra-screenshots/XX*
