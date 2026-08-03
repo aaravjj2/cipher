@@ -51,7 +51,7 @@ from core.research_platform.seven_layer_stack import (
     ForecastAnomalyEngine,
     ForecastObservation,
     RealizedObservation,
-    SevenLayerStackSpec,
+    EightLayerStackSpec,
 )
 from core.research_platform.warehouse import BigQueryWarehousePlan
 from core.timesfm_walkforward import base_ohlcv_context_forecast
@@ -376,8 +376,12 @@ def test_portfolio_optimizer_is_simulation_only(tmp_path: Path):
     assert proposal.to_dict()["order_intents"] == []
 
 
-def test_seven_layer_stack_boundary_and_bigquery_topology(tmp_path: Path):
-    spec = SevenLayerStackSpec.default()
+def test_eight_layer_stack_boundary_and_bigquery_topology(tmp_path: Path):
+    spec = EightLayerStackSpec.default()
+    assert len(spec.layers) == 8
+    assert spec.layers[3].name == "attribution_and_anomaly_engine"
+    assert spec.layers[6].name == "shadow_and_paper_execution"
+    assert spec.layers[7].name == "evidence_feedback_loop"
     assert spec.validate_boundaries() == ()
     plan = spec.offline_orchestration_plan()
     assert plan["maximum_promotion_state"] == "LIVE_REVIEW_REQUIRED"

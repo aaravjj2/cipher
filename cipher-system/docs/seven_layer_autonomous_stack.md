@@ -1,4 +1,4 @@
-# Seven-Layer Guarded Research Stack
+# Eight-Layer Guarded Research Stack
 
 Cipher implements substantial guarded infrastructure from the attached autonomous
 quant architecture. This document describes structural capabilities, not proof
@@ -12,8 +12,9 @@ assessment. The stack does not authorize live order submission.
 - Vendor/API access is confined to ingestion and existing read-only collectors.
 - Forecasting, FinBERT-style sentiment, GDELT/event parsing, Kronos/TimesFM features, factor discovery, anomaly attribution, and autoresearch feedback are offline or scheduled batch layers.
 - Strategy graduation remains capped at `LIVE_REVIEW_REQUIRED`.
-- Layer 6 produces simulation-only portfolio proposals and audit records. It does not create broker orders.
-- Layer 7 feedback routes back into the Layer 5 validation gate, not into live runtime execution.
+- Layer 6 produces simulation-only decision and portfolio-risk proposals. It does not create broker orders.
+- Layer 7 is the isolated shadow/paper execution layer and has no broker-order path.
+- Layer 8 feedback routes back into the Layer 5 validation gate, not into live runtime execution.
 
 ## Storage Decision
 
@@ -26,7 +27,7 @@ optional migration utilities, not prerequisites or scheduled work.
 
 ## Implemented Logical Tables
 
-The canonical BigQuery DDL now includes the additional topology needed by the seven-layer plan:
+The canonical analytical topology includes the additional tables needed by the eight-layer plan:
 
 - `feature_vectors`
 - `factor_candidates`
@@ -41,7 +42,7 @@ Existing tables such as `market_bars`, `option_quotes`, `news_events`, `model_fo
 ## New Code
 
 - `core/research_platform/seven_layer_stack.py`
-  Defines the seven guarded layers, validates boundary violations, creates offline orchestration plans, detects forecast interval anomalies, and builds autoresearch feedback packets.
+  Defines the eight guarded layers, validates boundary violations, creates offline orchestration plans, detects forecast interval anomalies, and builds evidence-feedback packets. The historical filename is retained for compatibility.
 
 - `scripts/describe_seven_layer_stack.py`
   Prints the stack plan and boundary status without touching GCP or starting a live process.

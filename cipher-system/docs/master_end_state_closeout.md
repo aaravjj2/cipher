@@ -18,6 +18,19 @@ Volume-sensitive research and independent reference-volume acquisition are
 outside this active close-out. Their existing gates remain unchanged and their
 blocked state does not prevent honest completion of unrelated tracks.
 
+## Master checklist correction — Section 2c
+
+**Original frozen panel: 11/12 strict independent origins; one short; essentially resolved but not yet cleared.**
+
+**Rescue-v3 structural cohort: 14/12 origins; availability cleared, untouched-holdout status not restored.**
+
+This was a localized completion gap, not a return to initial data discovery.
+The existing-data-only audit found no hidden rescue. A fixed, preregistered
+same-provider basket subsequently cleared structural availability without
+ranking/model outcome inspection. See `docs/master_end_state_checklist.md`,
+`data/governance/holdout_c_existing_data_gap_audit.json`, and
+`data/governance/holdout_c_alpaca_cohort_rescue_v3.json`.
+
 ## Corrected price-only cohort finding
 
 The reconstructed Alpaca SIP panel contains 744 full regular sessions from
@@ -37,9 +50,11 @@ Under the corrected rule, the strongest deterministic panel contains:
 - no ranking or model outcome used to select the windows;
 - no gate, ticker, or origin requirement changed.
 
-Consequently the factor, expanded-model, and full-backtest tracks close as data
-insufficient. A prior pooled factor screen remains exploratory only and does not
-qualify as confirmatory evidence.
+The subsequent rescue-v3 basket clears structural availability at 14 origins,
+but it cannot retroactively make the already-explored 2023–2025 period untouched.
+Consequently the factor, expanded-model, and full-backtest close-outs remain in
+force for previously explored formulations. A prior pooled factor screen remains
+exploratory only and does not qualify as confirmatory evidence.
 
 ## Eight-track status
 
@@ -47,24 +62,28 @@ qualify as confirmatory evidence.
 
 **State:** `closed_data_insufficient`
 
-The corrected frozen cohort has 11 of the required 12 independent origins. The
-governed runner now requires a passing cohort artifact and writes a skip artifact
-without evaluating factors when that gate fails.
+The original frozen cohort has 11 of the required 12 independent origins.
+Rescue v3 supplies 14 structurally valid origins, but prior exploratory use means
+it is not an untouched final holdout for this factor branch. The governed runner
+therefore retains the skip close-out.
 
 ### 2. Expanded price-only model study
 
 **State:** `closed_data_insufficient`
 
-TimesFM and Kronos were not rerun after the corrected cohort failure. Kronos
-retains its existing context-only status; no prior model verdict was reopened.
+TimesFM and Kronos were not rerun. Rescue v3 resolves structural availability,
+but does not restore an untouched period for these previously explored model
+formulations. Kronos retains its existing context-only status; no prior model
+verdict was reopened.
 
 ### 3. Full-scale price-only backtesting
 
 **State:** `closed_data_insufficient`
 
-No VectorBT selection or LEAN strategy job was run because the cohort failed
-before strategy selection. The native LEAN build remains infrastructure only and
-continues to require a separately frozen, research-grade replication package.
+No VectorBT selection or LEAN strategy job was run. Structural availability is
+now sufficient under rescue v3, but the period cannot be relabeled untouched
+after prior exploratory use. The native LEAN build remains infrastructure only
+and continues to require a separately frozen, research-grade replication package.
 
 ### 4. Public event ingestion and FinBERT triage
 

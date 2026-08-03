@@ -61,6 +61,11 @@ def build_status() -> dict[str, Any]:
     observed_origins = int(selected.get("strict_independent_origins") or 0)
     required_origins = int(cohort.get("requirements", {}).get("minimum_strict_independent_origins") or 12)
     cohort_pass = bool(cohort.get("pass"))
+    rescue_path = GOV / "holdout_c_alpaca_cohort_rescue_v3.json"
+    rescue = read_json(rescue_path)
+    rescue_selected = rescue.get("selected_block") or {}
+    rescue_origins = int(rescue_selected.get("strict_independent_origins") or 0)
+    rescue_pass = bool(rescue.get("pass"))
 
     factor_path = latest("data/market_quality/price_only_factor_screen_skip_*.json") or latest("data/market_quality/price_only_factor_screen_*.json")
     model_path = latest("data/market_quality/current_era_price_only_model_skip_*.json") or latest("data/market_quality/current_era_price_only_model_results_*.json")
@@ -93,13 +98,19 @@ def build_status() -> dict[str, Any]:
         track3 = track(3, "Full-scale price-only backtesting", "pending", reason="The cohort passed but no qualifying full backtest close-out is registered.", evidence=[])
     else:
         common = {
-            "strict_independent_origins": observed_origins,
+            "original_panel_strict_independent_origins": observed_origins,
             "required_strict_independent_origins": required_origins,
+            "original_panel_origin_gap": max(0, required_origins - observed_origins),
+            "original_panel_status": "essentially_resolved_not_cleared" if observed_origins == required_origins - 1 else "data_insufficient",
+            "rescue_v3_structural_pass": rescue_pass,
+            "rescue_v3_strict_independent_origins": rescue_origins,
+            "rescue_v3_allowed_claim": rescue.get("allowed_claim"),
+            "untouched_holdout_restored": False,
             "gate_relaxed": False,
         }
-        track1 = track(1, "Price-only Qlib/RD-Agent factor discovery", "closed_data_insufficient", reason="Corrected window-wide cohort eligibility produced fewer than the required independent origins; prior pooled screening is exploratory only.", evidence=[str(path) for path in (cohort_path, factor_path) if path], metrics=common)
-        track2 = track(2, "Expanded price-only model study", "closed_data_insufficient", reason="No model was rerun because the frozen cohort failed its unchanged origin requirement.", evidence=[str(path) for path in (cohort_path, model_path) if path], metrics=common)
-        track3 = track(3, "Full-scale price-only backtesting", "closed_data_insufficient", reason="VectorBT/LEAN strategy evaluation was skipped because the same frozen cohort failed before outcomes or strategy selection.", evidence=[str(cohort_path)] if cohort_path else [], metrics=common)
+        track1 = track(1, "Price-only Qlib/RD-Agent factor discovery", "closed_data_insufficient", reason="The original panel remains 11/12. Rescue v3 clears structural availability at 14/12, but prior exploratory use means it does not restore an untouched final holdout; prior pooled screening remains exploratory only.", evidence=[str(path) for path in (cohort_path, rescue_path, factor_path) if path], metrics=common)
+        track2 = track(2, "Expanded price-only model study", "closed_data_insufficient", reason="The structural origin gap is closed, but no model is rerun because rescue v3 is not an untouched final holdout for previously explored formulations.", evidence=[str(path) for path in (cohort_path, rescue_path, model_path) if path], metrics=common)
+        track3 = track(3, "Full-scale price-only backtesting", "closed_data_insufficient", reason="Structural availability is cleared, but VectorBT/LEAN strategy evaluation remains skipped because the period cannot be reclassified as untouched after prior exploratory use.", evidence=[str(path) for path in (cohort_path, rescue_path) if path], metrics=common)
 
     track4_state = "completed_real" if counts["news_events"] > 0 else "closed_data_insufficient"
     track4 = track(

@@ -56,7 +56,7 @@ class BoundaryViolation:
 
 
 @dataclass(frozen=True)
-class SevenLayerStackSpec:
+class EightLayerStackSpec:
     layers: tuple[StackLayer, ...]
     warehouse_tables: tuple[str, ...]
     forbidden_live_terms: tuple[str, ...] = (
@@ -69,7 +69,7 @@ class SevenLayerStackSpec:
     )
 
     @classmethod
-    def default(cls) -> "SevenLayerStackSpec":
+    def default(cls) -> "EightLayerStackSpec":
         context = (AllowedUse.CONTEXT, AllowedUse.FILTER, AllowedUse.RANKING)
         return cls(
             layers=(
@@ -110,7 +110,7 @@ class SevenLayerStackSpec:
                 ),
                 StackLayer(
                     4,
-                    "causal_attribution_and_anomaly_engine",
+                    "attribution_and_anomaly_engine",
                     LayerMode.OFFLINE_BATCH,
                     reads=("model_forecasts", "market_bars", "news_events"),
                     writes=("anomaly_log",),
@@ -128,22 +128,32 @@ class SevenLayerStackSpec:
                 ),
                 StackLayer(
                     6,
-                    "live_synthesis_and_simulated_risk_allocation",
+                    "decision_synthesis_and_simulated_portfolio_risk",
                     LayerMode.LIVE_SYNTHESIS,
                     reads=("model_forecasts", "anomaly_log", "backtest_gate_results"),
-                    writes=("portfolio_proposals", "execution_audit"),
+                    writes=("portfolio_proposals",),
                     allowed_use=(AllowedUse.CONTEXT,),
                     live_capital_access=False,
-                    notes="Agent synthesis and convex allocation create simulation-only proposals, never broker orders.",
+                    notes="Agent context and deterministic allocation create simulation-only proposals, never broker orders.",
                 ),
                 StackLayer(
                     7,
-                    "autoresearch_feedback_loop",
+                    "shadow_and_paper_execution",
+                    LayerMode.VALIDATION_GATE,
+                    reads=("backtest_gate_results", "portfolio_proposals"),
+                    writes=("execution_audit",),
+                    allowed_use=(AllowedUse.CONTEXT,),
+                    live_capital_access=False,
+                    notes="The isolated paper executor records virtual fills and positions; it has no broker-order path.",
+                ),
+                StackLayer(
+                    8,
+                    "evidence_feedback_loop",
                     LayerMode.FEEDBACK,
                     reads=("execution_audit", "anomaly_log", "experiment_metrics"),
                     writes=("autoresearch_feedback",),
                     allowed_use=(AllowedUse.CONTEXT,),
-                    notes="Feedback routes to Layer 5 validation; it cannot mutate live runtime prompts directly.",
+                    notes="Feedback routes to Layer 5 validation; it cannot mutate runtime prompts or promotion state directly.",
                 ),
             ),
             warehouse_tables=(
@@ -208,6 +218,10 @@ class SevenLayerStackSpec:
             "forbidden_live_terms": list(self.forbidden_live_terms),
             "steps": steps,
         }
+
+
+# Compatibility alias for older imports. The canonical topology is eight layers.
+SevenLayerStackSpec = EightLayerStackSpec
 
 
 @dataclass(frozen=True)

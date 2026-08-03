@@ -169,7 +169,11 @@ def file_count(root: Path, suffixes: tuple[str, ...] | None = None) -> int:
 def data_evidence() -> dict[str, Any]:
     data_root = ROOT / "data"
     parquet_root = data_root / "normalized" / "alpaca_sip_holdout_c_1m"
+    rescue_v3_parquet_root = data_root / "normalized" / "alpaca_sip_holdout_c_rescue_v3_1m"
     raw_root = data_root / "raw"
+    rescue_v3_path = GOVERNANCE_ROOT / "holdout_c_alpaca_cohort_rescue_v3.json"
+    rescue_v3 = read_json(rescue_v3_path)
+    rescue_selected = rescue_v3.get("selected_block") or {}
     database_files = sorted(
         path
         for path in data_root.rglob("*")
@@ -178,6 +182,12 @@ def data_evidence() -> dict[str, Any]:
     return {
         "raw_files": file_count(raw_root),
         "normalized_parquet_files": file_count(parquet_root, (".parquet",)),
+        "rescue_v3_normalized_parquet_files": file_count(rescue_v3_parquet_root, (".parquet",)),
+        "holdout_c_original_panel_origins": 11,
+        "holdout_c_rescue_v3_structural_pass": bool(rescue_v3.get("pass")),
+        "holdout_c_rescue_v3_origins": int(rescue_selected.get("strict_independent_origins") or 0),
+        "holdout_c_rescue_v3_allowed_claim": rescue_v3.get("allowed_claim"),
+        "holdout_c_untouched_status_restored": False,
         "database_files": [str(path) for path in database_files],
         "duckdb_database_count": sum(path.suffix.lower() == ".duckdb" for path in database_files),
         "sqlite_database_count": sum(path.suffix.lower() == ".sqlite" for path in database_files),
@@ -283,9 +293,9 @@ def vendor_access_evidence() -> dict[str, Any]:
 
 
 def stack_evidence() -> dict[str, Any]:
-    from core.research_platform.seven_layer_stack import SevenLayerStackSpec  # noqa: WPS433
+    from core.research_platform.seven_layer_stack import EightLayerStackSpec  # noqa: WPS433
 
-    spec = SevenLayerStackSpec.default()
+    spec = EightLayerStackSpec.default()
     return {
         "implemented_layer_count": len(spec.layers),
         "thesis_target_layer_count": 8,
@@ -604,8 +614,8 @@ def build_audit() -> dict[str, Any]:
             "implemented_not_activated_by_promotion",
             operationally_complete=False,
             reason=(
-                "The isolated paper executor has strong safety and reconciliation tests, but it is not "
-                "represented as a distinct layer in SevenLayerStackSpec and no promoted strategy feeds it."
+                "The isolated paper executor has strong safety and reconciliation tests and is now "
+                "represented as Layer 7, but no promoted strategy feeds it."
             ),
         ),
         layer(
@@ -659,14 +669,6 @@ def build_audit() -> dict[str, Any]:
             "finding": (
                 f"Only {identities['json_artifacts_with_code_or_normalizer_identity']} of "
                 f"{identities['json_artifact_count']} JSON artifacts contain a recognized code or normalizer identity."
-            ),
-        },
-        {
-            "id": "target_layer_count_mismatch",
-            "severity": "high",
-            "finding": (
-                f"The thesis defines eight layers plus governance; SevenLayerStackSpec defines "
-                f"{stack['implemented_layer_count']} layers and does not model paper execution distinctly."
             ),
         },
         {

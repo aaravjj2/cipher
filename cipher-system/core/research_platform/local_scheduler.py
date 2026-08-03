@@ -1,4 +1,4 @@
-"""A file-backed, research-only scheduler for the guarded seven-layer stack.
+"""A file-backed, research-only scheduler for the guarded eight-layer stack.
 
 It deliberately schedules only local, non-execution work.  Jobs whose evidence
 or runtime prerequisites are absent are written as blocked rather than invoked.

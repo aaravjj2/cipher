@@ -14,6 +14,35 @@ be combined with the replacement cohort.
 - `2026-01-01` onward: prospective-only. It cannot be used for historical
   model selection or parameter tuning.
 
+## Current price-only status
+
+The corrected original nine-symbol panel yields **11 of 12 strict independent
+origins** in the strongest continuous block: one short, essentially resolved,
+but not cleared. The original gap is localized to split-like price
+discontinuities for NVDA on `2024-06-10` and XLE on `2025-12-05`; both sessions
+contain 391 bars. An existing-data-only audit found no unused same-provider
+local store that validly repairs both dates or contributes a fully covered
+additional ticker.
+
+A preregistered DIA rescue failed because many DIA sessions had fewer than 391
+one-minute bars. A subsequent fixed-basket rescue preregistered `AMD, AMZN,
+GOOGL, META, TSLA` before retrieval and evaluated all five on availability and
+price continuity only. AMD, AMZN, GOOGL, and TSLA passed all 744 sessions; META
+passed 743. The resulting same-provider structural cohort supplies **14 strict
+independent origins** with at least nine common tickers and no gate relaxation,
+source mixing, volume use, or ranking/model outcome inspection.
+
+This clears structural cohort availability. It does not restore an untouched
+final holdout because the 2023–2025 period was previously used for exploratory
+research. The allowed claim is therefore
+`structural_cohort_eligibility_only_not_restored_untouched_holdout`.
+
+Evidence:
+
+- `data/governance/holdout_c_existing_data_gap_audit.json`
+- `data/governance/holdout_c_rescue_v3_preregistration.json`
+- `data/governance/holdout_c_alpaca_cohort_rescue_v3.json`
+
 ## Unchanged Eligibility
 
 The candidate final holdout must still have one qualified source, at least

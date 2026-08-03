@@ -115,24 +115,25 @@ The thesis requires runtime evidence to reference an immutable code identity.
 The current Git repository is healthy, but most previously generated artifacts
 cannot prove which code revision produced them.
 
-### 6. The implemented stack topology has seven layers, not eight
+### 6. The formal stack topology now matches the eight-layer design
 
-`SevenLayerStackSpec.default()` defines:
+The earlier self-audit found that the formal stack omitted shadow/paper
+execution and used a causality-implying attribution name. That discrepancy has
+been corrected. `EightLayerStackSpec.default()` now defines:
 
 1. foundational data warehouse;
 2. forecasting and feature generation;
 3. factor discovery;
-4. attribution/anomaly;
+4. attribution and anomaly analysis;
 5. backtesting gate;
-6. synthesis/risk allocation;
-7. feedback loop.
+6. decision synthesis and simulated portfolio risk;
+7. shadow and paper execution;
+8. evidence feedback.
 
-The thesis defines eight layers and places shadow/paper execution between
-portfolio risk and evidence feedback. The paper executor exists as a separate,
-well-tested package, but it is absent from the formal stack specification. The
-attribution layer is also named `causal_attribution_and_anomaly_engine`, despite
-the thesis's explicit instruction not to imply causality without a stronger
-research design.
+The attribution layer is now named `attribution_and_anomaly_engine`. The legacy
+`SevenLayerStackSpec` import remains only as a compatibility alias and returns
+the same eight-layer topology. This fixes the topology description; it does not
+change the operational-completion verdict for any layer.
 
 ### 7. Vendor access is not isolated behind the data layer
 
@@ -233,10 +234,16 @@ absence of every component.
 
 ### Fail-closed research behavior
 
-The corrected Holdout-C constructor found 11 strict origins instead of the
-required 12. Factor, model, and backtest work was stopped rather than weakening
-the rule. That behavior matches the architecture's evidence-first principles,
-even though it leaves the research and graduation layers operationally empty.
+The corrected original Holdout-C constructor found 11 strict origins instead
+of the required 12. Factor, model, and backtest work was stopped rather than
+weakening the rule. An existing-data audit then found no hidden rescue. A fixed,
+preregistered same-provider candidate basket subsequently established 14
+structural origins without ranking/model outcome inspection. Because the period
+had already been used for exploratory work, that result is explicitly limited
+to structural cohort eligibility and does not claim to restore an untouched
+final holdout. This sequence matches the architecture's evidence-first
+principles even though the research and graduation layers remain operationally
+empty.
 
 ## Accepted later deviations
 
