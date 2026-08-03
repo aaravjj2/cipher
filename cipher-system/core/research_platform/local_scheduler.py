@@ -33,7 +33,7 @@ def default_jobs() -> tuple[LocalResearchJob, ...]:
         packages = capabilities["research_packages"]
         if not (packages["qlib"] and packages["rdagent"]):
             return "qlib_or_rdagent_runtime_unavailable"
-        return "holdout_c_cohort_not_cleared"
+        return "full_volume_gate_reference_scope_unresolved"
 
     def anomaly_blocker(capabilities: dict[str, Any]) -> str | None:
         if not capabilities["models"]["timesfm"]["ready_for_prospective_forecast"]:

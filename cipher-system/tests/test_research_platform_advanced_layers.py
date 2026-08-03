@@ -420,6 +420,7 @@ def test_local_scheduler_records_blocked_jobs_without_execution(tmp_path: Path):
     assert any(event["status"] == "ready_for_manual_research_run" for event in result["last_run"])
     assert any(event["status"] == "blocked" for event in result["last_run"])
     assert all(event["live_order_authority"] is False for event in result["last_run"])
+    assert any(event["blocker"] == "full_volume_gate_reference_scope_unresolved" for event in result["last_run"])
 
 
 def test_vectorbt_adapter_refuses_uncleared_holdout_c(tmp_path: Path):
