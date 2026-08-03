@@ -25,7 +25,13 @@ DATA = ROOT / "data"
 DEFAULT_STATE = DATA / "alerts" / "data_health_state.json"
 GOVERNANCE_RUNNER = ROOT.parent / "infra" / "gcp-cipher-vm" / "bin" / "run-governance-catalog.sh"
 ARCHIVE_RUNNER = ROOT / "scripts" / "archive_live_option_chains.py"
+LIVE_OPTION_CHAINS_DIR = DATA / "live_option_chains"
 NY = ZoneInfo("America/New_York")
+
+SCANNER_TICKERS = (
+    "NVDA", "MSFT", "AAPL", "AVGO", "AMZN", "IBIT",
+    "GOOGL", "TSLA", "META", "MU", "AMD", "QQQ",
+)
 
 
 def utcnow() -> str:
@@ -73,6 +79,34 @@ def latest_gex(db_path: Path) -> dict[str, Any]:
         count = db.execute("select count(*) from gex_snapshots").fetchone()[0]
     latest = max((parse_dt(row[1]) for row in rows), default=None)
     return {"ok": bool(latest), "latest": latest, "rows": rows, "snapshots": count, "path": str(db_path)}
+
+
+def latest_live_option_chains(chain_dir: Path, tickers: tuple[str, ...] = SCANNER_TICKERS) -> dict[str, Any]:
+    """Read latest captured option-chain timestamps without contacting a vendor."""
+
+    if not chain_dir.is_dir():
+        return {"ok": False, "reason": "missing_dir", "path": str(chain_dir)}
+    per_ticker: dict[str, datetime] = {}
+    for ticker in tickers:
+        latest_path = chain_dir / f"latest_{ticker}.json"
+        if not latest_path.is_file():
+            continue
+        try:
+            payload = json.loads(latest_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        observed = parse_dt(payload.get("as_of") or payload.get("timestamp"))
+        if observed is not None:
+            per_ticker[ticker] = observed
+    latest = max(per_ticker.values(), default=None)
+    return {
+        "ok": bool(latest),
+        "latest": latest,
+        "per_ticker": per_ticker,
+        "missing": [ticker for ticker in tickers if ticker not in per_ticker],
+        "path": str(chain_dir),
+        "reason": None if latest else "no_latest_snapshots",
+    }
 
 
 def status_from_latest(info: dict[str, Any], *, max_age_minutes: int, active: bool) -> tuple[str, str]:
@@ -179,6 +213,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--gex-db", type=Path, default=DATA / "gex_history.sqlite")
     parser.add_argument("--tradier-max-age", type=int, default=int(os.environ.get("TRADIER_HEALTH_MAX_AGE_MIN", "20")))
     parser.add_argument("--gex-max-age", type=int, default=int(os.environ.get("GEX_HEALTH_MAX_AGE_MIN", "45")))
+    parser.add_argument(
+        "--option-chains-max-age",
+        type=int,
+        default=int(os.environ.get("OPTION_CHAINS_HEALTH_MAX_AGE_MIN", "15")),
+    )
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--skip-maintenance", action="store_true")
     parser.add_argument("--force-maintenance", action="store_true")
@@ -200,6 +239,11 @@ def main() -> int:
             args.gex_max_age,
             market_window("gex"),
         ),
+        "live_option_chains": (
+            latest_live_option_chains(LIVE_OPTION_CHAINS_DIR),
+            args.option_chains_max_age,
+            market_window("gex"),
+        ),
     }
     changes = []
     now = utcnow()
@@ -219,9 +263,23 @@ def main() -> int:
         lines = ["Cipher data health change", f"Checked: {now}", ""]
         for name, status, detail, info in changes:
             lines.append(f"{name.upper()}: {status.upper()} - {detail}")
-            rows = info.get("rows") or []
-            if rows:
-                lines.append("Latest: " + ", ".join(f"{r[0]} {r[1]}" for r in rows[:3]))
+            if name == "live_option_chains":
+                per_ticker = info.get("per_ticker") or {}
+                if per_ticker:
+                    lines.append(
+                        "Latest: "
+                        + ", ".join(
+                            f"{ticker} {observed.isoformat()}"
+                            for ticker, observed in list(per_ticker.items())[:5]
+                        )
+                    )
+                missing = info.get("missing") or []
+                if missing:
+                    lines.append("Missing: " + ", ".join(missing))
+            else:
+                rows = info.get("rows") or []
+                if rows:
+                    lines.append("Latest: " + ", ".join(f"{r[0]} {r[1]}" for r in rows[:3]))
         message = "\n".join(lines)
         if args.dry_run:
             print(message)

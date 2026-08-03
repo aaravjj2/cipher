@@ -79,6 +79,8 @@ async function sendResearchBrief(res) {
 const routes = {
   "/api/health": "/health",
   "/api/quote": "/api/quote",
+  "/api/governance": "/api/governance",
+  "/api/research-status": "/api/research-status",
   "/api/matrix": "/api/matrix",
   "/api/heatmap": "/api/heatmap",
   "/api/night-vision": "/api/night-vision",
