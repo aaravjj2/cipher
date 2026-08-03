@@ -136,6 +136,54 @@ def governance_status():
     }
 
 
+def research_status():
+    """Return the consolidated, read-only end-state and recent event evidence."""
+
+    status_path = ROOT / "data" / "governance" / "master_end_state_status.json"
+    event_path = ROOT / "data" / "events" / "latest_public_event_ingestion.json"
+    cache_path = ROOT / "data" / "cache" / "public_event_summary.json"
+    if not status_path.is_file():
+        return {
+            "initialized": False,
+            "read_only": True,
+            "live_execution_present": False,
+            "message": "Run scripts/update_master_end_state_status.py to initialize the operator status.",
+            "as_of": utcnow(),
+        }
+    try:
+        status = json.loads(status_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return {
+            "initialized": False,
+            "read_only": True,
+            "live_execution_present": False,
+            "error": f"invalid master status artifact: {type(exc).__name__}",
+            "as_of": utcnow(),
+        }
+    events = []
+    if event_path.is_file():
+        try:
+            event_payload = json.loads(event_path.read_text(encoding="utf-8"))
+            events = [item.get("record", {}) for item in event_payload.get("processed_events", [])][-50:]
+        except (OSError, json.JSONDecodeError):
+            events = []
+    event_summary = {}
+    if cache_path.is_file():
+        try:
+            event_summary = json.loads(cache_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            event_summary = {}
+    return {
+        "initialized": True,
+        "status": status,
+        "event_summary": event_summary,
+        "recent_events": events,
+        "read_only": True,
+        "live_execution_present": False,
+        "as_of": utcnow(),
+    }
+
+
 def local_settings():
     values = {}
     if ENV.is_file():
@@ -1096,6 +1144,8 @@ class Handler(BaseHTTPRequestHandler):
                 }
             elif parsed.path == "/api/governance":
                 data = governance_status()
+            elif parsed.path == "/api/research-status":
+                data = research_status()
             elif parsed.path == "/api/quote":
                 data = quote(ticker)
             elif parsed.path == "/debug/caches":
@@ -1635,6 +1685,7 @@ class Handler(BaseHTTPRequestHandler):
                             "/api/health",
                             "/api/quote",
                             "/api/governance",
+                            "/api/research-status",
                             "/api/matrix",
                             "/api/heatmap",
                             "/api/night-vision",

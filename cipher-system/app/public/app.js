@@ -44,6 +44,8 @@ const state = {
   scannerClusters: [],
   scannerMeta: null,
   rankingLab: null,
+  researchStatus: null,
+  researchStatusBusy: false,
   rankingBusy: false,
   scannerBusy: false,
   scannerJobId: null,
@@ -747,6 +749,7 @@ const VIEW_TITLES = {
   trident: "Cipher — Trident",
   saves: "Cipher — Chart Saves",
   scanner: "Cipher — Setup Scanner",
+  researchStatus: "Cipher — Research Status",
   rankingLab: "Cipher — Ranking Lab",
   gptAnalyst: "Cipher — GPT Analyst",
   bio: "Cipher — Bio",
@@ -766,6 +769,7 @@ function updateHeaderTitle() {
       night: "CIPHER NIGHT VISION",
       spyglass: "CIPHER SPYGLASS",
       scanner: "CIPHER SETUP SCANNER",
+      researchStatus: "CIPHER RESEARCH STATUS",
       rankingLab: "CIPHER RANKING LAB",
       trident: "CIPHER TRIDENT",
       saves: "CIPHER CHART SAVES",
@@ -2685,6 +2689,85 @@ function renderGptAnalyst() {
   $("#researchContent").innerHTML = panel("GPT Analyst", "Login-only ChatGPT research handoff", body);
 }
 
+function renderResearchStatus() {
+  const mount = $("#researchContent");
+  if (!state.researchStatus) {
+    mount.innerHTML = panel(
+      "Research Status",
+      "Governed end-state tracks and real event evidence",
+      `<div class="empty-panel">Loading the consolidated research status…</div>`,
+    );
+    if (!state.researchStatusBusy) {
+      state.researchStatusBusy = true;
+      fetchJson(`${api}/api/research-status`)
+        .then((payload) => {
+          state.researchStatus = payload;
+          state.researchStatusBusy = false;
+          if (state.view === "researchStatus") renderResearchStatus();
+        })
+        .catch((error) => {
+          state.researchStatusBusy = false;
+          mount.innerHTML = panel(
+            "Research Status",
+            "Governed end-state tracks and real event evidence",
+            `<div class="empty-panel">${escapeHtml(error.message || "Status unavailable")}</div>`,
+          );
+        });
+    }
+    return;
+  }
+  const payload = state.researchStatus;
+  if (!payload.initialized) {
+    mount.innerHTML = panel("Research Status", "Not initialized", `<div class="empty-panel">${escapeHtml(payload.message || payload.error || "Status unavailable")}</div>`);
+    return;
+  }
+  const status = payload.status || {};
+  const tracks = status.tracks || [];
+  const stateLabel = (value) => ({
+    completed_real: "COMPLETED — REAL",
+    completed_infrastructure: "COMPLETED — INFRA",
+    closed_data_insufficient: "CLOSED — DATA INSUFFICIENT",
+    pending: "PENDING",
+  }[value] || String(value || "UNKNOWN").toUpperCase());
+  const trackCards = tracks.map((item) => {
+    const metrics = Object.entries(item.metrics || {})
+      .filter(([, value]) => value !== null && value !== undefined && typeof value !== "object")
+      .slice(0, 4)
+      .map(([key, value]) => `<div class="setting-row"><span>${escapeHtml(key.replaceAll("_", " "))}</span><strong>${escapeHtml(String(value))}</strong></div>`)
+      .join("");
+    const evidence = (item.evidence || []).slice(0, 2).map((value) => value.split("/").pop()).join(" · ");
+    return `<article class="setting-card research-track-card state-${escapeHtml(item.state || "unknown")}">
+      <span class="research-state">${escapeHtml(stateLabel(item.state))}</span>
+      <h2>${Number(item.track_id) || "—"}. ${escapeHtml(item.name || "Unnamed track")}</h2>
+      <p>${escapeHtml(item.reason || "No reason recorded.")}</p>
+      ${metrics}
+      <small>${escapeHtml(evidence || "No artifact path recorded")}</small>
+    </article>`;
+  }).join("");
+  const recentEvents = (payload.recent_events || []).slice(0, 20).map((event) => {
+    const polarity = Math.max(Number(event.positive_probability || 0), Number(event.negative_probability || 0), Number(event.neutral_probability || 0));
+    return `<tr>
+      <td>${escapeHtml((event.publication_time || "").slice(0, 16).replace("T", " "))}</td>
+      <td>${escapeHtml(event.source || "—")}</td>
+      <td>${escapeHtml((event.symbols || []).join(", ") || "—")}</td>
+      <td>${escapeHtml(event.title || "—")}</td>
+      <td>${Number.isFinite(polarity) ? `${(polarity * 100).toFixed(1)}%` : "—"}</td>
+      <td>${event.high_magnitude ? "flagged" : "normal"}</td>
+    </tr>`;
+  }).join("");
+  const summary = payload.event_summary || {};
+  const body = `<div class="notice">Read-only research governance. Closed data-insufficient tracks were not rerun, relaxed, or filled with synthetic evidence. Nothing shown here authorizes execution.</div>
+    <div class="metric-grid">
+      <div class="metric-card"><span>TRACKS CLOSED</span><strong>${Number(status.closed_tracks || 0)}/${Number(status.total_tracks || 8)}</strong><small>${status.all_eight_closed ? "All active tracks have an honest close-out." : "Some tracks remain pending."}</small></div>
+      <div class="metric-card"><span>REAL EVENTS</span><strong>${Number(summary.event_count || 0)}</strong><small>${Number(summary.high_magnitude_count || 0)} high-magnitude FinBERT flags</small></div>
+      <div class="metric-card"><span>EXECUTION AUTHORITY</span><strong>NONE</strong><small>Promotion ceiling: ${escapeHtml(status.maximum_promotion_state || "LIVE_REVIEW_REQUIRED")}</small></div>
+    </div>
+    <div class="research-status-actions"><button class="tool" data-action="refresh-research-status">Refresh status</button><span>As of ${escapeHtml(payload.as_of || status.created_at || "—")}</span></div>
+    <div class="settings-grid research-track-grid">${trackCards}</div>
+    <div class="data-card spy-table research-event-table"><table><thead><tr><th>Published</th><th>Source</th><th>Symbols</th><th>Event</th><th>Max sentiment</th><th>Flag</th></tr></thead><tbody>${recentEvents || '<tr><td colspan="6">No governed real events recorded.</td></tr>'}</tbody></table></div>`;
+  mount.innerHTML = panel("Research Status", "Completed, skipped, blocked, and real event evidence", body);
+}
+
 function renderResearch() {
   const renderers = {
     spyglass: renderSpyglass,
@@ -2692,6 +2775,7 @@ function renderResearch() {
     journal: renderJournal,
     saves: renderSaves,
     scanner: renderScanner,
+    researchStatus: renderResearchStatus,
     rankingLab: renderRankingLab,
     gptAnalyst: renderGptAnalyst,
     bio: renderBio,
@@ -2919,6 +3003,10 @@ document.addEventListener("click", (event) => {
   }
   if (button.dataset.action === "refresh") return load(state.ticker);
   if (button.dataset.action === "refresh-flow") return refreshFlow();
+  if (button.dataset.action === "refresh-research-status") {
+    state.researchStatus = null;
+    return renderResearchStatus();
+  }
   if (button.dataset.action === "watch-current") return addWatchlist();
   if (button.dataset.action === "toggle-rail") {
     document.querySelector(".app")?.classList.toggle("rail-collapsed");

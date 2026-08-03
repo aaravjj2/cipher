@@ -206,9 +206,34 @@ def main() -> int:
     parser.add_argument("--preregister", action="store_true")
     parser.add_argument("--run", action="store_true")
     parser.add_argument("--preregistration", type=Path)
+    parser.add_argument("--cohort", type=Path, help="Frozen cohort-construction artifact.")
     args = parser.parse_args()
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     if args.preregister:
+        cohort_candidates = sorted((ROOT / "data" / "governance").glob("holdout_c_alpaca_cohort_construction_*.json"))
+        cohort_path = args.cohort or (cohort_candidates[-1] if cohort_candidates else None)
+        if cohort_path is None:
+            raise SystemExit("no frozen cohort artifact is available")
+        cohort = json.loads(cohort_path.read_text(encoding="utf-8"))
+        if not cohort.get("pass"):
+            payload = {
+                "schema_version": 1,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "status": "skipped_data_insufficient",
+                "cohort_artifact": str(cohort_path),
+                "observed_strict_independent_origins": (cohort.get("selected_block") or {}).get("strict_independent_origins", 0),
+                "required_strict_independent_origins": cohort.get("requirements", {}).get("minimum_strict_independent_origins", 12),
+                "models_run": [],
+                "research_verdicts_changed": False,
+                "volume_used": False,
+                "gate_relaxed": False,
+                "promotion_eligible": False,
+                "live_execution": False,
+            }
+            out = OUT_DIR / f"current_era_price_only_model_skip_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}.json"
+            out.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+            print(json.dumps({"path": str(out), "status": payload["status"]}, indent=2))
+            return 0
         payload = preregister()
         out = OUT_DIR / f"current_era_price_only_model_preregistration_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}.json"
         out.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")

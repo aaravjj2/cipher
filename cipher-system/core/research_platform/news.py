@@ -77,16 +77,23 @@ class SentimentProvider(Protocol):
 class FinBertSentimentProvider:
     """Optional local FinBERT adapter; no remote inference is performed."""
 
-    def __init__(self, model_id: str = "ProsusAI/finbert", *, device: int = -1):
+    def __init__(
+        self,
+        model_id: str = "ProsusAI/finbert",
+        *,
+        revision: str | None = None,
+        device: int = -1,
+    ):
         if importlib.util.find_spec("transformers") is None:
             raise RuntimeError("transformers is not installed; FinBERT remains unavailable")
         from transformers import pipeline  # type: ignore
 
-        self._model_id = model_id
+        self._model_id = f"{model_id}@{revision}" if revision else model_id
         self._pipeline = pipeline(
             "text-classification",
             model=model_id,
             tokenizer=model_id,
+            revision=revision,
             device=device,
             top_k=None,
             function_to_apply="softmax",
@@ -181,12 +188,13 @@ class NewsFeatureService:
             raise RuntimeError("sentiment provider returned a different number of scores than chunks")
         positive, negative, neutral = aggregate_sentiment(scores)
         magnitude = max(positive, negative)
+        # Event identity is stable across idempotent re-ingestion. Receipt and
+        # availability timestamps remain evidence fields but do not create a
+        # second event ID for the same external document.
         payload = {
             "source": document.source,
             "external_id": document.external_id,
             "publication_time": document.publication_time.isoformat(),
-            "received_at": document.received_at.isoformat(),
-            "available_at": document.available_at.isoformat(),
             "symbols": document.symbols,
             "text_sha256": document.text_sha256,
             "sentiment_model_id": provider.model_id,

@@ -8,6 +8,7 @@ the development/OOS decision without searching until a positive result appears.
 
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import sys
@@ -81,6 +82,30 @@ def _evaluate(rows: list[dict], compiled, cutoff: date) -> dict:
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--cohort", type=Path, help="Frozen cohort-construction artifact.")
+    args = parser.parse_args()
+    cohort_path = args.cohort or sorted((ROOT / "data" / "governance").glob("holdout_c_alpaca_cohort_construction_*.json"))[-1]
+    cohort = json.loads(cohort_path.read_text(encoding="utf-8"))
+    if not cohort.get("pass"):
+        OUT.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "schema_version": 1,
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "status": "skipped_data_insufficient",
+            "cohort_artifact": str(cohort_path),
+            "observed_strict_independent_origins": (cohort.get("selected_block") or {}).get("strict_independent_origins", 0),
+            "required_strict_independent_origins": cohort.get("requirements", {}).get("minimum_strict_independent_origins", 12),
+            "prior_screen_outputs": "exploratory_only_not_confirmatory",
+            "volume_used": False,
+            "gate_relaxed": False,
+            "paper_eligible": False,
+            "live_execution": False,
+        }
+        path = OUT / f"price_only_factor_screen_skip_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}.json"
+        path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        print(json.dumps({"report": str(path), "status": payload["status"]}, indent=2))
+        return 0
     files = _files()
     rows = load_price_only_daily(files, SYMBOLS)
     qlib_path = OUT / "current_era_price_only_qlib_panel.parquet"

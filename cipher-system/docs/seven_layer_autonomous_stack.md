@@ -65,11 +65,25 @@ cd /home/aarav/Aarav/cipher
 .venv/bin/python cipher-system/scripts/run_timesfm_base_context.py SPY --lookback 128 --horizon 12
 ```
 
-`run_local_research_scheduler.py` is a local, file-backed scheduler entrypoint.
-It records whether each guarded job is ready or blocked in
+`run_local_research_scheduler.py` is a local, file-backed readiness entrypoint.
+It records whether guarded jobs are ready or blocked in
 `data/governance/local_research_scheduler.json`; it does not invoke vendors,
-subprocesses, brokers, or orders. A system scheduler may call this command only
-after the relevant runtime and evidence prerequisites have been met.
+subprocesses, brokers, or orders.
+
+The separately guarded operational daemon invokes only four allowlisted jobs:
+public-event ingestion, bounded repair auditing, infrastructure auditing, and
+master-status refresh. Factor/model/backtest/paper/live jobs are excluded.
+
+```bash
+.venv-research-py312/bin/python cipher-system/scripts/manage_safe_scheduler.py status
+.venv-research-py312/bin/python cipher-system/scripts/manage_safe_scheduler.py start --interval-seconds 3600
+.venv-research-py312/bin/python cipher-system/scripts/manage_safe_scheduler.py stop
+```
+
+The current eight-track close-out and the data-insufficient policy are documented
+in `docs/master_end_state_closeout.md`. The machine-readable status is
+`data/governance/master_end_state_status.json` and is exposed read-only at
+`GET /api/research-status`.
 
 ## Optional Engine Runtime
 

@@ -14,16 +14,24 @@ QUALITY = ROOT / "data" / "market_quality"
 GOV = ROOT / "data" / "governance"
 MIN_TICKERS, CONTEXT, HORIZON, MIN_ORIGINS = 8, 32, 20, 12
 
-def main() -> None:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--scope", help="Explicit price-only scope artifact.")
-    parser.add_argument("--period", default="2017-01 through 2019-12")
-    args = parser.parse_args()
-    scope_path = Path(args.scope) if args.scope else sorted(QUALITY.glob("alpaca_holdout_c_price_only_scope_*.json"))[-1]
-    scope = json.loads(scope_path.read_text(encoding="utf-8"))
-    all_days = sorted({row["date"] for row in scope["daily_results"]})
-    eligible = {row["date"]: sorted(row["tickers"]) for row in scope["common_eligible_by_day"] if row["count"] >= MIN_TICKERS}
-    blocks, current = [], []
+
+def construct_candidate_blocks(
+    all_days: list[str],
+    eligible: dict[str, list[str]],
+    *,
+    minimum_tickers: int = MIN_TICKERS,
+    context_sessions: int = CONTEXT,
+    outcome_sessions: int = HORIZON,
+) -> list[dict]:
+    """Build deterministic non-overlapping windows with one ticker set throughout.
+
+    A day is part of a candidate block only when it is individually eligible.
+    Each accepted origin then requires at least ``minimum_tickers`` in the
+    intersection across its complete context and outcome window.
+    """
+
+    blocks: list[list[str]] = []
+    current: list[str] = []
     for day in all_days:
         if day in eligible:
             current.append(day)
@@ -33,16 +41,55 @@ def main() -> None:
             current = []
     if current:
         blocks.append(current)
-    # A strict independent case consumes a 32-session context and a disjoint
-    # 20-session outcome, matching the original 52-session window definition.
-    findings = []
+
+    findings: list[dict] = []
+    window_size = context_sessions + outcome_sessions
     for block in blocks:
-        if len(block) >= CONTEXT + HORIZON:
-            findings.append({"start": block[0], "end": block[-1], "sessions": len(block),
-                             "minimum_common_tickers": min(len(eligible[day]) for day in block),
-                             "strict_independent_origins": len(block) // (CONTEXT + HORIZON),
-                             "origin_windows": [{"origin": block[offset + CONTEXT - 1], "outcome_start": block[offset + CONTEXT], "outcome_end": block[offset + CONTEXT + HORIZON - 1], "tickers": eligible[block[offset + CONTEXT - 1]]}
-                                                for offset in range(0, len(block) - (CONTEXT + HORIZON) + 1, CONTEXT + HORIZON)]})
+        origin_windows = []
+        offset = 0
+        while offset + window_size <= len(block):
+            window = block[offset : offset + window_size]
+            common_tickers = sorted(set.intersection(*(set(eligible[day]) for day in window)))
+            if len(common_tickers) >= minimum_tickers:
+                origin_windows.append(
+                    {
+                        "context_start": window[0],
+                        "origin": window[context_sessions - 1],
+                        "outcome_start": window[context_sessions],
+                        "outcome_end": window[-1],
+                        "tickers": common_tickers,
+                    }
+                )
+                offset += window_size
+            else:
+                offset += 1
+        if origin_windows:
+            findings.append(
+                {
+                    "start": block[0],
+                    "end": block[-1],
+                    "sessions": len(block),
+                    "minimum_common_tickers": min(len(item["tickers"]) for item in origin_windows),
+                    "strict_independent_origins": len(origin_windows),
+                    "origin_windows": origin_windows,
+                }
+            )
+    return findings
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--scope", help="Explicit price-only scope artifact.")
+    parser.add_argument("--period", default="2017-01 through 2019-12")
+    args = parser.parse_args()
+    scope_path = Path(args.scope) if args.scope else sorted(QUALITY.glob("alpaca_holdout_c_price_only_scope_*.json"))[-1]
+    scope = json.loads(scope_path.read_text(encoding="utf-8"))
+    all_days = sorted({row["date"] for row in scope["daily_results"]})
+    eligible = {row["date"]: sorted(row["tickers"]) for row in scope["common_eligible_by_day"] if row["count"] >= MIN_TICKERS}
+    # A strict independent case consumes a 32-session context and a disjoint
+    # 20-session outcome. The same ticker set must be eligible throughout all
+    # 52 sessions; origin-day membership alone is not sufficient.
+    findings = construct_candidate_blocks(all_days, eligible)
     best = max(findings, key=lambda item: (item["strict_independent_origins"], item["minimum_common_tickers"], item["sessions"]), default=None)
     cohort_gate = require_holdout_c_cohort(
         source_count=1,

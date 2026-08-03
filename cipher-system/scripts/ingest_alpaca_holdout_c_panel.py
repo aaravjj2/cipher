@@ -20,6 +20,10 @@ import pandas as pd
 import requests
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in os.sys.path:
+    os.sys.path.insert(0, str(ROOT))
+
+from core.env import load_local_env
 RAW = ROOT / "data" / "raw" / "alpaca_sip_holdout_c_1m"
 NORMALIZED = ROOT / "data" / "normalized" / "alpaca_sip_holdout_c_1m"
 QUALITY = ROOT / "data" / "market_quality"
@@ -28,12 +32,28 @@ START, END = date(2017, 1, 1), date(2019, 12, 31)
 
 
 def headers() -> dict[str, str]:
-    values = {}
-    for line in (ROOT / ".env").read_text(encoding="utf-8").splitlines():
-        if "=" in line:
-            key, value = line.split("=", 1)
-            values[key] = value
-    return {"APCA-API-KEY-ID": values["ALPACA_API_KEY"], "APCA-API-SECRET-KEY": values["ALPACA_SECRET_KEY"]}
+    """Resolve the accepted read-only Alpaca credential aliases without printing values."""
+
+    load_local_env()
+    key = next(
+        (
+            os.environ.get(name)
+            for name in ("ALPACA_ALGO_PLUS_KEY", "ALPACA_ALGO_KEY", "ALPACA_API_KEY")
+            if os.environ.get(name)
+        ),
+        None,
+    )
+    secret = next(
+        (
+            os.environ.get(name)
+            for name in ("ALPACA_ALGO_PLUS_SECRET", "ALPACA_ALGO_SECRET", "ALPACA_API_SECRET", "ALPACA_SECRET_KEY")
+            if os.environ.get(name)
+        ),
+        None,
+    )
+    if not key or not secret:
+        raise RuntimeError("read-only Alpaca credentials are unavailable")
+    return {"APCA-API-KEY-ID": key, "APCA-API-SECRET-KEY": secret}
 
 
 def ny_utc(day: date, local: str) -> str:
