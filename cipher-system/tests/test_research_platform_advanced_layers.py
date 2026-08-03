@@ -28,7 +28,7 @@ from core.research_platform.factors import FactorCandidate, FactorResearchServic
 from core.research_platform.lean import LeanAuditValidator
 from core.research_platform.local_capabilities import build_local_capability_report
 from core.research_platform.local_scheduler import run_due
-from core.research_platform.engine_adapters import EngineGateError, screen_vectorbt_buy_and_hold
+from core.research_platform.engine_adapters import EngineGateError, screen_vectorbt_buy_and_hold, screen_vectorbt_price_only_signal
 from core.research_platform.market_quality import HoldoutCohortEligibility
 from core.research_platform.repair_boundary import RepairBoundaryViolation, RepairRequest, authorize_repair
 from core.research_platform.model_context import (
@@ -427,6 +427,23 @@ def test_vectorbt_adapter_refuses_uncleared_holdout_c(tmp_path: Path):
     cohort = HoldoutCohortEligibility(source_count=1, common_tickers=9, strict_independent_origins=6)
     with pytest.raises(EngineGateError, match="Holdout C gate"):
         screen_vectorbt_buy_and_hold([100.0, 101.0], cohort, ArtifactStore(tmp_path / "artifacts"))
+
+
+def test_vectorbt_price_only_contract_uses_same_promotion_path_without_volume(tmp_path: Path):
+    result = screen_vectorbt_price_only_signal(
+        [100.0, 101.0, 102.0, 101.0],
+        [True, False, False, False],
+        [False, False, True, False],
+        ArtifactStore(tmp_path / "artifacts"),
+        strategy_id="price_only_strategy",
+        dataset_id="price_only_dataset",
+    )
+    payload = json.loads(Path(result.artifact.data_path).read_text(encoding="utf-8"))
+    assert payload["data_scope"] == "price_only"
+    assert payload["volume_features"] is False
+    assert payload["promotion_path"] == "same_ordered_states_as_other_validated_strategies"
+    assert payload["promotion_eligible_now"] is False
+    assert payload["execution_authority"] is False
 
 
 @pytest.mark.parametrize("changes", [
