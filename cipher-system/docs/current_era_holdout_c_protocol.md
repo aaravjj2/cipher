@@ -52,8 +52,12 @@ product is daily-only and therefore cannot be filtered to the regular session.
 FirstRate's free AAPL and SPY samples verified CSV `timestamp,open,high,low,
 close,volume` data, US Eastern minute-start stamps, individual-share volume,
 and enough out-of-hours coverage to filter exactly to the 391-bar
-09:30-16:00 regular session. The samples do not cover 2023-2025. Its full
-nine-symbol dataset remains unacquired: an exact no-purchase quote and written
-confirmation of volume comparability to Alpaca SIP are required before any
-retrieval. Until then, the full volume gate remains blocked; no volume-sensitive
-backtest, ranking outcome, paper trial, or vendor patch is permitted.
+09:30-16:00 regular session. Its historical panel is purchasable, so it is
+excluded from this no-purchase path.
+
+London Strategic Edge is the next candidate. Its published free plan offers a
+key, REST access, and bounded CSV/Parquet downloads. It must still provide an
+API key and prove its minute-volume semantics are comparable to Alpaca SIP
+before any immutable 2023 pilot. Until then, the full volume gate remains
+blocked; no volume-sensitive backtest, ranking outcome, paper trial, or vendor
+patch is permitted.

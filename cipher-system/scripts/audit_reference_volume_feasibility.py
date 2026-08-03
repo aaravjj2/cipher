@@ -42,16 +42,21 @@ def main() -> None:
             "status": "rejected_semantic_coverage_not_proven_no_pilot",
         },
         "FirstRate": {
-            "stage": "public_schema_and_sample_check_complete",
+            "stage": "excluded_by_no_purchase_policy",
             "sample_evidence": sample_evidence(),
             "schema": ["timestamp", "open", "high", "low", "close", "volume"],
             "timestamp_and_volume_semantics": "US Eastern minute-start timestamps; volume is individual shares; zero-volume bars omitted",
             "published_coverage": "AAPL and SPY product pages advertise 1-minute OHLCV across the target period with multi-venue aggregation and out-of-hours bars; exact 09:30-16:00 filtering is possible",
-            "remaining_requirement": "exact no-purchase quote for all nine frozen symbols and written confirmation that volume is sufficiently comparable to Alpaca SIP",
-            "status": "conditionally_feasible_but_blocked_pending_quote_and_semantic_confirmation",
+            "status": "excluded; full historical access is purchasable and is not an eligible path",
+        },
+        "LondonStrategicEdge": {
+            "stage": "free_api_candidate",
+            "published_access": "free key; REST API; CSV/Parquet slices; up to 10 downloads/hour and 1,000,000 rows/download",
+            "required_before_ingestion": ["locally configured API key", "dataset metadata for each frozen symbol", "written or metadata evidence that minute volume is comparable to Alpaca SIP", "small immutable 2023 pilot"],
+            "status": "blocked_pending_free_api_key_and_volume_semantic_verification",
         },
         "acceptance": {"immutable_raw_evidence": True, "vendor_patches_price_data": False, "volume_scaling_or_inference": False, "daily_bar_reference": False, "max_relative_difference": 0.05, "trading_or_signal_evaluation": False},
-        "status": "blocked_pending_first_rate_quote_and_volume_semantic_confirmation",
+        "status": "blocked_pending_london_strategic_edge_free_api_key_and_volume_semantic_verification",
     }
     output = ROOT / "data" / "governance" / f"reference_volume_feasibility_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}.json"
     output.parent.mkdir(parents=True, exist_ok=True)
