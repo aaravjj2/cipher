@@ -31,5 +31,7 @@ def test_reference_volume_audit_preserves_no_spend_and_no_patch_boundaries(tmp_p
     assert payload["FirstRate"]["sample_evidence"][0]["sha256"]
     assert payload["FirstRate"]["stage"] == "excluded_by_no_purchase_policy"
     assert payload["LondonStrategicEdge"]["status"] == "rejected_pilot_material_volume_mismatch"
+    assert payload["provider_neutral_pipeline"]["status"] == "ready_for_future_authorized_reference_evidence"
+    assert payload["provider_neutral_pipeline"]["unblocks_gate_by_itself"] is False
     assert payload["acceptance"]["vendor_patches_price_data"] is False
     assert payload["acceptance"]["trading_or_signal_evaluation"] is False

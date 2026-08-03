@@ -76,3 +76,20 @@ June 1 matched volume within 5% for 9/9 symbols, although GE had only 387
 minute bars. June 2 matched only 5/9, with repeated material mismatches for
 AAPL, MSFT, NVDA, and QQQ. It is therefore retained only for supplemental
 price-only research and rejected as the independent volume reference.
+
+### Provider-Neutral Reconciliation Infrastructure (2026-08-03)
+
+The rejected pilots have been replaced with one provider-neutral import and
+reconciliation path. Authorized minute-volume CSV evidence must be stored
+immutably under `data/reference_volume/raw`, hashed, mapped with an explicit
+source timezone and timestamp convention, and validated against the unchanged
+391-bar regular-session rule before comparison. The pipeline reads only
+provider timestamp, symbol, and share volume; provider prices are ignored and
+cannot replace or patch Alpaca data. Invalid, duplicated, incomplete, zero, or
+missing reference sessions fail closed. The relative-difference threshold
+remains exactly 5%.
+
+This infrastructure does not unblock the full gate by itself. The status
+remains `blocked_reference_volume_access_after_free_sources_rejected` until an
+independent authorized source supplies valid evidence for the frozen panel.
+See `docs/reference_volume_reconciliation_pipeline.md`.

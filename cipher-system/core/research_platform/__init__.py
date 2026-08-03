@@ -11,6 +11,14 @@ from .experiments import ExperimentRunner, StandardBacktestOutput
 from .features import FeatureService
 from .promotion import PromotionService
 from .prospective import ProspectiveService
+from .reference_volume import (
+    REFERENCE_ALLOWED_USE,
+    ReferenceImportPolicy,
+    ReferenceSessionSummary,
+    RegularSessionSpec,
+    reconcile_session_volume,
+    summarize_reference_rows,
+)
 from .registry import ResearchRegistry
 from .models import (
     AllowedUse,
@@ -44,13 +52,19 @@ __all__ = [
     "FeatureSpec",
     "PromotionEvent",
     "PromotionState",
+    "REFERENCE_ALLOWED_USE",
     "RawObjectManifest",
+    "ReferenceImportPolicy",
+    "ReferenceSessionSummary",
+    "RegularSessionSpec",
     "ResearchPlatformConfig",
     "ResearchRegistry",
     "ExperimentRunner",
     "FeatureService",
     "PromotionService",
     "ProspectiveService",
+    "reconcile_session_volume",
     "StandardBacktestOutput",
+    "summarize_reference_rows",
     "StrategySpec",
 ]

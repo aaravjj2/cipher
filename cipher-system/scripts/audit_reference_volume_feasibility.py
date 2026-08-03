@@ -62,6 +62,14 @@ def main() -> None:
             "pilot_result": "2023-06-01: 9/9 volume pass but GE had 387 bars; 2023-06-02: 5/9 volume pass with repeated material mismatches",
             "status": "rejected_as_independent_volume_source_accepted_for_price_only_supplement",
         },
+        "provider_neutral_pipeline": {
+            "module": "core/research_platform/reference_volume.py",
+            "importer": "scripts/import_reference_volume_csv.py",
+            "reconciler": "scripts/reconcile_reference_volume_manifest.py",
+            "documentation": "docs/reference_volume_reconciliation_pipeline.md",
+            "status": "ready_for_future_authorized_reference_evidence",
+            "unblocks_gate_by_itself": False,
+        },
         "acceptance": {"immutable_raw_evidence": True, "vendor_patches_price_data": False, "volume_scaling_or_inference": False, "daily_bar_reference": False, "max_relative_difference": 0.05, "trading_or_signal_evaluation": False},
         "status": "blocked_reference_volume_access_after_free_sources_rejected",
     }
