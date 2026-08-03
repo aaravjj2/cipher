@@ -97,6 +97,9 @@ def build_status() -> dict[str, Any]:
         except (OSError, ValueError):
             build_healing_active = False
 
+    architecture_audit = read_json(GOV / "original_architecture_self_audit.json")
+    unified_product_audit = read_json(GOV / "unified_cipher_product_audit.json")
+
     counts = registry_counts()
     app_text = (ROOT / "core" / "app.py").read_text(encoding="utf-8", errors="ignore")
     js_text = (ROOT / "app" / "public" / "app.js").read_text(encoding="utf-8", errors="ignore")
@@ -194,8 +197,10 @@ def build_status() -> dict[str, Any]:
         "total_tracks": len(tracks),
         "all_eight_closed": all(item["closed"] for item in tracks),
         "work_package_complete": all(item["closed"] for item in tracks),
-        "architecture_complete": False,
-        "architecture_status": "not_measured_by_this_work_package",
+        "architecture_complete": bool(architecture_audit.get("architecture_complete", False)),
+        "architecture_status": str(architecture_audit.get("verdict") or "not_measured_by_this_work_package"),
+        "architecture_phase_exit_criteria_met": int(architecture_audit.get("phase_exit_criteria_met") or 0),
+        "architecture_operational_layers_complete": int(architecture_audit.get("operational_layers_complete") or 0),
         "architecture_audit_artifact": str(GOV / "original_architecture_self_audit.json"),
         "operational_controls": {
             "build_test_healing": {
@@ -207,7 +212,23 @@ def build_status() -> dict[str, Any]:
                 "commit_or_push": False,
                 "research_gate_changes": False,
                 "execution_authority": False,
-            }
+            },
+            "unified_product": {
+                "audit_available": bool(unified_product_audit),
+                "verdict": unified_product_audit.get("verdict"),
+                "complete": bool(unified_product_audit.get("unified_product_complete", False)),
+                "canonical_source": (
+                    unified_product_audit.get("paths", {})
+                    .get("canonical_source", {})
+                    .get("resolved")
+                ),
+                "runtime_data": (
+                    unified_product_audit.get("paths", {})
+                    .get("runtime_data", {})
+                    .get("resolved")
+                ),
+                "execution_authority": False,
+            },
         },
         "maximum_promotion_state": "LIVE_REVIEW_REQUIRED",
         "live_execution": False,

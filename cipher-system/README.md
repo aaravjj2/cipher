@@ -4,15 +4,19 @@ Local, read-only options research terminal (Strike Matrix, Night Vision, Spyglas
 
 ## Run
 
+On the VM, the unified product is managed by the installed `cipher-core`,
+`cipher-web`, `cipher-gex`, and `cipher-tradier` systemd services. For a manual
+local run from the canonical checkout:
+
 ```bash
 cd cipher-system
 ./Start-Cipher-App.sh
 ```
 
-Or:
+Or use the unified development manager:
 
 ```bash
-cd app && npm run app
+../.venv-research-py312/bin/python scripts/manage_unified_cipher.py start --without-ops
 ```
 
 Open **http://127.0.0.1:8283/**
@@ -36,9 +40,13 @@ cd cipher-system
 ```
 
 The current price-only study is recorded in
-`docs/current_era_price_only_research_closeout.md`. Volume-sensitive
-backtesting and promotion remain blocked until an independent, semantically
-comparable minute-volume reference passes the unchanged reconciliation gate.
+`docs/current_era_price_only_research_closeout.md`. Volume-sensitive research is
+explicitly deferred while adequate independent data is unavailable; the
+unchanged reconciliation gate remains preserved rather than weakened.
+
+The full source/runtime topology, module roles, data flows, architecture layers,
+and current completion state are documented in
+`docs/unified_workspace_architecture.md`.
 
 The system is research-only: no order endpoint, live execution authority, or
 automatic paper-trading promotion is enabled.

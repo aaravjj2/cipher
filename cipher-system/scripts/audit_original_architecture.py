@@ -89,10 +89,12 @@ def registry_evidence(path: Path = REGISTRY_PATH) -> dict[str, Any]:
         for name in (
             "raw_objects",
             "datasets",
+            "dataset_raw_objects",
             "features",
             "feature_snapshots",
             "strategies",
             "experiments",
+            "experiment_artifacts",
             "promotion_events",
             "prospective_tests",
             "prospective_observations",
@@ -468,8 +470,10 @@ def build_audit() -> dict[str, Any]:
             "not_met",
             exit_criteria_met=False,
             reason=(
-                "Schemas and services exist, but the canonical registry contains no real dataset "
-                "manifests, normalized-to-raw links, or research snapshots for the active panel."
+                f"Schemas and services exist and the merged registry now contains {counts['datasets']} dataset "
+                f"manifest(s), {counts['dataset_raw_objects']} dataset-to-raw link(s), and "
+                f"{counts['raw_objects']} raw-object record(s). The active 744-partition panel is still not "
+                "comprehensively represented by a frozen canonical dataset lineage, so the exit criterion remains unmet."
             ),
             evidence=[str(REGISTRY_PATH), str(ROOT / "core" / "research_platform" / "datasets.py")],
         ),
@@ -479,8 +483,9 @@ def build_audit() -> dict[str, Any]:
             "not_met",
             exit_criteria_met=False,
             reason=(
-                "The registry and common experiment contracts are implemented and tested, but no "
-                "real strategy or experiment is registered, so rerun/comparison exit criteria are unmet."
+                f"The merged registry contains {counts['strategies']} strategy specification(s), but "
+                f"{counts['experiments']} governed experiment(s) and {counts['experiment_artifacts']} experiment "
+                "artifact link(s). No strategy can yet be rerun and compared through the complete common contract."
             ),
             evidence=[str(REGISTRY_PATH), str(ROOT / "core" / "research_platform" / "experiments.py")],
         ),
@@ -501,8 +506,9 @@ def build_audit() -> dict[str, Any]:
             "not_met",
             exit_criteria_met=False,
             reason=(
-                "Prospective services exist in code, but the canonical registry has no prospective "
-                "test or observation for a registered strategy."
+                f"The merged registry contains {counts['prospective_tests']} prospective test(s) and "
+                f"{counts['prospective_observations']} observation(s), but they are not downstream of a governed "
+                "historical experiment, LEAN replication, and promotion event. The generalized exit criterion remains unmet."
             ),
             evidence=[str(REGISTRY_PATH), str(ROOT / "core" / "research_platform" / "prospective.py")],
         ),
@@ -548,8 +554,10 @@ def build_audit() -> dict[str, Any]:
             "structural_partial",
             operationally_complete=False,
             reason=(
-                "Strong immutable IDs, schemas, promotion gates, artifacts, and audit code; canonical "
-                "runtime adoption is minimal and contains one pytest-contaminated raw-object record."
+                f"Strong immutable IDs, schemas, promotion gates, artifacts, and audit code are active. The merged "
+                f"registry now contains {canonical_research_entities} higher-level research entities, and known pytest "
+                "fixture rows have been quarantined; adoption is still incomplete because governed experiments, promotions, "
+                "and evidence reconciliations remain absent."
             ),
         ),
         layer(
@@ -558,8 +566,9 @@ def build_audit() -> dict[str, Any]:
             "partial",
             operationally_complete=False,
             reason=(
-                "Selective raw and Parquet ingestion works, but active normalized data is outside a "
-                "registered canonical dataset and upper application layers still call vendors directly."
+                f"Selective raw and Parquet ingestion works and {counts['datasets']} dataset manifest(s) now exist, "
+                f"but the {data['normalized_parquet_files']}-partition active panel is not fully linked through canonical "
+                "dataset/raw-object lineage and upper application layers still call vendors directly."
             ),
         ),
         layer(
@@ -568,8 +577,10 @@ def build_audit() -> dict[str, Any]:
             "partial",
             operationally_complete=False,
             reason=(
-                "Model runtimes, factor DSL, and FinBERT exist; the canonical feature registry and "
-                "feature-snapshot table remain empty and forecast models are context-only/rejected."
+                f"Model runtimes, factor DSL, and FinBERT exist; the merged registry now contains "
+                f"{counts['features']} feature definition(s) and {counts['feature_snapshots']} feature snapshot(s). "
+                "Forecast models remain context-only/rejected and those feature records are not connected to a complete "
+                "governed experiment and promotion chain."
             ),
         ),
         layer(
@@ -594,8 +605,10 @@ def build_audit() -> dict[str, Any]:
             "code_only",
             operationally_complete=False,
             reason=(
-                "Promotion and LEAN audit gates exist, but no strategy, experiment, promotion, LEAN "
-                "replication, or prospective record exists in the canonical registry."
+                f"Promotion and LEAN audit gates exist, with {counts['strategies']} strategy specification(s), "
+                f"{counts['prospective_tests']} prospective test(s), and {counts['prospective_observations']} observation(s) "
+                f"in the merged registry. There are still {counts['experiments']} governed experiment(s), "
+                f"{counts['promotion_events']} promotion event(s), and no LEAN replication/reconciliation chain."
             ),
         ),
         layer(
@@ -643,18 +656,27 @@ def build_audit() -> dict[str, Any]:
             "id": "canonical_registry_not_adopted",
             "severity": "critical",
             "finding": (
-                f"Canonical real research entities total {canonical_research_entities}; datasets, "
-                "features, strategies, experiments, promotions, prospective tests, and reconciliations are empty."
+                f"Canonical higher-level research entities total {canonical_research_entities}: "
+                f"datasets={counts['datasets']}, features={counts['features']}, strategies={counts['strategies']}, "
+                f"experiments={counts['experiments']}, promotions={counts['promotion_events']}, "
+                f"prospective_tests={counts['prospective_tests']}, reconciliations={counts['evidence_reconciliations']}. "
+                "The registry is partially adopted, but the experiment-to-promotion-to-reconciliation chain is still absent."
             ),
         },
-        {
-            "id": "test_contamination_in_production_registry",
-            "severity": "high",
-            "finding": (
-                f"Production registry contains {len(registry['test_contamination'])} raw object(s) "
-                "originating from pytest temporary paths."
-            ),
-        },
+        *(
+            [
+                {
+                    "id": "test_contamination_in_production_registry",
+                    "severity": "high",
+                    "finding": (
+                        f"Production registry contains {len(registry['test_contamination'])} raw object(s) "
+                        "originating from pytest temporary paths."
+                    ),
+                }
+            ]
+            if registry["test_contamination"]
+            else []
+        ),
         {
             "id": "normalized_data_not_manifest_linked",
             "severity": "high",

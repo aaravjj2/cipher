@@ -249,6 +249,124 @@ def merge_registry(destination: Path, source: Path) -> dict[str, Any]:
     }
 
 
+def quarantine_registry_test_contamination(
+    registry_path: Path,
+    *,
+    backup_root: Path,
+) -> dict[str, Any]:
+    """Move pytest fixture rows out of active governance tables, preserving evidence."""
+
+    if not registry_path.is_file():
+        return {"status": "registry_missing", "registry": str(registry_path)}
+    backup_root.mkdir(parents=True, exist_ok=True)
+    backup_path = backup_root / f"research_registry_before_test_quarantine_{utcstamp()}.sqlite"
+    with sqlite3.connect(f"file:{registry_path}?mode=ro", uri=True, timeout=120) as src, sqlite3.connect(backup_path) as dst:
+        src.backup(dst)
+    quarantined_at = datetime.now(timezone.utc).isoformat()
+    moved: dict[str, int] = {"raw_objects": 0, "audit_events": 0}
+    with sqlite3.connect(registry_path, timeout=120) as db:
+        db.row_factory = sqlite3.Row
+        db.execute(
+            """
+            create table if not exists quarantined_registry_records (
+                quarantine_id text primary key,
+                source_table text not null,
+                source_primary_key text not null,
+                reason text not null,
+                quarantined_at text not null,
+                payload_json text not null
+            )
+            """
+        )
+        raw_rows = list(db.execute("select * from raw_objects where uri like '%/tmp/pytest-of-%'"))
+        raw_ids = [str(row["raw_object_id"]) for row in raw_rows]
+        for row in raw_rows:
+            record = dict(row)
+            key = str(record["raw_object_id"])
+            quarantine_id = "quarantine_" + hashlib.sha256(f"raw_objects:{key}".encode("utf-8")).hexdigest()[:24]
+            db.execute(
+                "insert or ignore into quarantined_registry_records values (?,?,?,?,?,?)",
+                (
+                    quarantine_id,
+                    "raw_objects",
+                    key,
+                    "pytest_fixture_path_in_production_registry",
+                    quarantined_at,
+                    json.dumps(record, sort_keys=True),
+                ),
+            )
+            db.execute("delete from raw_objects where raw_object_id=?", (key,))
+            moved["raw_objects"] += 1
+        audit_rows: list[sqlite3.Row] = []
+        if raw_ids:
+            placeholders = ",".join("?" for _ in raw_ids)
+            audit_rows.extend(
+                db.execute(
+                    f"select * from audit_events where entity_id in ({placeholders})",
+                    raw_ids,
+                ).fetchall()
+            )
+        audit_rows.extend(
+            db.execute("select * from audit_events where payload_json like '%/tmp/pytest-of-%'").fetchall()
+        )
+        unique_audits = {str(row["event_id"]): row for row in audit_rows}
+        for key, row in unique_audits.items():
+            record = dict(row)
+            quarantine_id = "quarantine_" + hashlib.sha256(f"audit_events:{key}".encode("utf-8")).hexdigest()[:24]
+            db.execute(
+                "insert or ignore into quarantined_registry_records values (?,?,?,?,?,?)",
+                (
+                    quarantine_id,
+                    "audit_events",
+                    key,
+                    "audit_event_for_pytest_fixture_record",
+                    quarantined_at,
+                    json.dumps(record, sort_keys=True),
+                ),
+            )
+            db.execute("delete from audit_events where event_id=?", (key,))
+            moved["audit_events"] += 1
+        summary_payload = {
+            "moved": moved,
+            "backup_path": str(backup_path),
+            "reason": "pytest fixture paths are not production evidence",
+            "active_records_deleted_only_after_quarantine": True,
+        }
+        event_id = "audit_" + hashlib.sha256(
+            json.dumps(summary_payload, sort_keys=True).encode("utf-8")
+        ).hexdigest()[:24]
+        db.execute(
+            "insert or ignore into audit_events values (?,?,?,?,?,?,?)",
+            (
+                event_id,
+                "TEST_CONTAMINATION_QUARANTINED",
+                "registry",
+                "research_registry",
+                quarantined_at,
+                "system",
+                json.dumps(summary_payload, sort_keys=True),
+            ),
+        )
+        db.commit()
+        db.execute("pragma wal_checkpoint(TRUNCATE)")
+        integrity = db.execute("pragma integrity_check").fetchone()
+        if not integrity or integrity[0] != "ok":
+            raise RuntimeError(f"registry integrity failed after quarantine: {integrity}")
+        remaining_raw = db.execute("select count(*) from raw_objects where uri like '%/tmp/pytest-of-%'").fetchone()[0]
+        remaining_audit = db.execute("select count(*) from audit_events where payload_json like '%/tmp/pytest-of-%'").fetchone()[0]
+        quarantine_count = db.execute("select count(*) from quarantined_registry_records").fetchone()[0]
+    return {
+        "status": "quarantined" if any(moved.values()) else "clean",
+        "registry": str(registry_path),
+        "backup": str(backup_path),
+        "moved": moved,
+        "remaining_active_raw": remaining_raw,
+        "remaining_active_audit": remaining_audit,
+        "quarantine_record_count": quarantine_count,
+        "registry_sha256": sha256(registry_path),
+    }
+
+
 def merge_tree(source: Path, destination: Path, *, registry_relative: str | None = None) -> dict[str, Any]:
     copied = same = conflicts = 0
     conflict_paths: list[str] = []
@@ -356,6 +474,10 @@ def execute(paths: MigrationPaths) -> dict[str, Any]:
         paths.runtime_data,
         registry_relative="governance/research_registry.sqlite",
     )
+    report["steps"]["quarantine_test_contamination"] = quarantine_registry_test_contamination(
+        paths.runtime_data / "governance" / "research_registry.sqlite",
+        backup_root=paths.backup_root / "registry_backups",
+    )
 
     report["steps"]["move_old_logs"] = move_directory(old_logs, paths.runtime_logs)
     canonical_logs_backup = paths.backup_root / "canonical_logs_original"
@@ -422,8 +544,16 @@ def main() -> int:
     parser.add_argument("--runtime-root", type=Path, default=DEFAULT_RUNTIME_ROOT)
     parser.add_argument("--backup-stamp", default=utcstamp())
     parser.add_argument("--execute", action="store_true")
+    parser.add_argument("--quarantine-registry-only", action="store_true")
     args = parser.parse_args()
     paths = build_paths(args)
+    if args.quarantine_registry_only:
+        result = quarantine_registry_test_contamination(
+            paths.runtime_data / "governance" / "research_registry.sqlite",
+            backup_root=paths.runtime_root / "backups" / "registry_quarantine",
+        )
+        print(json.dumps(result, indent=2, sort_keys=True))
+        return 0 if result.get("status") in {"clean", "quarantined"} else 1
     if not args.execute:
         print(json.dumps(preflight(paths), indent=2, sort_keys=True))
         return 0

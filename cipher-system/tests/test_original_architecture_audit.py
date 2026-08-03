@@ -71,7 +71,9 @@ def test_work_package_status_never_claims_architecture_completion():
     status = module.build_status()
     assert status["work_package_complete"] == status["all_eight_closed"]
     assert status["architecture_complete"] is False
-    assert status["architecture_status"] == "not_measured_by_this_work_package"
+    assert status["architecture_status"] == "INCOMPLETE"
+    assert status["architecture_phase_exit_criteria_met"] == 0
+    assert status["architecture_operational_layers_complete"] == 0
     assert status["architecture_audit_artifact"].endswith(
         "data/governance/original_architecture_self_audit.json"
     )
@@ -98,6 +100,12 @@ def test_architecture_audit_is_strictly_incomplete_and_execution_free():
     assert "canonical_registry_not_adopted" in finding_ids
     assert "work_package_not_architecture_completion" in finding_ids
     assert "target_layer_count_mismatch" not in finding_ids
+    assert "test_contamination_in_production_registry" not in finding_ids
+    registry_finding = next(
+        item for item in audit["critical_findings"] if item["id"] == "canonical_registry_not_adopted"
+    )
+    assert "datasets=" in registry_finding["finding"]
+    assert "experiments=" in registry_finding["finding"]
 
 
 def test_holdout_gap_audit_uses_maximum_non_overlapping_windows():

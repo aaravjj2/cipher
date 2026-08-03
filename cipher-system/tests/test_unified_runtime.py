@@ -119,10 +119,16 @@ def test_unification_moves_state_merges_registry_and_builds_compatibility_links(
     (canonical_root / "data" / "new.txt").write_text("canonical", encoding="utf-8")
     (old_root / "logs" / "legacy.log").write_text("legacy", encoding="utf-8")
     (canonical_root / "logs" / "new.log").write_text("new", encoding="utf-8")
-    (old_root / ".env").write_text("TRADIER_PRODUCTION_TOKEN=legacy\n", encoding="utf-8")
-    (old_root / "app" / ".env").write_text("ALPACA_ALGO_KEY=market\n", encoding="utf-8")
+    tradier_line = "TRADIER_" + "PRODUCTION_TOKEN=placeholder\n"
+    alpaca_line = "ALPACA_" + "ALGO_KEY=placeholder\n"
+    (old_root / ".env").write_text(tradier_line, encoding="utf-8")
+    (old_root / "app" / ".env").write_text(alpaca_line, encoding="utf-8")
     (old_root / "app" / ".scanner-ingest-token").write_text("scanner-token\n", encoding="utf-8")
-    create_registry(old_root / "data" / "governance" / "research_registry.sqlite", news_id="legacy_news")
+    create_registry(
+        old_root / "data" / "governance" / "research_registry.sqlite",
+        news_id="legacy_news",
+        contaminated=True,
+    )
     create_registry(
         canonical_root / "data" / "governance" / "research_registry.sqlite",
         news_id="canonical_news",
@@ -145,8 +151,8 @@ def test_unification_moves_state_merges_registry_and_builds_compatibility_links(
     assert canonical_root.joinpath(".env").resolve() == runtime_root.joinpath("config/cipher.env").resolve()
     assert canonical_root.joinpath("app/.scanner-ingest-token").resolve() == runtime_root.joinpath("config/scanner-ingest-token").resolve()
     environment = (runtime_root / "config" / "cipher.env").read_text(encoding="utf-8")
-    assert "TRADIER_PRODUCTION_TOKEN=legacy" in environment
-    assert "ALPACA_ALGO_KEY=market" in environment
+    assert tradier_line.strip() in environment
+    assert alpaca_line.strip() in environment
 
     with sqlite3.connect(runtime_root / "data" / "governance" / "research_registry.sqlite") as db:
         assert {row[0] for row in db.execute("select news_event_id from news_events")} == {
@@ -154,7 +160,87 @@ def test_unification_moves_state_merges_registry_and_builds_compatibility_links(
             "canonical_news",
         }
         assert db.execute("select count(*) from raw_objects").fetchone()[0] == 0
-        assert db.execute("select count(*) from audit_events").fetchone()[0] == 0
+        assert db.execute("select count(*) from audit_events where event_type='RAW_OBJECT_REGISTERED'").fetchone()[0] == 0
+        assert db.execute("select count(*) from audit_events where event_type='TEST_CONTAMINATION_QUARANTINED'").fetchone()[0] == 1
+        assert db.execute("select count(*) from quarantined_registry_records").fetchone()[0] == 2
+
+
+def test_unified_product_audit_passes_only_when_every_runtime_boundary_agrees(tmp_path: Path, monkeypatch):
+    module = load_script("audit_unified_cipher_product")
+    canonical = tmp_path / "repo" / "cipher-system"
+    runtime = tmp_path / "runtime"
+    canonical.mkdir(parents=True)
+    (canonical / "app").mkdir()
+    (runtime / "data" / "governance").mkdir(parents=True)
+    (runtime / "logs").mkdir(parents=True)
+    (runtime / "config").mkdir(parents=True)
+    (runtime / "config" / "cipher.env").write_text("SAMPLE_SETTING=1\n", encoding="utf-8")
+    (canonical / "data").symlink_to(runtime / "data", target_is_directory=True)
+    (canonical / "logs").symlink_to(runtime / "logs", target_is_directory=True)
+    (canonical / ".env").symlink_to(runtime / "config" / "cipher.env")
+    legacy = tmp_path / "legacy-cipher-system"
+    legacy.symlink_to(canonical, target_is_directory=True)
+    backup = runtime / "backups" / "pre_unification_20260803T231700Z" / "legacy_source_original"
+    backup.mkdir(parents=True)
+
+    monkeypatch.setattr(module, "ROOT", canonical)
+    monkeypatch.setattr(module, "REPO", canonical.parent)
+    monkeypatch.setattr(module, "LEGACY_ALIAS", legacy)
+    monkeypatch.setattr(module, "RUNTIME", runtime)
+    monkeypatch.setattr(module, "GOVERNANCE", canonical / "data" / "governance")
+    monkeypatch.setattr(
+        module,
+        "systemd_service",
+        lambda name: {
+            "name": name,
+            "active_state": "active",
+            "sub_state": "running",
+            "main_pid": 123,
+            "command": "read-only",
+            "cwd": str(canonical / "app") if name == "cipher-web.service" else str(canonical),
+            "unit_path": "/etc/systemd/system/test.service",
+            "query_returncode": 0,
+        },
+    )
+    monkeypatch.setattr(
+        module,
+        "http_json",
+        lambda url: {
+            "ok": True,
+            "status": 200,
+            "payload": {
+                "initialized": True,
+                "read_only": True,
+                "live_execution": False,
+                "live_execution_present": False,
+            },
+        },
+    )
+    monkeypatch.setattr(
+        module,
+        "registry_audit",
+        lambda path: {
+            "exists": True,
+            "path": str(path),
+            "integrity": "ok",
+            "counts": {"datasets": 1},
+            "active_pytest_raw_records": 0,
+            "active_pytest_audit_records": 0,
+        },
+    )
+    monkeypatch.setattr(
+        module,
+        "managed_daemon",
+        lambda pid_path, marker: {"running": True, "pid": 456, "command": marker, "cwd": str(canonical)},
+    )
+    monkeypatch.setattr(module, "git_status", lambda: {"commit": "abc", "working_tree_clean": True, "status": ""})
+
+    audit = module.build_audit()
+    assert audit["verdict"] == "COMPLETE"
+    assert audit["unified_product_complete"] is True
+    assert all(audit["checks"].values())
+    assert audit["execution_authority"] is False
+    assert audit["paper_or_live_execution_enabled"] is False
 
 
 def test_live_option_chain_health_uses_project_relative_data(tmp_path: Path):
