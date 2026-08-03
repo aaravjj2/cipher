@@ -46,7 +46,7 @@ from exposure import (
 )
 
 ROOT = Path(__file__).resolve().parents[1]
-ENV = ROOT / "app" / ".env"
+ENV = ROOT / ".env"
 DATA = "https://data.alpaca.markets"
 CONTRACTS = "https://paper-api.alpaca.markets/v2/options/contracts"
 

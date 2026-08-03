@@ -96,7 +96,7 @@ def load_tradier_token() -> str:
     token = os.environ.get("TRADIER_PRODUCTION_TOKEN")
     if token:
         return token
-    for path in (ROOT / ".env", ROOT / "app" / ".env"):
+    for path in (ROOT / ".env",):
         token = parse_env_file(path).get("TRADIER_PRODUCTION_TOKEN")
         if token:
             return token

@@ -89,7 +89,7 @@ def number(value):
 
 def load_dotenv() -> dict:
     env = {}
-    path = ROOT / "app" / ".env"
+    path = ROOT / ".env"
     if path.is_file():
         for line in path.read_text(encoding="utf-8").splitlines():
             raw = line.strip()
@@ -106,7 +106,7 @@ def lse_key() -> str:
     env = load_dotenv()
     key = env.get("LSE_API_KEY") or env.get("LONDON_STRATEGIC_EDGE_KEY")
     if not key:
-        raise ValueError("Set LSE_API_KEY in the environment or cipher-system/app/.env.")
+        raise ValueError("Set LSE_API_KEY in the environment or cipher-system/.env.")
     return key
 
 

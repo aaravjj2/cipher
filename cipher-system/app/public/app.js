@@ -2213,7 +2213,7 @@ function renderSettings() {
     </article>
     <article class="setting-card">
       <h2>Plan & connection</h2>
-      <p>Local read-only research terminal. Market data via Alpaca OPRA + SIP/IEX. Credentials stay in <code>app/.env</code> on the core service ? the browser never sees keys.</p>
+      <p>Local read-only research terminal. Market data via Alpaca OPRA + SIP/IEX. Credentials stay in the local <code>.env</code> on the core service; the browser never sees keys.</p>
       <span class="badge ok">Connected ? ${feed} + contract OI</span>
     </article>
     <article class="setting-card">

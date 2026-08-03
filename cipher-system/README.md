@@ -26,6 +26,6 @@ Default ports: core `8282`, web `8283` (override with `CIPHER_CORE_PORT` / `PORT
 - **Spyglass** — latest option prints with inferred bid/ask aggressor and premium tiers
 - **Trident / Scanner / Watchlists / Journal / Saves** — research utilities (local-only)
 
-Credentials stay in `app/.env` (Alpaca). The browser never sees them.
+Credentials stay in the local `.env` (never committed). The browser never sees them.
 
 GEX is a public-OI heuristic, not verified dealer positioning.

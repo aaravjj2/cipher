@@ -32,7 +32,7 @@ DEFAULT_DB = DATA_DIR / "tradier_stream.sqlite"
 DEFAULT_RAW_DIR = DATA_DIR / "tradier_stream_events"
 DEFAULT_LOCK_PATH = DATA_DIR / "tradier_stream_capture.lock"
 DEFAULT_SELECTION_PATH = DATA_DIR / "tradier_stream_selection_latest.json"
-APP_ENV = ROOT / "app" / ".env"
+APP_ENV = ROOT / ".env"
 LEGACY_ENV_PATHS = (
     ROOT / "previous-work" / "keys.env",
     ROOT / "previous-work" / ".env",
@@ -124,7 +124,7 @@ def load_credentials(env: str) -> tuple[str, str]:
     if not token:
         raise RuntimeError(
             "Tradier token not found. Set TRADIER_ACCESS_TOKEN/TRADIER_TOKEN "
-            "server-side or place it in cipher-system/app/.env."
+            "server-side or place it in cipher-system/.env."
         )
     return token, env
 

@@ -32,7 +32,7 @@ except ImportError:
 # Load credentials
 def load_env():
     """Load credentials from .env file."""
-    env_path = Path(__file__).parent.parent / "app" / ".env"
+    env_path = Path(__file__).parent.parent / ".env"
     creds = {}
     if env_path.exists():
         with open(env_path) as f:

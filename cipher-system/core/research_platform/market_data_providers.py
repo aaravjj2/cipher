@@ -7,6 +7,10 @@ import urllib.parse
 import urllib.request
 from typing import Any, Callable, Iterable
 
+from core.env import load_local_env
+
+load_local_env()
+
 
 class MarketDataProviderError(RuntimeError):
     """Raised for missing read-only provider credentials or invalid responses."""

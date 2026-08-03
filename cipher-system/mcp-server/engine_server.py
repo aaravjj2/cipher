@@ -8,7 +8,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
-ROOT=Path(__file__).resolve().parent; DB=ROOT/"data"/"cipher_research.db"; OUT=ROOT/"exports"; ENV=ROOT.parent/"app"/".env"
+ROOT=Path(__file__).resolve().parent; DB=ROOT/"data"/"cipher_research.db"; OUT=ROOT/"exports"; ENV=ROOT.parent/".env"
 CHAIN="https://data.alpaca.markets/v1beta1/options/snapshots/{ticker}"
 QUOTE="https://data.alpaca.markets/v2/stocks/{ticker}/quotes/latest"
 OCC=re.compile(r"^([A-Z.]+)(\d{6})([CP])(\d{8})$")

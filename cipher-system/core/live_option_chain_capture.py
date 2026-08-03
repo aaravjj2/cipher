@@ -26,7 +26,7 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 ROOT = Path(__file__).resolve().parents[1]
-ENV = ROOT / "app" / ".env"
+ENV = ROOT / ".env"
 DATA_DIR = ROOT / "data"
 LIVE_CHAINS_DIR = DATA_DIR / "live_option_chains"
 DATA = "https://data.alpaca.markets"
@@ -73,7 +73,7 @@ def get_credentials(env: dict[str, str]) -> tuple[str, str, str]:
     key = env.get("ALPACA_ALGO_KEY") or env.get("ALPACA_ALGO_PLUS_KEY") or env.get("ALPACA_API_KEY")
     secret = env.get("ALPACA_ALGO_SECRET") or env.get("ALPACA_ALGO_PLUS_SECRET") or env.get("ALPACA_API_SECRET")
     if not key or not secret:
-        raise ValueError("Alpaca market-data credentials not configured. Check app/.env or environment.")
+        raise ValueError("Alpaca market-data credentials not configured. Check .env or environment.")
     options_feed = env.get("ALPACA_DATA_FEED", "opra").lower()
     if options_feed not in {"opra", "indicative"}:
         options_feed = "opra"

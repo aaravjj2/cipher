@@ -84,7 +84,7 @@ def stable_json(payload: Any) -> str:
 
 def load_env_values() -> dict[str, str]:
     values: dict[str, str] = {}
-    for path in (REPO_ROOT / ".env", CIPHER_ROOT / "app" / ".env"):
+    for path in (REPO_ROOT / ".env",):
         if not path.exists():
             continue
         for raw in path.read_text(encoding="utf-8", errors="ignore").splitlines():
