@@ -30,8 +30,9 @@ def main() -> None:
     for row in local.itertuples(index=False):
         decision = require_eligible_market_day(observed_bars=int(row.bars), observed_volume=float(row.volume), reference_volume=daily.get((row.ticker, row.date)))
         results.append({"ticker": row.ticker, "date": row.date, "observed_bars": int(row.bars), "observed_volume": float(row.volume), "reference_volume": daily.get((row.ticker, row.date)), **decision})
+    passed = sum(bool(item["eligible"]) for item in results)
     output = ROOT / "data" / "market_quality" / "alpaca_current_era_full_gate.json"
-    output.write_text(json.dumps({"provider": "Alpaca SIP", "reference": "Alpaca SIP daily aggregates", "results": results, "full_gate_changed": False, "live_execution": False}, indent=2) + "\n")
+    output.write_text(json.dumps({"provider": "Alpaca SIP", "reference": "Alpaca SIP daily aggregates", "reference_scope": "daily aggregate; not verified regular-session-only", "results": results, "pass_count": passed, "total_count": len(results), "status": "blocked_reference_scope_mismatch" if passed < len(results) else "passed", "repair_action": "blocked; obtain a like-for-like regular-session reference rather than adjust volumes or thresholds", "full_gate_changed": False, "live_execution": False}, indent=2) + "\n")
     print(output)
 
 if __name__ == "__main__": main()
