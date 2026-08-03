@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import json
 import sys
+import argparse
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -25,6 +26,10 @@ MIN_STRETCH = 52
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--start")
+    parser.add_argument("--end")
+    args = parser.parse_args()
     paths = sorted(NORMALIZED.glob("year=*/month=*/*.parquet"))
     if not paths:
         raise SystemExit("no normalized Alpaca recovery partitions")
@@ -39,6 +44,10 @@ def main() -> None:
             rows.append({"ticker": ticker, "date": group["timestamp"].iloc[0].date().isoformat(), "bars": len(group),
                          "close": float(group.sort_values("timestamp").iloc[-1]["close"]), "path": str(path)})
     daily = pd.DataFrame(rows).sort_values(["ticker", "date"])
+    if args.start:
+        daily = daily[daily["date"] >= args.start]
+    if args.end:
+        daily = daily[daily["date"] <= args.end]
     results, stretches = [], []
     for ticker, group in daily.groupby("ticker", sort=True):
         prior_date = prior_close = None
@@ -70,7 +79,7 @@ def main() -> None:
     common_eligible = [{"date": day, "tickers": sorted(tickers), "count": len(tickers)} for day, tickers in sorted(common.items())]
     code = ROOT / "core" / "research_platform" / "market_quality.py"
     payload = {"schema_version": 1, "created_at": datetime.now(timezone.utc).isoformat(), "provider": "Alpaca SIP", "feed": "sip",
-               "panel": list(PANEL), "normalized_partitions": len(paths), "normalized_partition_sha256": {str(p): hashlib.sha256(p.read_bytes()).hexdigest() for p in paths},
+               "panel": list(PANEL), "period": f"{args.start or 'all'}..{args.end or 'all'}", "normalized_partitions": len(paths), "normalized_partition_sha256": {str(p): hashlib.sha256(p.read_bytes()).hexdigest() for p in paths},
                "gate": {"session_completeness": "exactly 391 NY regular-session minute bars", "price_continuity": "daily close ratio strictly between 0.5 and 2.0 when prior session is present", "volume_reconciliation": "not evaluated", "allowed_use": "price_forecast_research_only_no_volume_features"},
                "full_gate_changed": False, "full_gate_module_sha256": hashlib.sha256(code.read_bytes()).hexdigest(),
                "daily_results": results, "stretches_at_least_52_sessions": stretches, "common_eligible_by_day": common_eligible,

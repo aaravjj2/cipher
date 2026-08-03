@@ -3,6 +3,7 @@
 from __future__ import annotations
 import json
 import sys
+import argparse
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -14,7 +15,11 @@ GOV = ROOT / "data" / "governance"
 MIN_TICKERS, CONTEXT, HORIZON, MIN_ORIGINS = 8, 32, 20, 12
 
 def main() -> None:
-    scope_path = sorted(QUALITY.glob("alpaca_holdout_c_price_only_scope_*.json"))[-1]
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--scope", help="Explicit price-only scope artifact.")
+    parser.add_argument("--period", default="2017-01 through 2019-12")
+    args = parser.parse_args()
+    scope_path = Path(args.scope) if args.scope else sorted(QUALITY.glob("alpaca_holdout_c_price_only_scope_*.json"))[-1]
     scope = json.loads(scope_path.read_text(encoding="utf-8"))
     all_days = sorted({row["date"] for row in scope["daily_results"]})
     eligible = {row["date"]: sorted(row["tickers"]) for row in scope["common_eligible_by_day"] if row["count"] >= MIN_TICKERS}
@@ -46,7 +51,7 @@ def main() -> None:
     )
     passed = cohort_gate["eligible"]
     payload = {"schema_version": 1, "created_at": datetime.now(timezone.utc).isoformat(), "scope_artifact": str(scope_path),
-               "holdout_period": "2017-01 through 2019-12", "requirements": {"minimum_common_tickers": MIN_TICKERS, "context_sessions": CONTEXT, "outcome_horizon_sessions": HORIZON, "minimum_strict_independent_origins": MIN_ORIGINS},
+               "holdout_period": args.period, "requirements": {"minimum_common_tickers": MIN_TICKERS, "context_sessions": CONTEXT, "outcome_horizon_sessions": HORIZON, "minimum_strict_independent_origins": MIN_ORIGINS},
                "candidate_blocks": findings, "selected_block": best, "cohort_gate": cohort_gate, "pass": passed,
                "cohort_frozen_before_ranking_outcomes": passed, "ranking_outcomes_evaluated": False,
                "full_volume_reconciled_gate_changed": False, "volume_features_or_evaluation": False, "live_execution": False}
