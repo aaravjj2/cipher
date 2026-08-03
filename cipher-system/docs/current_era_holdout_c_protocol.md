@@ -61,3 +61,12 @@ API key and prove its minute-volume semantics are comparable to Alpaca SIP
 before any immutable 2023 pilot. Until then, the full volume gate remains
 blocked; no volume-sensitive backtest, ranking outcome, paper trial, or vendor
 patch is permitted.
+
+### LSE Pilot Result (2026-08-03)
+
+The two-session June 2023 pilot is rejected as an independent volume source.
+After identical `09:30 <= America/New_York < 16:00` filtering, June 1 passed
+4/9 symbols and June 2 passed 3/9 at the unchanged 5% threshold. The same
+symbols repeatedly showed large mismatches, so no broader download is
+authorized by this protocol. Raw responses and manifests remain isolated under
+`data/reference_volume`; the Alpaca price dataset and full gate are unchanged.

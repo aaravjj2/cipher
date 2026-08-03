@@ -30,6 +30,6 @@ def test_reference_volume_audit_preserves_no_spend_and_no_patch_boundaries(tmp_p
     assert payload["Databento"]["status"] == "rejected_semantic_coverage_not_proven_no_pilot"
     assert payload["FirstRate"]["sample_evidence"][0]["sha256"]
     assert payload["FirstRate"]["stage"] == "excluded_by_no_purchase_policy"
-    assert payload["LondonStrategicEdge"]["status"] == "blocked_pending_free_api_key_and_volume_semantic_verification"
+    assert payload["LondonStrategicEdge"]["status"] == "rejected_pilot_material_volume_mismatch"
     assert payload["acceptance"]["vendor_patches_price_data"] is False
     assert payload["acceptance"]["trading_or_signal_evaluation"] is False

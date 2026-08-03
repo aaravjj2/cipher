@@ -53,10 +53,11 @@ def main() -> None:
             "stage": "free_api_candidate",
             "published_access": "free key; REST API; CSV/Parquet slices; up to 10 downloads/hour and 1,000,000 rows/download",
             "required_before_ingestion": ["locally configured API key", "dataset metadata for each frozen symbol", "written or metadata evidence that minute volume is comparable to Alpaca SIP", "small immutable 2023 pilot"],
-            "status": "blocked_pending_free_api_key_and_volume_semantic_verification",
+            "pilot_result": "2023-06-01: 4/9 pass; 2023-06-02: 3/9 pass at unchanged 5% threshold",
+            "status": "rejected_pilot_material_volume_mismatch",
         },
         "acceptance": {"immutable_raw_evidence": True, "vendor_patches_price_data": False, "volume_scaling_or_inference": False, "daily_bar_reference": False, "max_relative_difference": 0.05, "trading_or_signal_evaluation": False},
-        "status": "blocked_pending_london_strategic_edge_free_api_key_and_volume_semantic_verification",
+        "status": "blocked_reference_volume_access_after_free_sources_rejected",
     }
     output = ROOT / "data" / "governance" / f"reference_volume_feasibility_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}.json"
     output.parent.mkdir(parents=True, exist_ok=True)
