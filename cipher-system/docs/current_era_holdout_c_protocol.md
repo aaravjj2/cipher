@@ -31,3 +31,29 @@ at least 624 eligible sessions; two trading years cannot satisfy that minimum.
 Only if
 that audit fails may a separate source be considered; no source may be mixed
 into the final cohort.
+
+## Independent Volume Reference
+
+Polygon/Massive is excluded from this recovery path because its entitlement
+does not cover the required requests. The reference-volume source may only be
+used to reconcile volume, never to patch or replace Alpaca price data. It must
+provide independent one-minute share volume that can be filtered exactly to
+09:30-16:00 ET for the frozen nine-symbol 2023-2025 panel. Databento metadata
+and no-cost estimate checks come first; FirstRate is sample/quote only if that
+check cannot pass. The 5% full-gate threshold is unchanged.
+
+### Feasibility Result (2026-08-02)
+
+Databento is not eligible for a no-spend pilot: its documented minute product
+(`EQUS.MINI`) aggregates component ATS and Reg NMS venues but does not prove
+full SIP-comparable coverage. Its explicitly consolidated `EQUS.SUMMARY`
+product is daily-only and therefore cannot be filtered to the regular session.
+
+FirstRate's free AAPL and SPY samples verified CSV `timestamp,open,high,low,
+close,volume` data, US Eastern minute-start stamps, individual-share volume,
+and enough out-of-hours coverage to filter exactly to the 391-bar
+09:30-16:00 regular session. The samples do not cover 2023-2025. Its full
+nine-symbol dataset remains unacquired: an exact no-purchase quote and written
+confirmation of volume comparability to Alpaca SIP are required before any
+retrieval. Until then, the full volume gate remains blocked; no volume-sensitive
+backtest, ranking outcome, paper trial, or vendor patch is permitted.
