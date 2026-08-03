@@ -86,6 +86,17 @@ def build_status() -> dict[str, Any]:
         except (OSError, ValueError):
             scheduler_active = False
 
+    build_healing_root = GOV / "build_healing"
+    build_healing_run = read_json(build_healing_root / "latest_build_healing_run.json")
+    build_healing_pid_path = build_healing_root / "build_healing_loop.pid"
+    build_healing_active = False
+    if build_healing_pid_path.is_file():
+        try:
+            build_healing_pid = int(build_healing_pid_path.read_text(encoding="utf-8").strip())
+            build_healing_active = Path(f"/proc/{build_healing_pid}").exists()
+        except (OSError, ValueError):
+            build_healing_active = False
+
     counts = registry_counts()
     app_text = (ROOT / "core" / "app.py").read_text(encoding="utf-8", errors="ignore")
     js_text = (ROOT / "app" / "public" / "app.js").read_text(encoding="utf-8", errors="ignore")
@@ -186,6 +197,18 @@ def build_status() -> dict[str, Any]:
         "architecture_complete": False,
         "architecture_status": "not_measured_by_this_work_package",
         "architecture_audit_artifact": str(GOV / "original_architecture_self_audit.json"),
+        "operational_controls": {
+            "build_test_healing": {
+                "watcher_active": build_healing_active,
+                "latest_status": build_healing_run.get("status"),
+                "latest_source_fingerprint": build_healing_run.get("source_fingerprint"),
+                "bounded_mechanical_healing_only": True,
+                "source_code_auto_edit": False,
+                "commit_or_push": False,
+                "research_gate_changes": False,
+                "execution_authority": False,
+            }
+        },
         "maximum_promotion_state": "LIVE_REVIEW_REQUIRED",
         "live_execution": False,
     }

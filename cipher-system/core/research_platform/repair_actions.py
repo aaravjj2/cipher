@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shutil
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -65,6 +66,117 @@ class RepairExecutor:
                     time.sleep(policy.backoff_seconds * attempt)
         status = "repaired" if result is not None else "escalated_blocked"
         return self._record(request, status=status, attempts=attempts, result=dict(result or {}))
+
+    def retry_validation_command(
+        self,
+        request: RepairRequest,
+        operation: Callable[[], Mapping[str, Any]],
+        *,
+        policy: RepairPolicy = RepairPolicy(max_attempts=2, backoff_seconds=0.5),
+    ) -> dict[str, Any]:
+        """Retry a deterministic build/test command without modifying source.
+
+        The operation must return a mapping containing ``returncode``. A zero
+        return code ends the retry sequence; nonzero results are recorded and
+        retried within the policy limit. Exceptions are recorded identically.
+        """
+
+        authorize_repair(request)
+        if request.action != "retry_validation_command":
+            raise ValueError("request action must be retry_validation_command")
+        attempts: list[dict[str, Any]] = []
+        result: Mapping[str, Any] | None = None
+        for attempt in range(1, policy.max_attempts + 1):
+            started = datetime.now(timezone.utc)
+            try:
+                candidate = dict(operation())
+                returncode = int(candidate.get("returncode", 1))
+                attempts.append(
+                    {
+                        "attempt": attempt,
+                        "started_at": started.isoformat(),
+                        "status": "succeeded" if returncode == 0 else "failed",
+                        "returncode": returncode,
+                    }
+                )
+                result = candidate
+                if returncode == 0:
+                    break
+            except Exception as exc:
+                attempts.append(
+                    {
+                        "attempt": attempt,
+                        "started_at": started.isoformat(),
+                        "status": "failed",
+                        "error": f"{type(exc).__name__}: {exc}",
+                    }
+                )
+            if attempt < policy.max_attempts:
+                time.sleep(policy.backoff_seconds * attempt)
+        repaired = bool(result is not None and int(result.get("returncode", 1)) == 0)
+        return self._record(
+            request,
+            status="repaired" if repaired else "escalated_blocked",
+            attempts=attempts,
+            result=dict(result or {}),
+        )
+
+    def clear_generated_test_caches(
+        self,
+        request: RepairRequest,
+        *,
+        root: str | Path,
+    ) -> dict[str, Any]:
+        """Remove only generated Python/pytest cache material under ``root``."""
+
+        authorize_repair(request)
+        if request.action != "clear_generated_test_caches":
+            raise ValueError("request action must be clear_generated_test_caches")
+        root_path = Path(root).resolve()
+        if not root_path.is_dir():
+            raise FileNotFoundError(root_path)
+        removed: list[str] = []
+        protected_parts = {
+            ".git",
+            ".venv",
+            "node_modules",
+            "data",
+            "logs",
+            "previous-work",
+            "access-obsidian-complete-audit",
+            "mcp-server",
+        }
+        for path in sorted(root_path.rglob("*"), key=lambda item: len(item.parts), reverse=True):
+            resolved = path.resolve()
+            try:
+                relative = resolved.relative_to(root_path)
+            except ValueError as exc:
+                raise RuntimeError(f"cache path escaped repair root: {resolved}") from exc
+            if protected_parts.intersection(relative.parts):
+                continue
+            if path.is_dir() and path.name in {"__pycache__", ".pytest_cache"}:
+                shutil.rmtree(path)
+                removed.append(str(path))
+                continue
+            if path.is_file() and path.suffix in {".pyc", ".pyo"}:
+                path.unlink()
+                removed.append(str(path))
+        removed.sort()
+        removed_digest = hashlib.sha256(canonical_json(removed).encode("utf-8")).hexdigest()
+        result = {
+            "root": str(root_path),
+            "removed_count": len(removed),
+            "removed_paths_sample": removed[:100],
+            "removed_paths_truncated": len(removed) > 100,
+            "removed_paths_sha256": removed_digest,
+            "source_files_modified": False,
+        }
+        return self._record(
+            request,
+            status="repaired",
+            attempts=[{"attempt": 1, "status": "succeeded"}],
+            result=result,
+        )
 
     def rebuild_derived_cache(
         self,

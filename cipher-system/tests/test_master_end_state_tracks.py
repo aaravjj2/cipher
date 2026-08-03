@@ -170,6 +170,17 @@ def test_safe_scheduler_has_only_the_four_operational_jobs():
         assert forbidden not in command_text
 
 
+def test_master_status_exposes_bounded_build_healing_without_source_authority():
+    module = load_script("update_master_end_state_status")
+    status = module.build_status()
+    healing = status["operational_controls"]["build_test_healing"]
+    assert healing["bounded_mechanical_healing_only"] is True
+    assert healing["source_code_auto_edit"] is False
+    assert healing["commit_or_push"] is False
+    assert healing["research_gate_changes"] is False
+    assert healing["execution_authority"] is False
+
+
 def test_research_status_api_and_ui_are_read_only_surfaces():
     app_source = (ROOT / "core" / "app.py").read_text(encoding="utf-8")
     html_source = (ROOT / "app" / "public" / "index.html").read_text(encoding="utf-8")

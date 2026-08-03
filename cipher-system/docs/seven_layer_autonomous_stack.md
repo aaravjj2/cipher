@@ -80,10 +80,21 @@ The separately guarded operational daemon invokes only four allowlisted jobs:
 public-event ingestion, bounded repair auditing, infrastructure auditing, and
 master-status refresh. Factor/model/backtest/paper/live jobs are excluded.
 
+A separate source-change watcher now runs compile, Node syntax, and the complete
+active Cipher pytest suite in a bounded healing loop. It may retry validation
+and remove generated caches, but cannot edit source, install packages, alter
+research evidence, commit, push, or invoke paper/live execution. See
+`docs/build_test_healing_loop.md`.
+
 ```bash
 .venv-research-py312/bin/python cipher-system/scripts/manage_safe_scheduler.py status
 .venv-research-py312/bin/python cipher-system/scripts/manage_safe_scheduler.py start --interval-seconds 3600
 .venv-research-py312/bin/python cipher-system/scripts/manage_safe_scheduler.py stop
+
+.venv-research-py312/bin/python cipher-system/scripts/run_build_healing_loop.py --once
+.venv-research-py312/bin/python cipher-system/scripts/manage_build_healing_loop.py start --run-on-start --interval-seconds 60
+.venv-research-py312/bin/python cipher-system/scripts/manage_build_healing_loop.py status
+.venv-research-py312/bin/python cipher-system/scripts/manage_build_healing_loop.py stop
 ```
 
 The current eight-track close-out and the data-insufficient policy are documented

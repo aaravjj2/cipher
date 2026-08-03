@@ -33,5 +33,11 @@ def authorize_repair(request: RepairRequest) -> None:
     forbidden = FORBIDDEN_FIELDS.intersection(request.changes)
     if forbidden:
         raise RepairBoundaryViolation(f"repair cannot alter protected fields: {sorted(forbidden)}")
-    if request.action not in {"retry_transient_delivery", "rebuild_derived_cache", "recompute_checksum"}:
+    if request.action not in {
+        "retry_transient_delivery",
+        "rebuild_derived_cache",
+        "recompute_checksum",
+        "clear_generated_test_caches",
+        "retry_validation_command",
+    }:
         raise RepairBoundaryViolation(f"repair action is not allowlisted: {request.action}")
