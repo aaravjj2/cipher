@@ -2758,7 +2758,7 @@ function renderResearchStatus() {
   const summary = payload.event_summary || {};
   const body = `<div class="notice">Read-only research governance. Closed data-insufficient tracks were not rerun, relaxed, or filled with synthetic evidence. Nothing shown here authorizes execution.</div>
     <div class="metric-grid">
-      <div class="metric-card"><span>TRACKS CLOSED</span><strong>${Number(status.closed_tracks || 0)}/${Number(status.total_tracks || 8)}</strong><small>${status.all_eight_closed ? "All active tracks have an honest close-out." : "Some tracks remain pending."}</small></div>
+      <div class="metric-card"><span>WORK PACKAGE CLOSED</span><strong>${Number(status.closed_tracks || 0)}/${Number(status.total_tracks || 8)}</strong><small>${status.work_package_complete ? "Operational tracks are closed; this does not mean the original architecture is complete." : "Some operational tracks remain pending."}</small></div>
       <div class="metric-card"><span>REAL EVENTS</span><strong>${Number(summary.event_count || 0)}</strong><small>${Number(summary.high_magnitude_count || 0)} high-magnitude FinBERT flags</small></div>
       <div class="metric-card"><span>EXECUTION AUTHORITY</span><strong>NONE</strong><small>Promotion ceiling: ${escapeHtml(status.maximum_promotion_state || "LIVE_REVIEW_REQUIRED")}</small></div>
     </div>

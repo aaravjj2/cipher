@@ -45,6 +45,13 @@ class _IngestHandler(BaseHTTPRequestHandler):
         return
 
 
+@pytest.fixture(autouse=True)
+def disable_production_governance_hooks(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Importer tests must never register temporary fixtures in the real registry."""
+
+    monkeypatch.setenv("CIPHER_GOVERNANCE_HOOKS", "0")
+
+
 @pytest.fixture()
 def ingest_server():
     _IngestHandler.requests = []

@@ -60,6 +60,26 @@ def atomic_raw(source: str, name: str, payload: bytes) -> dict[str, Any]:
     return {"path": str(path), "sha256": digest, "bytes": len(payload)}
 
 
+def observed_availability(
+    publication_time: datetime,
+    observed_at: datetime | None = None,
+) -> datetime:
+    """Return the earliest truthful system-availability time for this ingest.
+
+    A historical provider timestamp is publication evidence, not proof that
+    Cipher received the item at that instant. Future-dated provider values are
+    retained rather than producing an impossible received-before-publication
+    record.
+    """
+
+    observed = observed_at or datetime.now(timezone.utc)
+    if publication_time.tzinfo is None or publication_time.utcoffset() is None:
+        raise ValueError("publication_time must be timezone-aware")
+    if observed.tzinfo is None or observed.utcoffset() is None:
+        raise ValueError("observed_at must be timezone-aware")
+    return max(publication_time.astimezone(timezone.utc), observed.astimezone(timezone.utc))
+
+
 def parse_sec_time(value: str, fallback_date: str) -> datetime:
     candidate = (value or "").strip()
     if candidate:
@@ -143,8 +163,8 @@ def fetch_sec_documents(
                     title=title,
                     text=text,
                     publication_time=published,
-                    received_at=published,
-                    available_at=published,
+                    received_at=observed_availability(published, now),
+                    available_at=observed_availability(published, now),
                     symbols=(symbol,),
                     url_hash=hashlib.sha256(filing_url.encode("utf-8")).hexdigest(),
                     raw_object_id=raw["sha256"],
@@ -224,8 +244,8 @@ def fetch_yahoo_documents(
                     title=title,
                     text=f"{title} — publisher: {publisher}",
                     publication_time=published,
-                    received_at=published,
-                    available_at=published,
+                    received_at=observed_availability(published, now),
+                    available_at=observed_availability(published, now),
                     symbols=related,
                     url_hash=hashlib.sha256(link.encode("utf-8")).hexdigest() if link else None,
                     raw_object_id=raw["sha256"],

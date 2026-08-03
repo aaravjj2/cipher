@@ -1,6 +1,11 @@
 # Seven-Layer Guarded Research Stack
 
-Cipher implements the attached autonomous quant architecture as a guarded research and backtesting stack. It does not authorize live order submission.
+Cipher implements substantial guarded infrastructure from the attached autonomous
+quant architecture. This document describes structural capabilities, not proof
+that the original architecture's operational exit criteria have been met. See
+`original_architecture_self_audit.md` and
+`data/governance/original_architecture_self_audit.json` for the strict current
+assessment. The stack does not authorize live order submission.
 
 ## Boundary
 

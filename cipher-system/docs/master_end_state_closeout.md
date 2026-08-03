@@ -1,5 +1,10 @@
 # Master End-State Eight-Track Close-Out
 
+> **Scope warning:** this document closes one eight-track operational work
+> package. It does not certify completion of the original eight-layer hybrid
+> architecture or its phased exit criteria. The authoritative architecture
+> assessment is produced by `scripts/audit_original_architecture.py`.
+
 ## Governing rule
 
 The active work queue follows one fail-closed rule:

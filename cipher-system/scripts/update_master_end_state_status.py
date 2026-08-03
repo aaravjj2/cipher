@@ -171,6 +171,10 @@ def build_status() -> dict[str, Any]:
         "closed_tracks": sum(item["closed"] for item in tracks),
         "total_tracks": len(tracks),
         "all_eight_closed": all(item["closed"] for item in tracks),
+        "work_package_complete": all(item["closed"] for item in tracks),
+        "architecture_complete": False,
+        "architecture_status": "not_measured_by_this_work_package",
+        "architecture_audit_artifact": str(GOV / "original_architecture_self_audit.json"),
         "maximum_promotion_state": "LIVE_REVIEW_REQUIRED",
         "live_execution": False,
     }

@@ -1,6 +1,11 @@
 # Cipher Research Platform
 
-This package implements the governance, provenance, research, and prospective-validation architecture described in `CIPHER_CURRENT_STATE_AND_HYBRID_ARCHITECTURE_THESIS.md`.
+This package implements the structural governance, provenance, research, and
+prospective-validation services described in
+`CIPHER_CURRENT_STATE_AND_HYBRID_ARCHITECTURE_THESIS.md`. Structural
+implementation is not equivalent to operational completion: the strict current
+assessment is recorded in `docs/original_architecture_self_audit.md` and
+`data/governance/original_architecture_self_audit.json`.
 
 It extends the existing Cipher terminal and forward-test runtime. It does not replace the current Alpaca/Tradier collectors, UI, scanners, historical option archives, Kronos watcher, or shadow paper executor.
 
