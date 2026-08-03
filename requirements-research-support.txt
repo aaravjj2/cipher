@@ -1,0 +1,20 @@
+# Direct optional runtime dependencies used by Cipher research scripts.
+# Install into .venv-research-py312 after requirements-research-engines.txt.
+#
+# CPU PyTorch is intentionally installed separately from the official CPU wheel
+# index to avoid downloading unused CUDA runtimes:
+#   uv pip install --python .venv-research-py312/bin/python \
+#     --index-url https://download.pytorch.org/whl/cpu torch==2.13.0+cpu
+
+pip==26.2
+duckdb==1.5.5
+einops==0.8.2
+huggingface-hub==0.36.2
+safetensors==0.8.0
+timesfm==2.0.2
+yfinance==1.5.2
+hurst==0.0.5
+lean==1.0.227
+pandas==2.3.3
+pyarrow==24.0.0
+requests==2.34.2

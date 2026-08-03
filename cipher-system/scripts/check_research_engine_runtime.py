@@ -14,6 +14,17 @@ MODULES = {
     "qlib": "qlib",
     "riskfolio": "riskfolio",
     "rdagent": "rdagent",
+    "torch": "torch",
+    "timesfm": "timesfm",
+    "duckdb": "duckdb",
+    "huggingface_hub": "huggingface_hub",
+    "safetensors": "safetensors",
+    "einops": "einops",
+    "pandas": "pandas",
+    "pyarrow": "pyarrow",
+    "yfinance": "yfinance",
+    "hurst": "hurst",
+    "lean_cli": "lean",
 }
 
 

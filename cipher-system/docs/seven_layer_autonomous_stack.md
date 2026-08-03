@@ -80,9 +80,22 @@ not alter the local ingestion or UI runtime:
 ```bash
 cd /home/aarav/Aarav/cipher
 /home/aarav/.local/bin/python3.12 -m venv .venv-research-py312
+.venv-research-py312/bin/python -m pip install -r requirements.txt
 .venv-research-py312/bin/python -m pip install -r requirements-research-engines.txt
+.venv-research-py312/bin/python -m pip install \
+  --index-url https://download.pytorch.org/whl/cpu \
+  torch==2.13.0+cpu
+.venv-research-py312/bin/python -m pip install -r requirements-research-support.txt
 .venv-research-py312/bin/python cipher-system/scripts/check_research_engine_runtime.py
 ```
+
+`requirements-research-support.txt` pins the direct optional packages used by
+TimesFM, Kronos, local DuckDB/Parquet research, corporate-action capture, Hurst
+analysis, and the LEAN CLI.  PyTorch is installed from its CPU-only index on the
+current CPU VM so an environment rebuild does not pull unused CUDA runtimes.
+The LEAN CLI import and command can be validated without starting a backtest;
+local LEAN engine execution remains unavailable until Docker is installed by an
+administrator and the required QuantConnect account access is configured.
 
 An importable engine is only runtime-ready. Qlib/RD-Agent factor runs and
 VectorBT screens remain blocked until the unchanged Holdout C cohort has a
