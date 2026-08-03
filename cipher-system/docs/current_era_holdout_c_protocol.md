@@ -70,3 +70,9 @@ After identical `09:30 <= America/New_York < 16:00` filtering, June 1 passed
 symbols repeatedly showed large mismatches, so no broader download is
 authorized by this protocol. Raw responses and manifests remain isolated under
 `data/reference_volume`; the Alpaca price dataset and full gate are unchanged.
+
+The free Hugging Face/Finnhub-derived archive was also tested on June 1 and 2.
+June 1 matched volume within 5% for 9/9 symbols, although GE had only 387
+minute bars. June 2 matched only 5/9, with repeated material mismatches for
+AAPL, MSFT, NVDA, and QQQ. It is therefore retained only for supplemental
+price-only research and rejected as the independent volume reference.

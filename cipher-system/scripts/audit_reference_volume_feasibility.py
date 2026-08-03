@@ -56,6 +56,12 @@ def main() -> None:
             "pilot_result": "2023-06-01: 4/9 pass; 2023-06-02: 3/9 pass at unchanged 5% threshold",
             "status": "rejected_pilot_material_volume_mismatch",
         },
+        "HuggingFace_OHLCV_1m": {
+            "stage": "free_price_only_candidate_pilot_complete",
+            "dataset": "mito0o852/OHLCV-1m",
+            "pilot_result": "2023-06-01: 9/9 volume pass but GE had 387 bars; 2023-06-02: 5/9 volume pass with repeated material mismatches",
+            "status": "rejected_as_independent_volume_source_accepted_for_price_only_supplement",
+        },
         "acceptance": {"immutable_raw_evidence": True, "vendor_patches_price_data": False, "volume_scaling_or_inference": False, "daily_bar_reference": False, "max_relative_difference": 0.05, "trading_or_signal_evaluation": False},
         "status": "blocked_reference_volume_access_after_free_sources_rejected",
     }
