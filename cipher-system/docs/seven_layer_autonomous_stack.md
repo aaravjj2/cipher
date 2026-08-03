@@ -93,14 +93,28 @@ cd /home/aarav/Aarav/cipher
 TimesFM, Kronos, local DuckDB/Parquet research, corporate-action capture, Hurst
 analysis, and the LEAN CLI.  PyTorch is installed from its CPU-only index on the
 current CPU VM so an environment rebuild does not pull unused CUDA runtimes.
-The LEAN CLI import and command can be validated without starting a backtest;
-local LEAN engine execution remains unavailable until Docker is installed by an
-administrator and the required QuantConnect account access is configured.
+The LEAN CLI import and command can be validated without starting a backtest.
+Its normal local commands remain Docker-dependent, but Cipher also supports a
+separately cloned native LEAN source build. The current native launcher is built
+with .NET 10 and can be audited without running an algorithm:
+
+```bash
+.venv-research-py312/bin/python \
+  cipher-system/scripts/audit_native_lean_build.py \
+  --lean-root /home/aarav/Aarav/Autopilot/external/Lean \
+  --dotnet /home/aarav/.dotnet/dotnet
+```
+
+The native-build audit records the source revision, launcher checksum, .NET
+version, and NuGet vulnerability findings. A successful compile is infrastructure
+evidence only. It is not a LEAN replication result and cannot satisfy
+`LeanAuditValidator` without a frozen strategy job, point-in-time dataset,
+observed-fill evidence, and the required reconciliation artifacts.
 
 An importable engine is only runtime-ready. Qlib/RD-Agent factor runs and
 VectorBT screens remain blocked until the unchanged Holdout C cohort has a
-qualified source with its required independent origins. LEAN is separately
-available through its CLI and remains subject to `LeanAuditValidator`.
+qualified source with its required independent origins. LEAN remains subject to
+`LeanAuditValidator` regardless of whether Docker or the native launcher is used.
 
 ## Validation
 
