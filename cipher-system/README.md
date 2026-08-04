@@ -46,7 +46,9 @@ unchanged reconciliation gate remains preserved rather than weakened.
 
 The full source/runtime topology, module roles, data flows, architecture layers,
 and current completion state are documented in
-`docs/unified_workspace_architecture.md`.
+`docs/unified_workspace_architecture.md`. The focused restart, Holdout C, event
+timestamp, and eight-layer verification is recorded in
+`docs/post_merge_verification.md`.
 
 The system is research-only: no order endpoint, live execution authority, or
 automatic paper-trading promotion is enabled.

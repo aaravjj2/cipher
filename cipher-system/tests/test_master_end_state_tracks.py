@@ -181,6 +181,17 @@ def test_master_status_exposes_bounded_build_healing_without_source_authority():
     assert healing["execution_authority"] is False
 
 
+def test_master_status_exposes_qualified_post_merge_verification():
+    module = load_script("update_master_end_state_status")
+    status = module.build_status()
+    verification = status["operational_controls"]["post_merge_verification"]
+    assert verification["audit_available"] is True
+    assert verification["verdict"] == "PASSED_WITH_KNOWN_CANONICAL_LINEAGE_GAP"
+    assert verification["passed"] is True
+    assert verification["known_canonical_lineage_gap"] is True
+    assert verification["execution_authority"] is False
+
+
 def test_research_status_api_and_ui_are_read_only_surfaces():
     app_source = (ROOT / "core" / "app.py").read_text(encoding="utf-8")
     html_source = (ROOT / "app" / "public" / "index.html").read_text(encoding="utf-8")

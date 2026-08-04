@@ -712,6 +712,7 @@ def test_forecast_anomaly_engine_outputs_context_only_rows():
     assert anomaly.linked_event_ids == ("event_macro_1",)
     row = anomaly.to_warehouse_row()
     assert row["allowed_use"] == "context"
+    assert row["source"] == "attribution_and_anomaly_engine"
     assert row["available_at"] == realized.available_at
     assert row["payload_json"]["linked_event_ids"] == ["event_macro_1"]
 

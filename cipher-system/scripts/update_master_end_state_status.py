@@ -99,6 +99,7 @@ def build_status() -> dict[str, Any]:
 
     architecture_audit = read_json(GOV / "original_architecture_self_audit.json")
     unified_product_audit = read_json(GOV / "unified_cipher_product_audit.json")
+    post_merge_verification = read_json(GOV / "post_merge_verification.json")
 
     counts = registry_counts()
     app_text = (ROOT / "core" / "app.py").read_text(encoding="utf-8", errors="ignore")
@@ -227,6 +228,18 @@ def build_status() -> dict[str, Any]:
                     .get("runtime_data", {})
                     .get("resolved")
                 ),
+                "execution_authority": False,
+            },
+            "post_merge_verification": {
+                "audit_available": bool(post_merge_verification),
+                "verdict": post_merge_verification.get("verdict"),
+                "passed": bool(post_merge_verification.get("verification_passed", False)),
+                "known_canonical_lineage_gap": any(
+                    item.get("id") == "holdout_c_canonical_lineage_absent"
+                    for item in post_merge_verification.get("known_gaps", [])
+                    if isinstance(item, dict)
+                ),
+                "artifact": str(GOV / "post_merge_verification.json"),
                 "execution_authority": False,
             },
         },

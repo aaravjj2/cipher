@@ -306,7 +306,7 @@ class AnomalyRecord:
             "event_time": self.event_time,
             "received_at": self.available_at,
             "available_at": self.available_at,
-            "source": "causal_attribution_engine",
+            "source": "attribution_and_anomaly_engine",
             "raw_object_id": self.forecast_id,
             "schema_version": 1,
             "anomaly_id": self.anomaly_id,

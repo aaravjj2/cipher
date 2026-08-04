@@ -905,6 +905,14 @@ The source/runtime merge is complete when the unified-product audit passes:
 - safe scheduler and healer are active;
 - execution authority is absent.
 
+A separate focused post-merge verification then confirms that the four systemd
+services recover through the canonical alias, the original Holdout C panel
+still recounts to 11/12 strict origins, and the point-in-time timestamp and
+eight-layer naming corrections remain intact. Its current verdict is
+`PASSED_WITH_KNOWN_CANONICAL_LINEAGE_GAP`: runtime behavior is verified, but the
+Holdout C panel is not yet represented by a complete canonical registry
+lineage. See `docs/post_merge_verification.md`.
+
 ### Original research architecture
 
 The original architecture remains `INCOMPLETE`:
