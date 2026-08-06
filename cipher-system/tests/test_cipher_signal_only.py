@@ -119,6 +119,34 @@ def test_candidate_rules_deduplicate_ticker_day_across_sources():
     assert unanimous.iloc[0]["covered_sources"] == 2
 
 
+def test_terminal_confirmation_uses_last_selected_source_timestamp():
+    module = load_script("run_cipher_complete_observations")
+    states = [
+        episode(signal_id="cluster", source="cluster", timestamp="2026-08-05T14:00:00+00:00"),
+        episode(signal_id="flash", source="flash", timestamp="2026-08-05T15:00:00+00:00"),
+        episode(signal_id="agentic", source="flash_agentic", timestamp="2026-08-05T16:00:00+00:00"),
+    ]
+    context = module.terminal_confirmation_context(states)[("2026-08-05", "AAPL")]
+    assert context["confirmed_at"] == "2026-08-05T16:00:00+00:00"
+    assert context["trigger_source"] == "flash_agentic"
+    assert context["covered_sources"] == 3
+
+
+def test_first_realtime_confirmation_uses_only_observed_prior_state():
+    module = load_script("run_cipher_complete_observations")
+    cluster = episode(signal_id="cluster", source="cluster", timestamp="2026-08-05T15:00:00+00:00")
+    episodes = [
+        episode(signal_id="flash-bear", source="flash", timestamp="2026-08-05T14:30:00+00:00", direction="BEARISH"),
+        cluster,
+        episode(signal_id="flash-bull", source="flash", timestamp="2026-08-05T15:30:00+00:00", direction="BULLISH"),
+    ]
+    context = module.first_realtime_confirmation_context(cluster, episodes)
+    assert context is not None
+    assert context["confirmed_at"] == "2026-08-05T15:30:00+00:00"
+    assert context["trigger_source"] == "flash"
+    assert context["supporting_sources"] == ["flash"]
+
+
 def test_cluster_expiration_uses_second_listed_expiry_and_directional_contracts():
     module = load_script("run_cipher_complete_observations")
     contracts = [

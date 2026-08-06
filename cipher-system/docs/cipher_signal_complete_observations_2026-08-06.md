@@ -97,6 +97,51 @@ Rank remains more monotonic than displayed strength. The strongest populated pos
 
 The first four filters were selected after observing outcomes and are frozen only for prospective tracking. Their marked option results are mostly pending: only three or four cases in each cohort had expired. Cross-source confirmation was a predefined structural hypothesis, but its sample remains only eight observations.
 
+## Confirmation-time entry recalculation
+
+The original eight-record confirmation statistic entered each option at the Cluster timestamp. That overstated what could be earned by a trader who waits for the other source to confirm. A cache-only follow-up therefore re-entered the same contracts using two later timing rules.
+
+### Entry after the selected terminal states all agree
+
+This is the requested strict timing: entry occurs on the first traded one-minute bar after the last selected agreeing source state appears.
+
+| Metric | Original Cluster entry | Post-terminal-confirmation entry |
+|---|---:|---:|
+| Underlying direction correct | 100.0% | 87.5% |
+| Median directional underlying return | +5.53% | +5.05% |
+| ATM option profitable | 75.0% | 75.0% |
+| ATM option median return | +201.67% | +176.87% |
+| Target option profitable | 62.5% | 62.5% |
+| Target option median return | +254.46% | +149.75% |
+| Debit spread profitable | 87.5% | 87.5% |
+| Debit spread median return | +147.33% | +97.23% |
+
+Waiting reduced returns materially but did not change the spread win count: seven of eight spreads remained positive. The sole spread loser remained AAPL.
+
+| Ticker/session | Confirmation trigger | Post-confirmation underlying | ATM option | Target option | Debit spread |
+|---|---|---:|---:|---:|---:|
+| AMZN Jul. 28 | Flash floor bounce near 3:55 PM ET | +17.50% | +382.99% | +477.22% | +119.21% |
+| MSFT Jul. 28 | Flash momentum push near 3:57 PM ET | +23.89% | +577.26% | +1,533.43% | +253.91% |
+| AVGO Jul. 30 | Final Flash momentum push near 3:56 PM ET | +1.25% | -40.67% | -99.56% | +48.23% |
+| NVDA Jul. 30 | Final Flash floor bounce near 3:54 PM ET | +6.03% | +226.75% | +583.53% | +120.42% |
+| TSLA Jul. 30 | Flash breakout attempt near 3:49 PM ET | +4.08% | +145.67% | -98.94% | +204.84% |
+| AAPL Jul. 31 | Flash breakout continuation near 3:55 PM ET | -1.55% | -85.65% | -99.09% | -83.14% |
+| AVGO Aug. 3 | Flash momentum push near 3:58 PM ET | +6.61% | +208.08% | +293.55% | +75.25% |
+| META Aug. 4 | Cluster completed prior Flash agreement near 10:36 AM ET | +0.98% | +16.49% | +5.94% | +20.63% pending |
+
+### First prospective one-source confirmation
+
+A second timing rule uses only information available in sequence: at the selected Cluster timestamp, it checks the latest observed Flash and Agentic states; otherwise it waits for the next same-direction alert. This avoids waiting for the end-of-session terminal state, although the eight-record cohort itself is still identified from terminal states and therefore retains selection look-ahead.
+
+- Underlying direction correct: **8/8**
+- ATM options profitable: **6/8**; median return **+201.67%**
+- Target options profitable: **5/8**; median return **+254.46%**
+- Debit spreads profitable: **7/8**; median return **+134.96%**
+
+For the exact strict Cluster subset—rank 1–10, strength 200–299, and target 2–10% away—only MSFT, TSLA, and META qualified. All three post-confirmation spreads were positive. Their median spread return was **+204.84%** under terminal-confirmation timing and **+190.29%** under first prospective one-source timing. This is only three observations, including one pending record.
+
+The cache-only artifact is `data/governance/cipher_signal_only/latest_confirmation_entry_research.json`.
+
 ## Option-path giveback
 
 Option paths contain substantially more favorable movement than expiration/latest marks retain.
@@ -193,6 +238,7 @@ These terminal states can change during the session. The immutable prospective r
 ## Implementation artifacts
 
 - `scripts/run_cipher_complete_observations.py`
+- `scripts/run_cipher_confirmation_entry_research.py`
 - `scripts/run_cipher_signal_only_loop.py`
 - `scripts/manage_cipher_signal_only_loop.py`
 - `core/research_platform/cipher_signal_overlay.py`

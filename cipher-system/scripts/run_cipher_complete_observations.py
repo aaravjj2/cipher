@@ -602,6 +602,145 @@ def provider_open_matrix(
     return frame.pivot(index="session", columns="ticker", values="open").sort_index()
 
 
+def terminal_confirmation_context(
+    states: Sequence[Mapping[str, Any]],
+) -> dict[tuple[str, str], dict[str, Any]]:
+    """Describe when the selected terminal source states first coexist.
+
+    This preserves the existing daily-terminal-state cohort definition. It is
+    intentionally labelled terminal because the cohort itself is known only
+    after selecting each source's last eligible state for the session.
+    """
+    grouped: dict[tuple[str, str], list[Mapping[str, Any]]] = defaultdict(list)
+    for row in states:
+        grouped[(str(row.get("market_session")), str(row.get("ticker")))].append(row)
+    output: dict[tuple[str, str], dict[str, Any]] = {}
+    for key, rows in grouped.items():
+        if len(rows) < 2 or not any(str(row.get("scan_type")) == "cluster" for row in rows):
+            continue
+        directions = {str(row.get("direction")) for row in rows}
+        if len(directions) != 1 or next(iter(directions), "") not in {"BULLISH", "BEARISH"}:
+            continue
+        ordered = sorted(rows, key=lambda row: str(row.get("first_seen_at") or ""))
+        confirmed_at = utc_timestamp(ordered[-1].get("first_seen_at"))
+        if confirmed_at is None:
+            continue
+        output[key] = {
+            "definition": "entry after the last selected agreeing terminal source state appears",
+            "confirmed_at": confirmed_at.isoformat(),
+            "trigger_source": str(ordered[-1].get("scan_type")),
+            "covered_sources": len(ordered),
+            "source_states": [
+                {
+                    "source": str(row.get("scan_type")),
+                    "direction": str(row.get("direction")),
+                    "first_seen_at": row.get("first_seen_at"),
+                    "setup_family": row.get("setup_family"),
+                    "score": row.get("score"),
+                    "rank": row.get("rank"),
+                    "strength": row.get("strength"),
+                }
+                for row in ordered
+            ],
+        }
+    return output
+
+
+def first_realtime_confirmation_context(
+    cluster_row: Mapping[str, Any],
+    episodes: Sequence[Mapping[str, Any]],
+) -> dict[str, Any] | None:
+    """Find the first prospective same-direction Flash/Agentic confirmation.
+
+    At the Cluster timestamp, the latest eligible non-Cluster state from each
+    source is considered active. If none agrees, the next same-direction alert
+    becomes the confirmation trigger. This is a one-source confirmation rule;
+    it does not use knowledge of which sources will appear later in the day.
+    """
+    cluster_at = utc_timestamp(cluster_row.get("first_seen_at"))
+    if cluster_at is None:
+        return None
+    session = str(cluster_row.get("market_session"))
+    ticker = str(cluster_row.get("ticker"))
+    direction = str(cluster_row.get("direction"))
+    timeline = sorted(
+        (
+            row
+            for row in episodes
+            if eligible_episode(row)
+            and str(row.get("market_session")) == session
+            and str(row.get("ticker")) == ticker
+            and str(row.get("scan_type")) in {"flash", "flash_agentic"}
+            and utc_timestamp(row.get("first_seen_at")) is not None
+        ),
+        key=lambda row: str(row.get("first_seen_at")),
+    )
+    active: dict[str, Mapping[str, Any]] = {}
+    for row in timeline:
+        seen_at = utc_timestamp(row.get("first_seen_at"))
+        if seen_at is None:
+            continue
+        if seen_at <= cluster_at:
+            active[str(row.get("scan_type"))] = row
+            continue
+        agreeing_active = [
+            state for state in active.values() if str(state.get("direction")) == direction
+        ]
+        if agreeing_active:
+            return {
+                "definition": "first prospective one-source confirmation using only states observed by the Cluster timestamp",
+                "confirmed_at": cluster_at.isoformat(),
+                "trigger_source": "cluster",
+                "supporting_sources": sorted(str(state.get("scan_type")) for state in agreeing_active),
+                "supporting_states": [
+                    {
+                        "source": str(state.get("scan_type")),
+                        "direction": str(state.get("direction")),
+                        "first_seen_at": state.get("first_seen_at"),
+                        "setup_family": state.get("setup_family"),
+                        "score": state.get("score"),
+                    }
+                    for state in agreeing_active
+                ],
+            }
+        if str(row.get("direction")) == direction:
+            return {
+                "definition": "first prospective one-source confirmation after the Cluster timestamp",
+                "confirmed_at": seen_at.isoformat(),
+                "trigger_source": str(row.get("scan_type")),
+                "supporting_sources": [str(row.get("scan_type"))],
+                "supporting_states": [
+                    {
+                        "source": str(row.get("scan_type")),
+                        "direction": str(row.get("direction")),
+                        "first_seen_at": row.get("first_seen_at"),
+                        "setup_family": row.get("setup_family"),
+                        "score": row.get("score"),
+                    }
+                ],
+            }
+        active[str(row.get("scan_type"))] = row
+    agreeing_active = [state for state in active.values() if str(state.get("direction")) == direction]
+    if agreeing_active:
+        return {
+            "definition": "first prospective one-source confirmation using only states observed by the Cluster timestamp",
+            "confirmed_at": cluster_at.isoformat(),
+            "trigger_source": "cluster",
+            "supporting_sources": sorted(str(state.get("scan_type")) for state in agreeing_active),
+            "supporting_states": [
+                {
+                    "source": str(state.get("scan_type")),
+                    "direction": str(state.get("direction")),
+                    "first_seen_at": state.get("first_seen_at"),
+                    "setup_family": state.get("setup_family"),
+                    "score": state.get("score"),
+                }
+                for state in agreeing_active
+            ],
+        }
+    return None
+
+
 def option_leg_metrics(
     *,
     symbol: str | None,
@@ -738,6 +877,84 @@ def underlying_metrics(
     }
 
 
+def underlying_entry_metrics(
+    row: Mapping[str, Any],
+    *,
+    entry_at: pd.Timestamp,
+    expiry: str,
+    minute_bars: Mapping[tuple[str, str], Sequence[Mapping[str, Any]]],
+    daily_bars: Mapping[str, Sequence[Mapping[str, Any]]],
+    latest_market_session: str,
+) -> dict[str, Any]:
+    """Score the underlying from the first traded stock bar after a later entry trigger."""
+    ticker = str(row["ticker"])
+    session = entry_at.tz_convert(NY).date().isoformat()
+    target = finite(row.get("target"))
+    direction = str(row.get("direction"))
+    intraday: list[tuple[pd.Timestamp, Mapping[str, Any]]] = []
+    for bar in minute_bars.get((session, ticker), []) or []:
+        timestamp = bar_time(bar)
+        if timestamp is not None and timestamp >= entry_at:
+            intraday.append((timestamp, bar))
+    if not intraday:
+        return {"status": "entry_bar_unavailable", "ticker": ticker}
+    intraday.sort(key=lambda item: item[0])
+    entry_price = bar_value(intraday[0][1], "vw", "c", "o")
+    if entry_price is None or entry_price <= 0:
+        return {"status": "entry_price_unavailable", "ticker": ticker}
+    cutoff = min(expiry, latest_market_session)
+    later_daily: list[Mapping[str, Any]] = []
+    for bar in daily_bars.get(ticker, []) or []:
+        timestamp = bar_time(bar)
+        if timestamp is None:
+            continue
+        day = timestamp.tz_convert(NY).date().isoformat()
+        if session < day <= cutoff:
+            later_daily.append(bar)
+    final_bar: Mapping[str, Any] | None = later_daily[-1] if later_daily else intraday[-1][1]
+    final_timestamp = bar_time(final_bar) if later_daily else intraday[-1][0]
+    final_price = bar_value(final_bar, "c", "vw") if final_bar else None
+    highs = [bar_value(bar, "h", "c") for _, bar in intraday]
+    lows = [bar_value(bar, "l", "c") for _, bar in intraday]
+    highs.extend(bar_value(bar, "h", "c") for bar in later_daily)
+    lows.extend(bar_value(bar, "l", "c") for bar in later_daily)
+    highs = [value for value in highs if value is not None]
+    lows = [value for value in lows if value is not None]
+    favorable = adverse = target_hit = None
+    if highs and lows:
+        if direction == "BULLISH":
+            favorable = (max(highs) / entry_price - 1.0) * 100.0
+            adverse = (min(lows) / entry_price - 1.0) * 100.0
+            target_hit = target is not None and max(highs) >= target
+        else:
+            favorable = (1.0 - min(lows) / entry_price) * 100.0
+            adverse = (1.0 - max(highs) / entry_price) * 100.0
+            target_hit = target is not None and min(lows) <= target
+    raw_return = (final_price / entry_price - 1.0) * 100.0 if final_price is not None else None
+    directional_return = raw_return if direction == "BULLISH" else -raw_return if raw_return is not None else None
+    mark_session = final_timestamp.tz_convert(NY).date().isoformat() if final_timestamp is not None else None
+    return {
+        "status": "matured_at_expiry" if expiry <= latest_market_session else "pending_expiry_marked_to_latest",
+        "ticker": ticker,
+        "entry_at": intraday[0][0].isoformat(),
+        "entry_price": entry_price,
+        "cluster_scan_spot": finite(row.get("spot")),
+        "target": target,
+        "mark_at": final_timestamp.isoformat() if final_timestamp is not None else None,
+        "mark_session": mark_session,
+        "mark_basis": "daily_close" if later_daily else "same_session_intraday",
+        "mark_price": final_price,
+        "raw_return_pct": raw_return,
+        "directional_return_pct": directional_return,
+        "direction_correct": directional_return > 0 if directional_return is not None else None,
+        "maximum_favorable_move_pct": favorable,
+        "maximum_adverse_move_pct": adverse,
+        "target_hit_by_mark": target_hit,
+        "minute_bars_after_entry": len(intraday),
+        "later_daily_bars": len(later_daily),
+    }
+
+
 def spread_metrics(atm: Mapping[str, Any], target: Mapping[str, Any]) -> dict[str, Any]:
     if atm.get("status") in {"contract_unavailable", "entry_bar_unavailable", "entry_price_unavailable"}:
         return {"status": "atm_leg_unavailable"}
@@ -763,6 +980,107 @@ def spread_metrics(atm: Mapping[str, Any], target: Mapping[str, Any]) -> dict[st
         "mark_value": mark_value,
         "end_return_pct": (mark_value / entry_debit - 1.0) * 100.0,
         "profitable_at_mark": mark_value > entry_debit,
+    }
+
+
+def score_cluster_entry_package(
+    row: Mapping[str, Any],
+    *,
+    entry_at: pd.Timestamp,
+    entry_context: Mapping[str, Any],
+    expiry: str,
+    option_minute: Mapping[tuple[str, str], Sequence[Mapping[str, Any]]],
+    option_daily: Mapping[str, Sequence[Mapping[str, Any]]],
+    stock_minute: Mapping[tuple[str, str], Sequence[Mapping[str, Any]]],
+    stock_daily: Mapping[str, Sequence[Mapping[str, Any]]],
+    latest_market_session: str,
+) -> dict[str, Any]:
+    atm_contract = row.get("atm_contract") or {}
+    target_contract = row.get("target_contract") or {}
+    atm = option_leg_metrics(
+        symbol=atm_contract.get("symbol"),
+        signal_at=entry_at,
+        expiry=expiry,
+        minute_bars=option_minute,
+        daily_bars=option_daily,
+        latest_market_session=latest_market_session,
+    )
+    target_leg = option_leg_metrics(
+        symbol=target_contract.get("symbol"),
+        signal_at=entry_at,
+        expiry=expiry,
+        minute_bars=option_minute,
+        daily_bars=option_daily,
+        latest_market_session=latest_market_session,
+    )
+    underlying = underlying_entry_metrics(
+        row,
+        entry_at=entry_at,
+        expiry=expiry,
+        minute_bars=stock_minute,
+        daily_bars=stock_daily,
+        latest_market_session=latest_market_session,
+    )
+    spread = spread_metrics(atm, target_leg)
+    statuses = {
+        str(atm.get("status")),
+        str(target_leg.get("status")),
+        str(underlying.get("status")),
+        str(spread.get("status")),
+    }
+    if any(status in {"entry_bar_unavailable", "entry_price_unavailable"} for status in statuses):
+        package_status = "partially_or_fully_unscorable_entry_bar"
+    elif expiry <= latest_market_session:
+        package_status = "matured_at_expiry"
+    else:
+        package_status = "pending_expiry_marked_to_latest"
+    return {
+        "status": package_status,
+        "entry_context": dict(entry_context),
+        "requested_entry_at": entry_at.isoformat(),
+        "underlying": underlying,
+        "atm_option": atm,
+        "target_option": target_leg,
+        "debit_spread": spread,
+    }
+
+
+def flatten_entry_package(
+    row: Mapping[str, Any],
+    package_key: str,
+) -> dict[str, Any] | None:
+    package = row.get(package_key)
+    if not isinstance(package, Mapping):
+        return None
+    underlying = package.get("underlying") or {}
+    atm = package.get("atm_option") or {}
+    target = package.get("target_option") or {}
+    spread = package.get("debit_spread") or {}
+    return {
+        "signal_id": row.get("signal_id"),
+        "market_session": row.get("market_session"),
+        "ticker": row.get("ticker"),
+        "direction": row.get("direction"),
+        "rank": row.get("rank"),
+        "strength": row.get("strength"),
+        "target_distance_pct": row.get("target_distance_pct"),
+        "cluster_expiration": row.get("cluster_expiration"),
+        "agreement_status": row.get("agreement_status"),
+        "status": package.get("status"),
+        "entry_context": package.get("entry_context"),
+        "requested_entry_at": package.get("requested_entry_at"),
+        "underlying_directional_return_pct": underlying.get("directional_return_pct"),
+        "underlying_maximum_favorable_move_pct": underlying.get("maximum_favorable_move_pct"),
+        "underlying_maximum_adverse_move_pct": underlying.get("maximum_adverse_move_pct"),
+        "target_hit_by_expiry": underlying.get("target_hit_by_mark"),
+        "atm_option_status": atm.get("status"),
+        "target_option_status": target.get("status"),
+        "debit_spread_status": spread.get("status"),
+        "atm_option_end_return_pct": atm.get("end_return_pct"),
+        "atm_option_maximum_return_pct": atm.get("maximum_return_pct"),
+        "target_option_end_return_pct": target.get("end_return_pct"),
+        "target_option_maximum_return_pct": target.get("maximum_return_pct"),
+        "debit_spread_end_return_pct": spread.get("end_return_pct"),
     }
 
 
@@ -1031,6 +1349,7 @@ def main() -> int:
     episodes = load_signal_episodes(CAPTURE_ROOT)
     states = daily_latest_states(episodes)
     contexts = agreement_context(states)
+    terminal_confirmation_contexts = terminal_confirmation_context(states)
     dataset = latest_dataset()
     canonical_latest_session = str(dataset.get("latest_session") or "")
     if not canonical_latest_session:
@@ -1159,7 +1478,14 @@ def main() -> int:
         base["target_distance_pct"] = directional_target_distance_pct(base)
         base["target_distance_bucket"] = target_distance_bucket(base["target_distance_pct"])
         base["signal_time_bucket"] = signal_time_bucket(base.get("first_seen_at"))
-        base.update(contexts.get((str(row["market_session"]), str(row["ticker"]))) or {})
+        context_key = (str(row["market_session"]), str(row["ticker"]))
+        base.update(contexts.get(context_key) or {})
+        terminal_confirmation = terminal_confirmation_contexts.get(context_key)
+        realtime_confirmation = first_realtime_confirmation_context(row, episodes)
+        if terminal_confirmation is not None:
+            base["terminal_confirmation"] = terminal_confirmation
+        if realtime_confirmation is not None:
+            base["first_realtime_confirmation"] = realtime_confirmation
         if signal_at is None or not expiry:
             cluster_observations.append({**base, "status": "unscorable_missing_signal_time_or_expiration"})
             continue
@@ -1190,6 +1516,34 @@ def main() -> int:
             latest_market_session=latest_market_session,
         )
         spread = spread_metrics(atm, target_leg)
+        post_terminal_confirmation_entry = None
+        terminal_confirmation_at = utc_timestamp((terminal_confirmation or {}).get("confirmed_at"))
+        if terminal_confirmation_at is not None:
+            post_terminal_confirmation_entry = score_cluster_entry_package(
+                row,
+                entry_at=terminal_confirmation_at,
+                entry_context=terminal_confirmation or {},
+                expiry=expiry,
+                option_minute=option_minute,
+                option_daily=option_daily,
+                stock_minute=stock_minute,
+                stock_daily=stock_daily,
+                latest_market_session=latest_market_session,
+            )
+        first_realtime_confirmation_entry = None
+        realtime_confirmation_at = utc_timestamp((realtime_confirmation or {}).get("confirmed_at"))
+        if realtime_confirmation_at is not None:
+            first_realtime_confirmation_entry = score_cluster_entry_package(
+                row,
+                entry_at=realtime_confirmation_at,
+                entry_context=realtime_confirmation or {},
+                expiry=expiry,
+                option_minute=option_minute,
+                option_daily=option_daily,
+                stock_minute=stock_minute,
+                stock_daily=stock_daily,
+                latest_market_session=latest_market_session,
+            )
         status = "matured_at_expiry" if expiry <= latest_market_session else "pending_expiry_marked_to_latest"
         cluster_observations.append(
             {
@@ -1199,6 +1553,8 @@ def main() -> int:
                 "atm_option": atm,
                 "target_option": target_leg,
                 "debit_spread": spread,
+                "post_terminal_confirmation_entry": post_terminal_confirmation_entry,
+                "first_realtime_confirmation_entry": first_realtime_confirmation_entry,
             }
         )
 
@@ -1206,7 +1562,19 @@ def main() -> int:
     for row in cluster_observations:
         flat_cluster.append(
             {
-                **{key: value for key, value in row.items() if key not in {"underlying", "atm_option", "target_option", "debit_spread"}},
+                **{
+                    key: value
+                    for key, value in row.items()
+                    if key
+                    not in {
+                        "underlying",
+                        "atm_option",
+                        "target_option",
+                        "debit_spread",
+                        "post_terminal_confirmation_entry",
+                        "first_realtime_confirmation_entry",
+                    }
+                },
                 "underlying_directional_return_pct": (row.get("underlying") or {}).get("directional_return_pct"),
                 "underlying_maximum_favorable_move_pct": (row.get("underlying") or {}).get("maximum_favorable_move_pct"),
                 "underlying_maximum_adverse_move_pct": (row.get("underlying") or {}).get("maximum_adverse_move_pct"),
@@ -1221,6 +1589,17 @@ def main() -> int:
                 "debit_spread_end_return_pct": (row.get("debit_spread") or {}).get("end_return_pct"),
             }
         )
+
+    post_terminal_confirmation_flat = [
+        flattened
+        for row in cluster_observations
+        if (flattened := flatten_entry_package(row, "post_terminal_confirmation_entry")) is not None
+    ]
+    first_realtime_confirmation_flat = [
+        flattened
+        for row in cluster_observations
+        if (flattened := flatten_entry_package(row, "first_realtime_confirmation_entry")) is not None
+    ]
 
     complete_states = []
     for row in states:
@@ -1245,6 +1624,22 @@ def main() -> int:
         "target_option_maximum_return_pct",
         "debit_spread_end_return_pct",
     )
+    terminal_bullish_confirmed = [
+        row
+        for row in post_terminal_confirmation_flat
+        if str(row.get("direction")) == "BULLISH"
+        and str(row.get("agreement_status")) == "all_agree_bullish"
+    ]
+    terminal_bullish_signal_ids = {str(row.get("signal_id")) for row in terminal_bullish_confirmed}
+    same_cohort_first_realtime_confirmed = [
+        row
+        for row in first_realtime_confirmation_flat
+        if str(row.get("signal_id")) in terminal_bullish_signal_ids
+    ]
+    all_first_realtime_bullish_confirmed = [
+        row for row in first_realtime_confirmation_flat if str(row.get("direction")) == "BULLISH"
+    ]
+
     matured_fixed_horizon = [row for row in fixed_horizon if row.get("status") == "matured"]
     fixed_horizon_summary = {
         "records": len(fixed_horizon),
@@ -1316,6 +1711,37 @@ def main() -> int:
         },
         "candidate_hypotheses_completed_sessions": cluster_candidate_hypotheses(completed_session_cluster),
         "candidate_hypotheses_current_partial": cluster_candidate_hypotheses(current_partial_cluster),
+        "confirmation_entry_research": {
+            "terminal_selection_warning": (
+                "The terminal-state cohort is selected using each source's last eligible state for the session; "
+                "its membership is not knowable at the original Cluster timestamp."
+            ),
+            "post_terminal_selected_state_entry": {
+                "definition": "enter after the last selected agreeing terminal source state appears",
+                "metrics": cluster_population_metrics(terminal_bullish_confirmed),
+                "by_ticker_session": summarize_numeric(
+                    terminal_bullish_confirmed,
+                    ("ticker", "market_session"),
+                    cluster_value_fields,
+                ),
+            },
+            "same_terminal_cohort_first_realtime_one_source_entry": {
+                "definition": (
+                    "for the same terminal-confirmed records, enter when the latest observed Flash/Agentic state "
+                    "first agrees with the selected Cluster state, without using later source coverage"
+                ),
+                "metrics": cluster_population_metrics(same_cohort_first_realtime_confirmed),
+                "by_ticker_session": summarize_numeric(
+                    same_cohort_first_realtime_confirmed,
+                    ("ticker", "market_session"),
+                    cluster_value_fields,
+                ),
+            },
+            "all_first_realtime_one_source_bullish_entries": {
+                "definition": "all bullish Cluster states receiving at least one prospective same-direction Flash/Agentic confirmation",
+                "metrics": cluster_population_metrics(all_first_realtime_bullish_confirmed),
+            },
+        },
         "pending_by_market_session": summarize_numeric(pending_cluster, ("market_session",), cluster_value_fields),
         "pending_by_expiration": summarize_numeric(pending_cluster, ("cluster_expiration",), cluster_value_fields),
         "pending_by_direction": summarize_numeric(pending_cluster, ("direction",), cluster_value_fields),
