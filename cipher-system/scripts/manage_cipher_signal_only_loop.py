@@ -21,6 +21,7 @@ STATUS_PATH = GOV / "signal_research_loop_status.json"
 RUNNER = ROOT / "scripts" / "run_cipher_signal_only_loop.py"
 REPORT = GOV / "latest_signal_research.json"
 SPECIFICS = GOV / "latest_ticker_strategy_specifics.json"
+COMPLETE_REPORT = GOV / "latest_complete_observations.json"
 CYCLE = GOV / "latest_signal_research_cycle.json"
 
 
@@ -62,8 +63,13 @@ def summary() -> dict[str, Any]:
     report = read_json(REPORT)
     cycle = read_json(CYCLE)
     specifics = read_json(SPECIFICS)
+    complete = read_json(COMPLETE_REPORT)
     inventory = report.get("capture_inventory") if isinstance(report.get("capture_inventory"), dict) else {}
     scoring = report.get("forward_scoring") if isinstance(report.get("forward_scoring"), dict) else {}
+    populations = complete.get("population_counts") if isinstance(complete.get("population_counts"), dict) else {}
+    cluster_research = complete.get("cluster_expiry_research") if isinstance(complete.get("cluster_expiry_research"), dict) else {}
+    cluster_summary = cluster_research.get("summary") if isinstance(cluster_research.get("summary"), dict) else {}
+    fixed_complete = complete.get("fixed_horizon_flash_agentic") if isinstance(complete.get("fixed_horizon_flash_agentic"), dict) else {}
     return {
         "latest_cycle_status": cycle.get("status"),
         "latest_cycle_created_at": cycle.get("created_at"),
@@ -83,6 +89,20 @@ def summary() -> dict[str, Any]:
         "timing_analysis": specifics.get("timing_analysis"),
         "candidate_rule_analysis": specifics.get("candidate_rule_analysis"),
         "latest_session_snapshot": specifics.get("latest_session_snapshot"),
+        "complete_unique_episodes": populations.get("all_unique_episodes"),
+        "complete_daily_terminal_states": populations.get("all_daily_terminal_source_ticker_states"),
+        "cluster_expiry_records": populations.get("cluster_expiry_records"),
+        "cluster_latest_completed_market_session": cluster_summary.get("latest_completed_market_session"),
+        "cluster_matured_at_expiry": cluster_summary.get("matured_at_expiry"),
+        "cluster_pending_expiry": cluster_summary.get("pending_expiry"),
+        "cluster_finalized_at_expiry": cluster_summary.get("finalized_at_expiry"),
+        "cluster_pending_mark_to_latest": cluster_summary.get("pending_mark_to_latest"),
+        "cluster_completed_session_target_distance_analysis": cluster_summary.get("completed_sessions_by_target_distance_bucket"),
+        "cluster_completed_session_time_analysis": cluster_summary.get("completed_sessions_by_signal_time_bucket"),
+        "cluster_completed_session_option_path_diagnostics": cluster_summary.get("option_path_diagnostics_completed_sessions"),
+        "cluster_completed_session_candidate_hypotheses": cluster_summary.get("candidate_hypotheses_completed_sessions"),
+        "cluster_current_partial_candidate_hypotheses": cluster_summary.get("candidate_hypotheses_current_partial"),
+        "complete_flash_agentic_summary": fixed_complete.get("summary"),
         "other_research_branches": "paused_frozen_reference_only",
     }
 
@@ -107,6 +127,12 @@ def write_status(action: str, *, pid: int | None, state: str, detail: str | None
             "setup_family_performance",
             "score_bucket_calibration",
             "one_five_twenty_one_session_future_open_scoring",
+            "complete_all_date_episode_and_terminal_state_observations",
+            "cluster_second_listed_expiration_reconstruction",
+            "cluster_underlying_move_through_expiration",
+            "cluster_atm_and_target_option_moves_through_expiration",
+            "cluster_debit_spread_move_through_expiration",
+            "cluster_finalized_vs_pending_expiry_separation",
             "symbol_and_dataset_coverage",
             "ticker_level_performance",
             "source_ticker_setup_interactions",

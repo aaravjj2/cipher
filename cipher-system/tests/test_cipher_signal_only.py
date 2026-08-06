@@ -119,6 +119,142 @@ def test_candidate_rules_deduplicate_ticker_day_across_sources():
     assert unanimous.iloc[0]["covered_sources"] == 2
 
 
+def test_cluster_expiration_uses_second_listed_expiry_and_directional_contracts():
+    module = load_script("run_cipher_complete_observations")
+    contracts = [
+        {"symbol": "AAPL1C100", "expiration_date": "2026-08-07", "strike_price": 100.0, "type": "call"},
+        {"symbol": "AAPL2C100", "expiration_date": "2026-08-14", "strike_price": 100.0, "type": "call"},
+        {"symbol": "AAPL2C105", "expiration_date": "2026-08-14", "strike_price": 105.0, "type": "call"},
+        {"symbol": "AAPL2P100", "expiration_date": "2026-08-14", "strike_price": 100.0, "type": "put"},
+    ]
+    expiry, method = module.expiry_for_state({"market_session": "2026-08-05"}, contracts)
+    assert expiry == "2026-08-14"
+    assert method == "provider_second_listed_expiration"
+    contract = module.nearest_contract(
+        contracts,
+        expiry=expiry,
+        option_type="call",
+        strike_target=104.0,
+    )
+    assert contract["symbol"] == "AAPL2C105"
+
+
+def test_cluster_debit_spread_metrics_use_atm_long_and_target_short():
+    module = load_script("run_cipher_complete_observations")
+    result = module.spread_metrics(
+        {
+            "status": "matured_at_expiry",
+            "symbol": "LONG",
+            "entry_price": 4.0,
+            "mark_price": 7.0,
+        },
+        {
+            "status": "matured_at_expiry",
+            "symbol": "SHORT",
+            "entry_price": 1.0,
+            "mark_price": 2.0,
+        },
+    )
+    assert result["entry_debit"] == 3.0
+    assert result["mark_value"] == 5.0
+    assert round(result["end_return_pct"], 8) == round((5.0 / 3.0 - 1.0) * 100.0, 8)
+    assert result["profitable_at_mark"] is True
+
+
+def test_provider_open_matrix_covers_all_source_tickers():
+    module = load_script("run_cipher_complete_observations")
+    bars = {
+        "AAPL": [{"t": "2026-08-05T04:00:00Z", "o": 100.0}],
+        "SPY": [{"t": "2026-08-05T04:00:00Z", "o": 500.0}],
+    }
+    matrix = module.provider_open_matrix(bars)
+    assert list(matrix.columns) == ["AAPL", "SPY"]
+    assert matrix.at[pd.Timestamp("2026-08-05"), "AAPL"] == 100.0
+
+
+def test_cluster_target_distance_and_time_buckets_are_directional():
+    module = load_script("run_cipher_complete_observations")
+    bullish = module.directional_target_distance_pct(
+        {"direction": "BULLISH", "spot": 100.0, "target": 105.0}
+    )
+    bearish = module.directional_target_distance_pct(
+        {"direction": "BEARISH", "spot": 100.0, "target": 95.0}
+    )
+    assert round(bullish, 8) == 5.0
+    assert round(bearish, 8) == 5.0
+    assert module.target_distance_bucket(1.99) == "under_2_pct"
+    assert module.target_distance_bucket(2.0) == "2_to_5_pct"
+    assert module.target_distance_bucket(5.0) == "5_to_10_pct"
+    assert module.target_distance_bucket(10.01) == "over_10_pct"
+    assert module.signal_time_bucket("2026-08-05T13:45:00Z") == "0930_1029_et"
+    assert module.signal_time_bucket("2026-08-05T19:45:00Z") == "1530_1600_et"
+
+
+def test_option_path_diagnostics_preserve_peak_giveback_counts():
+    module = load_script("run_cipher_complete_observations")
+    rows = [
+        {"atm_option_maximum_return_pct": 50.0, "atm_option_end_return_pct": -5.0},
+        {"atm_option_maximum_return_pct": 120.0, "atm_option_end_return_pct": 40.0},
+        {"atm_option_maximum_return_pct": 10.0, "atm_option_end_return_pct": 2.0},
+    ]
+    result = module.option_path_diagnostics(rows, "atm_option")
+    assert result["available"] == 3
+    assert result["positive_peak_fraction"] == 1.0
+    assert result["thresholds"]["25"]["reached_count"] == 2
+    assert result["thresholds"]["25"]["gave_back_to_nonpositive_count"] == 1
+    assert result["thresholds"]["100"]["reached_count"] == 1
+
+
+def test_same_session_option_mark_uses_actual_intraday_session():
+    module = load_script("run_cipher_complete_observations")
+    signal_at = pd.Timestamp("2026-08-06T13:54:00Z")
+    bars = {
+        ("2026-08-06", "AAPL260814C00100000"): [
+            {"t": "2026-08-06T14:00:00Z", "o": 2.0, "h": 2.2, "l": 1.9, "c": 2.1},
+            {"t": "2026-08-06T14:20:00Z", "o": 2.1, "h": 2.5, "l": 2.0, "c": 2.4},
+        ]
+    }
+    result = module.option_leg_metrics(
+        symbol="AAPL260814C00100000",
+        signal_at=signal_at,
+        expiry="2026-08-14",
+        minute_bars=bars,
+        daily_bars={},
+        latest_market_session="2026-08-05",
+    )
+    assert result["mark_session"] == "2026-08-06"
+    assert result["mark_basis"] == "same_session_intraday"
+    assert result["mark_at"] == "2026-08-06T14:20:00+00:00"
+
+
+def test_live_complete_observations_are_all_date_and_expiry_aware():
+    payload = json.loads(
+        (ROOT / "data" / "governance" / "cipher_signal_only" / "latest_complete_observations.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    populations = payload["population_counts"]
+    cluster = payload["cluster_expiry_research"]
+    summary = cluster["summary"]
+    assert payload["mode"] == "complete_flash_agentic_cluster_observations"
+    assert populations["all_unique_episodes"] >= 5000
+    assert populations["all_daily_terminal_source_ticker_states"] >= 600
+    assert populations["cluster_expiry_records"] == summary["states"]
+    assert summary["expiration_reconstructed"] == summary["states"]
+    assert summary["matured_at_expiry"] + summary["pending_expiry"] == summary["states"]
+    assert summary["finalized_at_expiry"]["observations"] == summary["matured_at_expiry"]
+    assert summary["pending_mark_to_latest"]["observations"] == summary["pending_expiry"]
+    assert summary["completed_sessions_by_target_distance_bucket"]
+    assert summary["completed_sessions_by_signal_time_bucket"]
+    assert summary["option_path_diagnostics_completed_sessions"]["atm_option"]["available"] >= 1
+    assert summary["candidate_hypotheses_completed_sessions"]
+    assert summary["current_partial_sessions"]["observations"] >= 0
+    assert cluster["primary_horizon"] == "scanner_second_listed_option_expiration"
+    assert payload["automatic_promotion"] is False
+    assert payload["paper_or_live_execution"] is False
+    assert payload["execution_authority"] is False
+
+
 def test_live_signal_specifics_has_ticker_and_rule_boundaries():
     payload = json.loads(
         (ROOT / "data" / "governance" / "cipher_signal_only" / "latest_ticker_strategy_specifics.json").read_text(
@@ -159,6 +295,7 @@ def test_signal_only_sources_have_no_order_authority():
             "scripts/run_cipher_signal_only_loop.py",
             "scripts/manage_cipher_signal_only_loop.py",
             "scripts/run_cipher_signal_specifics.py",
+            "scripts/run_cipher_complete_observations.py",
         )
     )
     for forbidden in ("/v2/orders", "submit_order", "place_order", "TradingClient", "OrderClient"):

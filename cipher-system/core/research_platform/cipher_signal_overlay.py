@@ -138,6 +138,13 @@ def load_signal_episodes(capture_root: str | Path) -> list[dict[str, Any]]:
                 if not signal_id or scan_type not in SCAN_TYPES or first_seen is None:
                     continue
                 market_session, regular_hours = _regular_session(first_seen)
+                try:
+                    raw_card = json.loads(str(raw.get("raw_json") or "{}"))
+                except (TypeError, ValueError, json.JSONDecodeError):
+                    raw_card = {}
+                if not isinstance(raw_card, dict):
+                    raw_card = {}
+                rank_value = _float(raw_card.get("rank"))
                 episode = {
                     "signal_id": signal_id,
                     "signal_signature": str(raw.get("signal_signature") or ""),
@@ -147,6 +154,13 @@ def load_signal_episodes(capture_root: str | Path) -> list[dict[str, Any]]:
                     "setup_family": str(raw.get("setup_family") or "").strip().lower(),
                     "score": _float(raw.get("score")),
                     "strength": _float(raw.get("strength")),
+                    "rank": int(rank_value) if rank_value is not None else None,
+                    "declared_dte": raw_card.get("dte"),
+                    "declared_expiration": (
+                        raw_card.get("expiration")
+                        or raw_card.get("expiry")
+                        or raw_card.get("expiration_date")
+                    ),
                     "spot": _float(raw.get("spot")),
                     "target": _float(raw.get("target")),
                     "invalidation": _float(raw.get("invalidation")),
