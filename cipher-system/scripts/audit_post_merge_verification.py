@@ -252,7 +252,7 @@ def registry_evidence(path: Path = REGISTRY) -> dict[str, Any]:
         "holdout_dataset_manifests": dataset_count,
         "holdout_raw_objects": raw_count,
         "holdout_dataset_raw_links": links,
-        "holdout_canonical_lineage_present": dataset_count > 0 and raw_count > 0 and links > 0,
+        "holdout_canonical_lineage_present": dataset_count == 1 and raw_count == 744 and links == 744,
         "news_timestamp_invariants": {
             "total_events": int(event_timestamps[0] or 0),
             "received_before_publication": int(event_timestamps[1] or 0),
@@ -336,6 +336,63 @@ def atomic_write(path: Path, payload: Mapping[str, Any]) -> None:
     temporary = path.with_suffix(path.suffix + ".tmp")
     temporary.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     os.replace(temporary, path)
+
+
+def refresh_lineage_verification() -> dict[str, Any]:
+    """Refresh only the canonical-lineage portion of the durable audit.
+
+    Service-restart and route evidence remains the evidence captured by the
+    original post-merge run. This refresh is intentionally narrow and records
+    that those checks were not rerun while updating the registry-backed gap.
+    """
+
+    existing = read_json(OUTPUT)
+    if not existing:
+        raise FileNotFoundError(f"post-merge verification artifact is unavailable: {OUTPUT}")
+    registry = registry_evidence()
+    lineage_present = bool(registry.get("holdout_canonical_lineage_present"))
+    checks = dict(existing.get("checks") or {})
+    checks["holdout_canonical_lineage_complete"] = lineage_present
+    verdict = classify(checks, holdout_lineage_present=lineage_present)
+    refreshed = dict(existing)
+    refreshed.update(
+        {
+            "created_at": utc_now().isoformat(),
+            "verdict": verdict,
+            "verification_passed": verdict != "FAILED",
+            "checks": checks,
+            "canonical_registry": registry,
+            "known_canonical_lineage_gap": not lineage_present,
+            "known_gaps": []
+            if lineage_present
+            else [
+                {
+                    "id": "holdout_c_canonical_lineage_absent",
+                    "status": "open",
+                    "detail": (
+                        "The Holdout C panel does not yet have exactly one frozen dataset manifest, "
+                        "744 canonical raw-object entries, and 744 dataset-to-raw links."
+                    ),
+                }
+            ],
+            "lineage_refresh": {
+                "refreshed_at": utc_now().isoformat(),
+                "scope": "canonical_registry_lineage_only",
+                "service_restart_checks_rerun": False,
+                "route_checks_rerun": False,
+                "required_counts": {
+                    "dataset_manifests": 1,
+                    "raw_objects": 744,
+                    "dataset_raw_links": 744,
+                },
+            },
+        }
+    )
+    stamp = utc_now().strftime("%Y%m%dT%H%M%S%fZ")
+    timestamped = GOVERNANCE / f"post_merge_verification_lineage_refresh_{stamp}.json"
+    atomic_write(timestamped, refreshed)
+    atomic_write(OUTPUT, refreshed)
+    return refreshed
 
 
 def build_audit(
@@ -426,6 +483,7 @@ def build_audit(
         "canonical_registry": registry,
         "timestamp_fix": timestamps,
         "eight_layer_topology": stack,
+        "known_canonical_lineage_gap": not bool(registry.get("holdout_canonical_lineage_present")),
         "known_gaps": [
             {
                 "id": "holdout_c_canonical_lineage_absent",

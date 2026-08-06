@@ -75,9 +75,13 @@ def test_eight_layer_topology_and_noncausal_naming_survived_merge():
     assert evidence["stale_causal_attribution_source_present"] is False
 
 
-def test_post_merge_report_records_qualified_verdict():
+def test_post_merge_report_records_closed_lineage_and_open_origin_gap():
     report = (ROOT / "docs" / "post_merge_verification.md").read_text(encoding="utf-8")
-    assert "PASSED_WITH_KNOWN_CANONICAL_LINEAGE_GAP" in report
+    assert "`PASSED`" in report
     assert "11/12 strict independent origins" in report
-    assert "Holdout C dataset manifests: 0" in report
+    assert "Holdout C dataset manifests: 1" in report
+    assert "Holdout C raw-object entries: 744" in report
+    assert "Holdout C dataset-to-raw links: 744" in report
+    assert "canonical-lineage gap is therefore closed" in report
+    assert "one-origin shortfall remains" in report
     assert "attribution_and_anomaly_engine" in report

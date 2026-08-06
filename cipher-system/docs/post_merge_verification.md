@@ -14,12 +14,15 @@ new research or feature work. It addressed only three questions:
 
 ## Verdict
 
-`PASSED_WITH_KNOWN_CANONICAL_LINEAGE_GAP`
+`PASSED`
 
-All operational and semantic verification checks passed. The qualification is
-important: the Holdout C result is reproducible from the unified runtime's 744
-normalized Parquet partitions, but that panel is still absent from the
-canonical registry as a dataset/raw-object lineage.
+All operational and semantic verification checks passed. The original audit was
+initially qualified because the Holdout C panel was reproducible from 744
+Parquet partitions but absent from the canonical registry. The targeted
+canonical registration completed on 2026-08-04 with an exact match to the
+protected 11/12 baseline. The lineage-only refresh did not rerun the earlier
+service restart or route checks; it preserved that evidence and refreshed only
+the registry-backed gap state.
 
 ## 1. Service restart verification
 
@@ -86,16 +89,29 @@ The merge did not alter this number.
 
 ### Registry reconciliation
 
-The canonical merged registry has integrity status `ok`, but contains:
+The canonical merged registry has integrity status `ok` and now contains:
 
-- Holdout C dataset manifests: 0
-- Holdout C raw-object entries: 0
-- Holdout C dataset-to-raw links: 0
+- Holdout C dataset manifests: 1
+- Holdout C raw-object entries: 744
+- Holdout C dataset-to-raw links: 744
 
-Therefore the fresh origin count is a reproducible calculation over the unified
-runtime files, not a calculation derived from a complete registered lineage.
-This is the remaining canonical-lineage gap and is why the audit verdict is
-qualified rather than simply `PASSED`.
+Dataset ID:
+
+`ds_380c76da95f0c3787529c6b8`
+
+The registration transaction exposed the newly inserted dataset and links to a
+pre-commit validator, which reran the original price-only scope implementation
+and the original 52-session cohort implementation. It committed only after the
+partition identities/hashes, selected block, 638-session count, minimum common
+ticker count, all origin windows, and 11/12 result matched exactly.
+
+Registration evidence:
+
+`data/governance/holdout_c_canonical_dataset_registration.json`
+
+The canonical-lineage gap is therefore closed. The separate one-origin research
+gap remains open: the original panel still supplies 11 origins against 12
+required.
 
 ## 3. Point-in-time timestamp verification
 
@@ -153,9 +169,13 @@ Stable artifact:
 
 `data/governance/post_merge_verification.json`
 
-Timestamped artifact:
+Original timestamped artifact:
 
 `data/governance/post_merge_verification_20260804T000257266878Z.json`
+
+The stable artifact also records a later lineage-only refresh under a
+`post_merge_verification_lineage_refresh_*.json` timestamped artifact. That
+refresh explicitly states that service restart and route checks were not rerun.
 
 The audit records:
 
@@ -173,7 +193,7 @@ The audit records:
 ## Conclusion
 
 The source/runtime merge survives an actual systemd recovery cycle, the
-original-panel Holdout C result remains 11/12 after a fresh recount, and the
-timestamp/topology corrections survived the merge. The single newly confirmed
-open issue is not a changed origin count; it is that the Holdout C panel still
-lacks a complete canonical registered lineage.
+original-panel Holdout C result remains 11/12 after canonical re-derivation, and
+the timestamp/topology corrections survived the merge. The complete frozen
+lineage is now registered and the `known_canonical_lineage_gap` flag is false.
+The one-origin shortfall remains a separate unresolved research-data issue.

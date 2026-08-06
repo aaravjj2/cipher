@@ -181,15 +181,140 @@ def test_master_status_exposes_bounded_build_healing_without_source_authority():
     assert healing["execution_authority"] is False
 
 
-def test_master_status_exposes_qualified_post_merge_verification():
+def test_master_status_exposes_strategy_research_loop_without_promotion_authority():
+    module = load_script("update_master_end_state_status")
+    status = module.build_status()
+    research = status["operational_controls"]["strategy_research_loop"]
+    assert research["latest_status"] in {"completed", "catalog_exhausted_or_candidate_cap_reached"}
+    assert research["canonical_experiments"] >= 1
+    assert research["canonical_strategy_specs"] >= 1
+    assert research["promotion_events"] == 0
+    assert research["automatic_promotion"] is False
+    assert research["lean_replication"] is False
+    assert research["paper_or_live_execution"] is False
+    assert research["execution_authority"] is False
+    assert "new_strategy_candidates" in research["focus"]
+    assert "canonical_backtesting" in research["focus"]
+    assert "cross_sectional_and_market_neutral_research" in research["focus"]
+    assert "regime_and_ensemble_research" in research["focus"]
+    assert "historical_options_walk_forward" in research["focus"]
+    assert "locked_temporal_validation" in research["focus"]
+    assert "recent_2025_development" in research["focus"]
+    assert "rolling_monthly_2025_2026_selection" in research["focus"]
+    assert "prior_month_market_regime_gates" in research["focus"]
+    assert "immutable_recent_prospective_snapshots" in research["focus"]
+    assert "future_open_prospective_scoring" in research["focus"]
+    assert "exact_recent_component_concentration_audit" in research["focus"]
+    assert "cipher_flash_agentic_cluster_overlay" in research["focus"]
+    assert "after_close_recent_data_refresh" in research["focus"]
+    assert "broad_2020_2022_phase3_research" in research["focus"]
+    assert "cross_period_consensus" in research["focus"]
+    assert "locked_2026_ytd_validation" in research["focus"]
+    assert "transaction_cost_and_symbol_concentration_stress" in research["focus"]
+    assert "calendar_year_regime_stability" in research["focus"]
+    assert research["phase_two_enabled"] is True
+    assert research["seed_candidate_count"] == 84
+    assert research["candidate_cap"] == 240
+    recent = research["recent_regime_research"]
+    assert recent["status"] in {"completed", "not_due_inputs_unchanged"}
+    assert recent["summary"]["components"] == 14
+    assert recent["summary"]["selectors"] == 8
+    assert recent["summary"]["selector_passes"] == 0
+    assert recent["summary"]["gate_variants"] == 16
+    assert recent["summary"]["gate_passes"] == 0
+    assert recent["summary"]["latest_session"] >= "2026-08-04"
+    assert recent["prospective_snapshot"]["market_session"] >= "2026-08-04"
+    assert recent["prospective_evaluation"]["pending_observations"] >= 1
+    assert recent["prospective_evaluation"]["matured_observations"] >= 0
+    assert recent["prospective_evaluation"]["execution_authority"] is False
+    assert recent["component_robustness"]["summary"]["leave_one_symbol_out_tests"] == 38
+    assert recent["component_robustness"]["summary"]["leave_one_symbol_out_passed"] is True
+    assert recent["component_robustness"]["summary"]["concentration_flag"] is False
+    assert recent["component_robustness"]["execution_authority"] is False
+    assert recent["signal_overlay"]["policy_family"]["count"] == 6
+    assert recent["signal_overlay"]["capture_inventory"]["sessions"] >= 1
+    assert recent["signal_overlay"]["capture_inventory"]["historical_backtest_eligible"] is False
+    assert recent["signal_overlay"]["prospective_evaluation"]["pending_observations"] >= 1
+    assert recent["signal_overlay"]["prospective_evaluation"]["matured_observations"] >= 0
+    assert recent["signal_overlay"]["execution_authority"] is False
+    assert recent["research_role"] == "recent_2024_warmup_2025_2026_rolling_development_only_not_independent_holdout"
+    assert recent["automatic_promotion"] is False
+    assert recent["paper_or_live_execution"] is False
+    assert recent["execution_authority"] is False
+    phase3 = research["phase3_broad_research"]
+    assert phase3["tested_candidate_count_total"] >= 1
+    assert phase3["research_role"] == "broad_phase3_development_only"
+    assert phase3["automatic_promotion"] is False
+    assert phase3["execution_authority"] is False
+    locked = research["locked_temporal_validation"]
+    assert locked["summary"]["candidates"] == 92
+    assert locked["summary"]["passes"] == 3
+    assert locked["summary"]["errors"] == 0
+    assert locked["adaptive_feedback_allowed"] is False
+    assert locked["automatic_promotion"] is False
+    assert locked["execution_authority"] is False
+    ytd = research["locked_2026_ytd_validation"]
+    assert ytd["summary"]["candidates"] == 194
+    assert ytd["summary"]["passes"] == 5
+    assert ytd["summary"]["errors"] == 0
+    assert ytd["adaptive_feedback_allowed"] is False
+    assert ytd["automatic_promotion"] is False
+    assert ytd["execution_authority"] is False
+    robustness = research["ytd_2026_robustness"]
+    assert robustness["candidate_count"] == 6
+    assert robustness["robust_candidate_count"] == 1
+    assert robustness["automatic_promotion"] is False
+    assert robustness["execution_authority"] is False
+    annual = research["annual_regime_stability"]
+    assert annual["candidate_count"] == 15
+    assert annual["stable_candidate_count"] == 0
+    assert annual["automatic_promotion"] is False
+    assert annual["execution_authority"] is False
+    consensus = research["cross_period_consensus"]
+    assert consensus["identity_key"] == "candidate_id"
+    assert consensus["summary"]["passed_at_least_two"] >= 1
+    assert consensus["summary"]["passed_all_three"] == 0
+    assert consensus["summary"]["passed_all_four"] == 0
+    assert consensus["summary"]["tested_all_four"] >= 51
+    assert consensus["automatic_promotion"] is False
+    assert consensus["execution_authority"] is False
+    auxiliary = research["auxiliary_research"]
+    assert auxiliary["status"] in {"completed", "seeded_existing_reports", "not_due_inputs_unchanged"}
+    assert auxiliary["summary"]["regime_allocator_specs"] == 22
+    assert auxiliary["summary"]["regime_allocator_effective_hypotheses"] == 22
+    assert auxiliary["summary"]["regime_allocator_passes"] == 0
+    assert auxiliary["summary"]["factor_rotation_specs"] == 40
+    assert auxiliary["summary"]["factor_rotation_effective_hypotheses"] == 38
+    assert auxiliary["summary"]["factor_rotation_passes"] == 0
+    assert auxiliary["summary"]["factor_rotation_raw_lineage_freeze_verified"] is True
+    assert auxiliary["summary"]["dominant_failure_category"] == "benchmark_consistency"
+    assert auxiliary["allowed_claim"] == "no_auxiliary_strategy_clears_complete_contract"
+    assert auxiliary["automatic_promotion"] is False
+    assert auxiliary["source_code_auto_edit"] is False
+    assert auxiliary["execution_authority"] is False
+    options = research["options_research"]
+    assert options["automatic_promotion"] is False
+    assert options["execution_authority"] is False
+
+
+def test_master_status_exposes_completed_holdout_lineage_without_closing_origin_gap():
     module = load_script("update_master_end_state_status")
     status = module.build_status()
     verification = status["operational_controls"]["post_merge_verification"]
+    lineage = status["data_lineage"]["holdout_c"]
     assert verification["audit_available"] is True
-    assert verification["verdict"] == "PASSED_WITH_KNOWN_CANONICAL_LINEAGE_GAP"
+    assert verification["verdict"] == "PASSED"
     assert verification["passed"] is True
-    assert verification["known_canonical_lineage_gap"] is True
+    assert verification["known_canonical_lineage_gap"] is False
     assert verification["execution_authority"] is False
+    assert lineage["dataset_manifests"] == 1
+    assert lineage["raw_objects"] == 744
+    assert lineage["dataset_raw_links"] == 744
+    assert lineage["canonical_frozen_lineage_complete"] is True
+    assert lineage["strict_independent_origins"] == 11
+    assert lineage["required_strict_independent_origins"] == 12
+    assert lineage["origin_gap"] == 1
+    assert lineage["registration_closes_origin_gap"] is False
 
 
 def test_research_status_api_and_ui_are_read_only_surfaces():

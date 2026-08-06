@@ -28,6 +28,16 @@ The corrected window-wide eligibility test requires the same ticker set across
 all 52 sessions. Under that rule, the strongest block supplies 11 of the 12
 required origins.
 
+**Canonical lineage status: complete.** The protected 744-partition panel is now
+registered as one frozen dataset (`ds_380c76da95f0c3787529c6b8`) with exactly
+744 canonical raw-object records and 744 dataset-to-raw links. Every partition
+hash was checked against the protected scope artifact before registration. The
+transaction then reran the original scope and 52-session cohort implementations
+through the registered manifest and committed only after reproducing the same
+selected block, 638 sessions, minimum eight common tickers, and 11/12 origins.
+This closes the provability/lineage gap only; it does not close the one-origin
+shortfall.
+
 The remaining gap is concentrated in two otherwise complete 391-bar sessions:
 
 - `NVDA` on `2024-06-10`, rejected by the unchanged split-like close-ratio
@@ -71,6 +81,8 @@ Evidence:
 - `data/governance/holdout_c_rescue_v2_preregistration.json`
 - `data/governance/holdout_c_rescue_v3_preregistration.json`
 - `data/governance/holdout_c_alpaca_cohort_rescue_v3.json`
+- `data/governance/holdout_c_canonical_dataset_registration.json`
+- `data/governance/post_merge_verification.json`
 
 ## Interpretation
 

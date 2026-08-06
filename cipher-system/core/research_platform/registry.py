@@ -4,7 +4,7 @@ import json
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Iterator, Mapping
+from typing import Any, Callable, Iterator, Mapping, Sequence
 
 from .hashing import canonical_json
 from .models import (
@@ -306,6 +306,177 @@ class ResearchRegistry:
             return False
         db.execute(insert_sql, values)
         return True
+
+    @classmethod
+    def _audit_in_connection(cls, db: sqlite3.Connection, event: AuditEvent) -> bool:
+        payload = cls._payload(event)
+        return cls._immutable_insert(
+            db,
+            table="audit_events",
+            id_column="event_id",
+            entity_id=event.event_id,
+            payload_column="payload_json",
+            payload_json=payload,
+            insert_sql="""
+                insert into audit_events(
+                    event_id, event_type, entity_type, entity_id, occurred_at, actor, payload_json
+                ) values (?, ?, ?, ?, ?, ?, ?)
+            """,
+            values=(
+                event.event_id,
+                event.event_type,
+                event.entity_type,
+                event.entity_id,
+                event.occurred_at.isoformat(),
+                event.actor,
+                payload,
+            ),
+        )
+
+    def register_dataset_bundle(
+        self,
+        raw_manifests: Sequence[RawObjectManifest],
+        manifest: DatasetManifest,
+        *,
+        actor: str = "system",
+        precommit_validator: Callable[[sqlite3.Connection, DatasetManifest], None] | None = None,
+    ) -> dict[str, int | bool]:
+        """Atomically register raw objects, one dataset, and all lineage links.
+
+        The optional validator runs after the rows are visible inside the same
+        transaction but before commit. Raising from the validator rolls back the
+        complete bundle. This is intended for evidence migrations where a
+        canonical re-derivation must succeed before any lineage becomes durable.
+        """
+
+        raw_objects = tuple(raw_manifests)
+        raw_ids = tuple(item.raw_object_id for item in raw_objects)
+        if len(raw_ids) != len(set(raw_ids)):
+            raise ValueError("raw_manifests contains duplicate raw_object_id values")
+        if set(raw_ids) != set(manifest.raw_object_ids):
+            raise ValueError("dataset raw_object_ids do not exactly match the supplied raw manifests")
+
+        occurred_at = utc_now()
+        raw_inserted = 0
+        links_inserted = 0
+        with self.connect() as db:
+            for raw in raw_objects:
+                payload = self._payload(raw)
+                inserted = self._immutable_insert(
+                    db,
+                    table="raw_objects",
+                    id_column="raw_object_id",
+                    entity_id=raw.raw_object_id,
+                    payload_column="payload_json",
+                    payload_json=payload,
+                    insert_sql="""
+                        insert into raw_objects(
+                            raw_object_id, source, dataset, uri, checksum, checksum_method,
+                            size_bytes, received_at, available_at, ingestion_run_id,
+                            disposition, payload_json
+                        ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    values=(
+                        raw.raw_object_id,
+                        raw.source,
+                        raw.dataset,
+                        raw.uri,
+                        raw.checksum,
+                        raw.checksum_method,
+                        raw.size_bytes,
+                        raw.received_at.isoformat(),
+                        raw.available_at.isoformat(),
+                        raw.ingestion_run_id,
+                        raw.disposition.value,
+                        payload,
+                    ),
+                )
+                if inserted:
+                    raw_inserted += 1
+                    self._audit_in_connection(
+                        db,
+                        AuditEvent(
+                            event_type="RAW_OBJECT_REGISTERED",
+                            entity_type="raw_object",
+                            entity_id=raw.raw_object_id,
+                            occurred_at=occurred_at,
+                            actor=actor,
+                            payload={"source": raw.source, "dataset": raw.dataset, "uri": raw.uri},
+                        ),
+                    )
+
+            dataset_payload = self._payload(manifest)
+            dataset_inserted = self._immutable_insert(
+                db,
+                table="datasets",
+                id_column="dataset_id",
+                entity_id=manifest.dataset_id,
+                payload_column="payload_json",
+                payload_json=dataset_payload,
+                insert_sql="""
+                    insert into datasets(
+                        dataset_id, name, created_at, availability_cutoff, schema_name,
+                        frozen, quality_passed, payload_json
+                    ) values (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                values=(
+                    manifest.dataset_id,
+                    manifest.name,
+                    manifest.created_at.isoformat(),
+                    manifest.availability_cutoff.isoformat(),
+                    manifest.schema_name,
+                    1 if manifest.frozen else 0,
+                    1 if manifest.quality_passed else 0,
+                    dataset_payload,
+                ),
+            )
+            for raw_id in manifest.raw_object_ids:
+                cursor = db.execute(
+                    "insert or ignore into dataset_raw_objects(dataset_id, raw_object_id) values (?, ?)",
+                    (manifest.dataset_id, raw_id),
+                )
+                links_inserted += max(0, int(cursor.rowcount or 0))
+
+            if precommit_validator is not None:
+                precommit_validator(db, manifest)
+
+            if dataset_inserted:
+                self._audit_in_connection(
+                    db,
+                    AuditEvent(
+                        event_type="DATASET_REGISTERED",
+                        entity_type="dataset",
+                        entity_id=manifest.dataset_id,
+                        occurred_at=occurred_at,
+                        actor=actor,
+                        payload={"name": manifest.name, "quality_passed": manifest.quality_passed},
+                    ),
+                )
+            self._audit_in_connection(
+                db,
+                AuditEvent(
+                    event_type="DATASET_BUNDLE_VERIFIED_AND_REGISTERED",
+                    entity_type="dataset",
+                    entity_id=manifest.dataset_id,
+                    occurred_at=occurred_at,
+                    actor=actor,
+                    payload={
+                        "raw_object_count": len(raw_objects),
+                        "raw_objects_inserted": raw_inserted,
+                        "dataset_inserted": dataset_inserted,
+                        "links_inserted": links_inserted,
+                        "precommit_validator_used": precommit_validator is not None,
+                    },
+                ),
+            )
+
+        return {
+            "raw_object_count": len(raw_objects),
+            "raw_objects_inserted": raw_inserted,
+            "raw_objects_existing": len(raw_objects) - raw_inserted,
+            "dataset_inserted": dataset_inserted,
+            "links_inserted": links_inserted,
+        }
 
     def register_raw_object(self, manifest: RawObjectManifest) -> bool:
         payload = self._payload(manifest)
@@ -667,30 +838,8 @@ class ResearchRegistry:
             )
 
     def audit(self, event: AuditEvent) -> bool:
-        payload = self._payload(event)
         with self.connect() as db:
-            return self._immutable_insert(
-                db,
-                table="audit_events",
-                id_column="event_id",
-                entity_id=event.event_id,
-                payload_column="payload_json",
-                payload_json=payload,
-                insert_sql="""
-                    insert into audit_events(
-                        event_id, event_type, entity_type, entity_id, occurred_at, actor, payload_json
-                    ) values (?, ?, ?, ?, ?, ?, ?)
-                """,
-                values=(
-                    event.event_id,
-                    event.event_type,
-                    event.entity_type,
-                    event.entity_id,
-                    event.occurred_at.isoformat(),
-                    event.actor,
-                    payload,
-                ),
-            )
+            return self._audit_in_connection(db, event)
 
     def get_payload(self, table: str, id_column: str, entity_id: str, payload_column: str = "payload_json") -> dict[str, Any]:
         allowed = {
