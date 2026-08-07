@@ -563,6 +563,13 @@ export function NightVision({
    * placed (or the SPOT badge). Previously every label drew at its exact level y,
    * so clustered strikes near spot stacked on top of each other and the spot badge.
    */
+  // Prior-session levels, clipped to the visible price domain so off-screen lines
+  // do not draw labels at the chart edge.
+  const sessionLevels = useMemo(() => {
+    const all = nightVision?.session_levels?.levels ?? [];
+    return all.filter((l) => l.price > domainMin && l.price < domainMax);
+  }, [nightVision, domainMin, domainMax]);
+
   const LABEL_H = 18;
   const bandLevels = useMemo(() => {
     const all = nightVision?.levels ?? [];
@@ -921,6 +928,36 @@ export function NightVision({
                 {bandLevels.map((band) => (
                   <LevelBand key={`band-${band.lvl.price}`} band={band} />
                 ))}
+              </g>
+
+              {/* Prior-session and extended-hours levels (PDH/PDL, PWH/PWL, PMH/PML,
+                  post-market). Drawn as dashed neutral lines so they read as structure
+                  rather than exposure — they come from traded price, not from the
+                  options surface, and the two should not look alike. */}
+              <g clipPath="url(#nv-plot-clip)">
+                  {sessionLevels.map((lvl) => (
+                    <g key={`sess-${lvl.kind}-${lvl.price}`}>
+                      <line
+                        x1={MARGIN.left}
+                        x2={MARGIN.left + plotW}
+                        y1={priceToY(lvl.price)}
+                        y2={priceToY(lvl.price)}
+                        stroke="var(--text-mute)"
+                        strokeWidth={1}
+                        strokeDasharray="2 5"
+                        opacity={0.75}
+                      />
+                      <text
+                        x={MARGIN.left + 4}
+                        y={priceToY(lvl.price) - 3}
+                        fontSize={9}
+                        fontFamily="var(--font-mono)"
+                        fill="var(--text-mute)"
+                      >
+                        {lvl.label} {lvl.price}
+                      </text>
+                    </g>
+                  ))}
               </g>
 
               {/* Gamma flip — the level where net dealer gamma changes sign. Returned

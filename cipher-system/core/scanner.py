@@ -24,6 +24,8 @@ from pathlib import Path
 import numpy as np
 from scipy.signal import find_peaks
 
+import agentic_episodes
+
 # Cap-tier universe from data/optionable_universe_by_cap.json.
 # Confirmed against the real product's own Setup Scanner (paired comparison, 2026-08-06):
 # it scans ~578/580 of the same optionable universe (excludes only ~2 non-optionable
@@ -1579,13 +1581,56 @@ def analyze_ticker(matrix_fn, ticker, feed, mode, strategy, cluster_exp=None, ba
                     if obs.get("trend_up") or obs.get("trend_down"):
                         flash["regime"] = "trend"
 
-                entry = obs.get("entry_price")
-                tgt = flash.get("first_target")
-                if entry is not None and tgt is not None and spot is not None and tgt != entry:
-                    pct = (spot - entry) / (tgt - entry) * 100.0
-                    pct = max(0.0, min(100.0, pct))
-                    flash["target_progress_pct"] = round(pct, 1)
-                    flash["target_progress"] = f"{int(round(pct))}% to target"
+                # Episode tracking with target extension. The card's target used to
+                # be recomputed from live spot on every scan, so it retreated as
+                # price advanced and was never actually reached. An episode anchors
+                # the target, promotes to the next structural level once price
+                # trades through it, and closes on a structure flip — the behaviour
+                # the product describes on its own Micron walkthrough.
+                structure_flipped = any(
+                    "flipped" in str(event).lower() for event in (obs.get("events") or [])
+                )
+                walls = sorted(
+                    {float(p["strike"]) for p in (profile or []) if p.get("strike") is not None}
+                )
+                episode = agentic_episodes.update(
+                    ticker,
+                    direction=flash.get("direction") or model.get("direction"),
+                    setup=obs.get("setup") or flash.get("setup"),
+                    spot=spot,
+                    first_target=flash.get("first_target"),
+                    invalidation=flash.get("invalidation"),
+                    levels=walls,
+                    structure_flipped=structure_flipped,
+                )
+                if episode:
+                    flash["episode"] = {
+                        "entry_price": episode["entry_price"],
+                        "original_target": episode["original_target"],
+                        "target": episode["target"],
+                        "extension_count": episode["extension_count"],
+                        "extensions": episode["extensions"][-4:],
+                        "max_favorable": episode["max_favorable"],
+                        "move_pct": episode["move_pct"],
+                        "state": episode["state"],
+                        "close_reason": episode["close_reason"],
+                        "opened_at": episode["opened_at"],
+                    }
+                    # The anchored target is the one the card should show.
+                    flash["first_target"] = episode["target"]
+                    if episode.get("progress_pct") is not None:
+                        flash["target_progress_pct"] = episode["progress_pct"]
+                        flash["target_progress"] = f"{int(round(episode['progress_pct']))}% to target"
+                    if episode["extension_count"]:
+                        flash["target_extended"] = True
+                else:
+                    entry = obs.get("entry_price")
+                    tgt = flash.get("first_target")
+                    if entry is not None and tgt is not None and spot is not None and tgt != entry:
+                        pct = (spot - entry) / (tgt - entry) * 100.0
+                        pct = max(0.0, min(100.0, pct))
+                        flash["target_progress_pct"] = round(pct, 1)
+                        flash["target_progress"] = f"{int(round(pct))}% to target"
             clarity = None
             comps = flash.get("components") or {}
             # Proxy runway clarity from thin path + ATR quality (0–1).

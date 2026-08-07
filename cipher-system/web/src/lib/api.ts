@@ -174,6 +174,21 @@ export type RealXrayRung = {
   kind: RealLevelKind;
 };
 
+/** Prior-session / extended-hours reaction level (core/session_levels.py). */
+export type RealSessionLevel = {
+  kind: string;
+  /** Short chart label: PDH, PDL, PWH, PWL, PMH, PML, PostH, PostL. */
+  label: string;
+  price: number;
+};
+
+export type RealSessionLevels = {
+  levels: RealSessionLevel[];
+  session_dates?: { current?: string; previous_day?: string | null; postmarket_from?: string | null };
+  warnings?: string[];
+  note?: string;
+};
+
 export type RealNightVisionResponse = RealMatrixResponse & {
   summary: RealNightVisionSummary;
   levels: RealLevel[];
@@ -183,6 +198,10 @@ export type RealNightVisionResponse = RealMatrixResponse & {
   /** Heuristic short-horizon price path from the hedging surface. */
   ghost?: { step: number; price: number }[];
   ghost_note?: string;
+  /** Previous day/week and pre/post-market extremes drawn alongside the exposure levels. */
+  session_levels?: RealSessionLevels;
+  /** Today's pre-market range as a percent of the pre-market low. */
+  premarket_range_pct?: number | null;
 };
 
 export function fetchNightVision(ticker: string, signal?: AbortSignal): Promise<RealNightVisionResponse> {
@@ -482,6 +501,20 @@ export type FlashAgenticRow = {
   setup_family: string;
   regime: string;
   target_progress: string;
+  /** Anchored episode with target extension (core/agentic_episodes.py). */
+  episode?: {
+    entry_price: number;
+    original_target: number;
+    target: number;
+    extension_count: number;
+    extensions: { at: string; from: number; to: number; spot: number }[];
+    max_favorable: number;
+    move_pct: number;
+    state: string;
+    close_reason: string | null;
+    opened_at: string;
+  } | null;
+  target_extended?: boolean;
   latest_event: string;
   event_timeline: FlashAgenticEvent[];
   cipher_read: string;

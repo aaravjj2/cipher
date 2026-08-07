@@ -756,6 +756,15 @@ function FlashAgenticCard({ row }: { row: FlashAgenticRow }) {
           </div>
           <div className="text-[11px] mt-1 text-center" style={{ color: "var(--text-mute)" }}>
             {row.target_progress}
+            {/* An extended target means the first one was actually reached and the
+                move kept running — worth saying, since the bar alone would just
+                look like it reset. */}
+            {row.episode && row.episode.extension_count > 0 && (
+              <span style={{ color: "var(--gold)" }}>
+                {" · extended "}
+                {row.episode.extension_count}x from {row.episode.original_target}
+              </span>
+            )}
           </div>
         </div>
       )}

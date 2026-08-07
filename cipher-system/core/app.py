@@ -39,6 +39,7 @@ import historical_backtest
 import price_backtest
 import edge_backtest
 import intraday_backtest
+import session_levels
 from exposure import (
     number, parse_contract, gex, vex, model_gamma, model_vanna, oi_is_proxy,
     iv_is_ill_conditioned,
@@ -879,6 +880,23 @@ def night_vision(ticker, feed, depth, expiration_count, force=False):
         "Ghost projects the next ~15 minutes from the dealer-hedging surface (GEX magnets). "
         "Heuristic only — not a forecast. Most useful on SPY/QQQ."
     )
+
+    # Prior-session and extended-hours levels. The real product draws these on every
+    # chart next to the exposure levels and treats them as reaction zones; nothing
+    # here produced them before. Failures are non-fatal — a missing bar feed should
+    # cost the session lines, not the whole Night Vision payload.
+    try:
+        minute = bars(ticker, "5m", limit=1000).get("bars") or []
+        daily = bars(ticker, "1d", limit=30).get("bars") or []
+        payload["session_levels"] = session_levels.compute(minute, daily_bars=daily)
+        premarket_pct = session_levels.premarket_range_pct(minute)
+        payload["premarket_range_pct"] = (
+            round(premarket_pct, 4) if premarket_pct is not None else None
+        )
+    except Exception as exc:  # noqa: BLE001 - bar feed is optional context here
+        payload["session_levels"] = {"levels": [], "note": f"unavailable: {exc}"}
+        payload["premarket_range_pct"] = None
+
     return payload
 
 
