@@ -319,11 +319,16 @@ def test_master_status_exposes_completed_holdout_lineage_without_closing_origin_
 
 def test_research_status_api_and_ui_are_read_only_surfaces():
     app_source = (ROOT / "core" / "app.py").read_text(encoding="utf-8")
-    html_source = (ROOT / "app" / "public" / "index.html").read_text(encoding="utf-8")
-    js_source = (ROOT / "app" / "public" / "app.js").read_text(encoding="utf-8")
+    # Frontend SOURCE, not the built bundle: app/public is regenerable build output and
+    # the retired vanilla app.js no longer exists. The guarantee under test is that the
+    # disclosure is present in the shipped UI, wherever that UI currently lives.
+    ui_source = "".join(
+        path.read_text(encoding="utf-8", errors="ignore")
+        for path in sorted((ROOT / "web" / "src").rglob("*.tsx"))
+    )
     assert 'parsed.path == "/api/research-status"' in app_source
-    assert 'data-view="researchStatus"' in html_source
-    assert "function renderResearchStatus()" in js_source
-    assert "EXECUTION AUTHORITY" in js_source
-    assert "NONE" in js_source
+    assert 'data-view="researchStatus"' in ui_source
+    assert "fetchResearchStatus" in ui_source
+    assert "EXECUTION AUTHORITY" in ui_source
+    assert "NONE" in ui_source
     assert "/v2/orders" not in app_source

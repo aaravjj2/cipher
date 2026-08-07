@@ -46,59 +46,190 @@ def parse_contract(symbol):
     }
 
 
-def model_gamma(contract, spot):
+# Two hours, in years. Floors same-day time-to-expiry so Black-Scholes stays
+# solvable after the 16:00 ET close without pretending the contract is long-dated.
+_MIN_T_YEARS = 2.0 / (24 * 365)
+
+
+def _years_to_expiry(expiry):
+    """Years until the expiry's 20:00 UTC settlement.
+
+    Same-day expiries are floored rather than rejected. Returning None once the
+    close has passed zeroed every 0DTE cell in the grid: measured against the real
+    product across 10 tickers, 886 of 1,801 same-day cells were zero on our side
+    and non-zero on theirs, with none the other way round. The real product keeps
+    showing same-day exposure after the bell, and it is real — those contracts hold
+    open interest until settlement.
+
+    Only genuinely past dates return None.
+    """
+    try:
+        expiry_date = datetime.fromisoformat(expiry).replace(tzinfo=timezone.utc)
+    except (ValueError, TypeError):
+        return None
+    now = datetime.now(timezone.utc)
+    years = (expiry_date + timedelta(hours=20) - now).total_seconds() / (365.25 * 86400)
+    if years > 0:
+        return years
+    # Past 20:00 UTC on the expiry date itself — floor instead of dropping.
+    return _MIN_T_YEARS if expiry_date.date() >= now.date() else None
+
+
+# A mid at or below this is the exchange's minimum tick on a worthless option. It
+# carries no volatility information: inverting Black-Scholes on it is
+# ill-conditioned and returns whatever the solver's ceiling allows.
+MIN_INFORMATIVE_MID = 0.01
+
+
+def iv_is_ill_conditioned(contract):
+    """True when this contract's gamma rests on a quote that carries no vol signal.
+
+    A mid at or below the minimum tick means the option is worth essentially
+    nothing, and inverting Black-Scholes on it is ill-conditioned: a half-cent of
+    quote noise moves implied vol by hundreds of points, and the solved gamma with
+    it. These cells are not wrong on average — against the real product their
+    median ratio is 0.973 — but they are individually noisy, disagreeing by a
+    median 35% where cells with real quotes on both legs agree to 3.8%.
+
+    Substituting a neighbouring strike's IV, or the same strike's other leg, both
+    measured worse (see resolve_iv). So the value is kept and the weakness is
+    flagged, the same way gamma_modeled and oi_from_volume are.
+    """
+    mid = number(contract.get("mid"))
+    return mid is not None and 0 < mid <= MIN_INFORMATIVE_MID
+
+
+
+def _solve_own_iv(contract, spot):
+    """IV from this contract alone — feed value, else inverted from its own mid.
+
+    Not memoised on the contract. Chain contracts are cached and reused across
+    requests at different spots, so caching a solved IV on the dict leaks a stale
+    value into a later call — measured as a jump from 1.33/0.34/0.09% to
+    8.07/1.64/0.76% median error on the 4-7 / 8-30 / 31+ DTE buckets.
+    """
+
+    iv = number(contract.get("iv"))
+    if iv is not None:
+        if iv > 5:
+            iv /= 100.0
+        if iv > 0:
+            return iv
+    mid = number(contract.get("mid"))
+    strike = number(contract.get("strike"))
+    if mid is None or mid <= 0 or strike is None or not spot or spot <= 0 or strike <= 0:
+        return None
+    years = _years_to_expiry(contract.get("expiry"))
+    if years is None:
+        return None
+    import greeks
+
+    return greeks.implied_vol(mid, spot, strike, years, contract.get("type") == "call")
+
+
+
+def resolve_iv(contract, spot, strike_iv=None):
+    """Contract IV, solved from the mid price when the feed omits it.
+
+    Alpaca supplies `impliedVolatility` on exactly the same contracts it supplies
+    `greeks.gamma` for — measured on AAPL 2026-08-07, both were present on 0/166
+    same-day contracts and 52/124, 66/126, 81/166 on the next three expirations. So
+    the IV-based model_gamma() fallback below could never actually fire on a contract
+    that needed it. A `mid` price, by contrast, is quoted for ~100% of contracts, so
+    inverting Black-Scholes on the mid recovers usable IV for the whole chain.
+    Validated against Alpaca's own gamma where both exist (n=1068 AAPL contracts):
+    correlation 0.9998, median ratio 1.003.
+
+    IV comes from this contract's own quote and nothing else. Two substitutions
+    were tried against the real product and BOTH measured worse, so `strike_iv` is
+    accepted and ignored:
+
+      * Borrowing from neighbouring strikes degraded the 4-7 / 8-30 / 31+ DTE
+        buckets from 0.82 / 0.37 / 0.04% to 2.18 / 0.70 / 0.43% median error.
+      * Borrowing the other leg of the SAME strike, on put-call parity grounds,
+        degraded them from 1.33 / 0.34 / 0.09% to 8.28 / 1.60 / 0.76%. Parity fixes
+        one IV per strike for European options; American equity options carry
+        early-exercise, dividend and borrow effects that make the call and put legs
+        genuinely price at different implied vols, and the data says so.
+
+    See MIN_INFORMATIVE_MID for what is still imperfect and why it is disclosed
+    rather than patched.
+    """
+    return _solve_own_iv(contract, spot)
+
+
+def model_gamma(contract, spot, strike_iv=None):
     """Black-Scholes gamma estimate when the chain lacks a greek gamma.
 
-    Returns None when inputs are insufficient (no IV, expired, etc.).
+    Returns None when inputs are insufficient (no IV/mid, expired, etc.).
     """
-    iv, strike, expiry = number(contract.get("iv")), number(contract.get("strike")), contract.get("expiry")
-    if iv is None or strike is None or not expiry or spot <= 0 or strike <= 0:
+    strike, expiry = number(contract.get("strike")), contract.get("expiry")
+    if strike is None or not expiry or spot <= 0 or strike <= 0:
         return None
-    if iv > 5:
-        iv /= 100.0
-    if iv <= 0:
+    iv = resolve_iv(contract, spot, strike_iv)
+    if iv is None or iv <= 0:
         return None
-    try:
-        expiry_at = datetime.fromisoformat(expiry).replace(tzinfo=timezone.utc) + timedelta(hours=20)
-    except ValueError:
-        return None
-    years = (expiry_at - datetime.now(timezone.utc)).total_seconds() / (365.25 * 86400)
-    if years <= 0:
+    years = _years_to_expiry(expiry)
+    if years is None:
         return None
     d1 = (math.log(spot / strike) + (0.045 + 0.5 * iv * iv) * years) / (iv * math.sqrt(years))
     normal_pdf = math.exp(-0.5 * d1 * d1) / math.sqrt(2 * math.pi)
     return normal_pdf / (spot * iv * math.sqrt(years))
 
 
-def gex(contract, spot):
-    """Dollar-gamma * OI heuristic. Missing OI remains unknown (not dealer-verified)."""
-    gamma, oi = number(contract.get("gamma")), number(contract.get("open_interest"))
+def contract_size(contract):
+    """Contracts outstanding to weight exposure by: open interest, else session volume.
+
+    Alpaca returns `open_interest: null` for a minority of listed contracts (40 of 420
+    AAPL matrix cells on 2026-08-07). Those rendered as blank cells while the real
+    product showed a number, so it evidently falls back to same-day volume there.
+    Tested against the real grid on exactly those cells: several reproduce to the
+    dollar (277.5 Aug-12 -264 vs -264; 287.5 Aug-10 -7,200 vs -7,181) with a median
+    real/computed ratio of 0.925.
+
+    Volume is a PROXY for open interest, not the same quantity — it counts a day's
+    trades rather than outstanding contracts, and is used only when OI is genuinely
+    absent. Callers that need to distinguish the two should check `open_interest`
+    themselves; `oi_is_proxy()` reports which path was taken.
+    """
+    oi = number(contract.get("open_interest"))
+    if oi is not None:
+        return oi
+    return number(contract.get("volume"))
+
+
+def oi_is_proxy(contract):
+    """True when contract_size() had to substitute volume for absent open interest."""
+    return number(contract.get("open_interest")) is None and number(contract.get("volume")) is not None
+
+
+def gex(contract, spot, strike_iv=None):
+    """Dollar-gamma * OI heuristic. Missing OI falls back to volume (see contract_size);
+    missing both remains unknown, not zero. Not dealer-verified."""
+    gamma = number(contract.get("gamma"))
+    size = contract_size(contract)
     if gamma is None:
-        gamma = model_gamma(contract, spot)
-    if gamma is None or oi is None:
+        gamma = model_gamma(contract, spot, strike_iv)
+    if gamma is None or size is None:
         return None
-    magnitude = gamma * oi * 100 * spot * spot * 0.01
+    magnitude = gamma * size * 100 * spot * spot * 0.01
     return magnitude if contract["type"] == "call" else -magnitude
 
 
-def model_vanna(contract, spot):
+def model_vanna(contract, spot, strike_iv=None):
     """Black-Scholes vanna estimate.
 
     Vanna = d(delta)/d(sigma) = -phi(d1) * d2 / sigma.
     """
-    iv, strike, expiry = number(contract.get("iv")), number(contract.get("strike")), contract.get("expiry")
-    if iv is None or strike is None or not expiry or spot <= 0 or strike <= 0:
+    strike, expiry = number(contract.get("strike")), contract.get("expiry")
+    if strike is None or not expiry or spot <= 0 or strike <= 0:
         return None
-    if iv > 5:
-        iv /= 100.0
-    if iv <= 0:
+    # Same IV-coverage gap as model_gamma() — see resolve_iv().
+    iv = resolve_iv(contract, spot, strike_iv)
+    if iv is None or iv <= 0:
         return None
-    try:
-        expiry_at = datetime.fromisoformat(expiry).replace(tzinfo=timezone.utc) + timedelta(hours=20)
-    except ValueError:
-        return None
-    years = (expiry_at - datetime.now(timezone.utc)).total_seconds() / (365.25 * 86400)
-    if years <= 0:
+    years = _years_to_expiry(expiry)
+    if years is None:
         return None
     root = iv * math.sqrt(years)
     d1 = (math.log(spot / strike) + (0.045 + 0.5 * iv * iv) * years) / root
@@ -107,12 +238,12 @@ def model_vanna(contract, spot):
     return -normal_pdf * d2 / iv
 
 
-def vex(contract, spot):
+def vex(contract, spot, strike_iv=None):
     """Vanna * OI heuristic. Same sign convention as gex."""
-    vanna, oi = model_vanna(contract, spot), number(contract.get("open_interest"))
-    if vanna is None or oi is None:
+    vanna, size = model_vanna(contract, spot, strike_iv), contract_size(contract)
+    if vanna is None or size is None:
         return None
-    magnitude = vanna * oi * 100 * spot * 0.01
+    magnitude = vanna * size * 100 * spot * 0.01
     return magnitude if contract["type"] == "call" else -magnitude
 
 

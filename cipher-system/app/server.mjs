@@ -34,6 +34,12 @@ const mime = {
   ".json": "application/json; charset=utf-8",
   ".png": "image/png",
   ".svg": "image/svg+xml",
+  ".ico": "image/x-icon",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".woff2": "font/woff2",
+  ".woff": "font/woff",
+  ".txt": "text/plain; charset=utf-8",
 };
 const sendJson = (res, status, body) => {
   res.writeHead(status, {
@@ -87,9 +93,13 @@ const routes = {
   "/api/bars": "/api/bars",
   "/api/flow": "/api/flow",
   "/api/spyglass": "/api/flow",
+  "/api/flow/job": "/api/flow/job",
+  "/api/contract-search": "/api/contract-search",
   "/api/scan": "/api/scan",
   "/api/scanner": "/api/scan",
   "/api/scan/job": "/api/scan/job",
+  "/api/scan/history": "/api/scan/history",
+  "/api/flash-agentic/live": "/api/flash-agentic/live",
   "/api/scan/universe": "/api/scan/universe",
   "/api/ranking-lab": "/api/ranking-lab",
   "/api/weight-lab": "/api/weight-lab",

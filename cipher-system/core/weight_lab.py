@@ -817,6 +817,22 @@ def score_cluster_setup(
 
     Guarantees any quad outranks any triple, which outranks battle/golden/walls,
     regardless of factor values (tier_gap dominates).
+
+    2026-08-06: investigated matching the real product's displayed "Strength"
+    number directly (not just the tier ordering). Real values for same-tier
+    (triple) setups span a huge range — 72 to 260 across a 31-ticker paired
+    sample — far wider than this formula's factor_contrib term (0-20) can
+    produce once tier_gap floors each tier. Checked whether factor_contrib's
+    *inputs* (the weighted factor sum before the 20x scale) at least correlate
+    with the real number, to see if widening the scale would help: measured
+    correlation was 0.19 (essentially noise) against the same 31 tickers. That
+    rules out a simple rescale — the current factor vector (strength_norm,
+    proximity, side_above, oi_log, vacuum_thin, peak_count_norm, persistence,
+    momentum), all derived from public OI/GEX, does not predict the real
+    displayed magnitude. The real number likely reflects something not
+    reconstructable from public OI (e.g. actual dealer positioning) rather
+    than a differently-scaled version of the same public-data signal. Did not
+    change factor_contrib's scale — a rescale here would fit noise, not signal.
     """
     weights = weights or load_cluster_score_weights()
     order = list(weights.get("hard_rank_order") or _DEFAULT_CLUSTER_SCORE_WEIGHTS["hard_rank_order"])

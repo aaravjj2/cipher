@@ -35,3 +35,17 @@ cipher-system/app/node_modules/
 cipher-system/.scanner-ingest-token
 cipher-system/exports/**
 cipher-system/access-obsidian-complete-audit/access-obsidian-audit/scanner-extra-screenshots/XX*
+
+# Frontend (cipher-system/web) — source is tracked, build output is not.
+cipher-system/web/node_modules/
+cipher-system/web/.next/
+cipher-system/web/out/
+cipher-system/web/tsconfig.tsbuildinfo
+# Published build + rolling backups produced by cipher-system/web/deploy.sh.
+cipher-system/app/public/
+cipher-system/app/public_new/
+cipher-system/app/public_backup_*/
+cipher-system/app/public.legacy/
+
+# Backtest bar cache — 68 MB of re-fetchable Alpaca OHLCV
+cipher-system/data/bar_cache/

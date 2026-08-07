@@ -16,6 +16,7 @@ import json
 import threading
 import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
@@ -24,14 +25,17 @@ import numpy as np
 from scipy.signal import find_peaks
 
 # Cap-tier universe from data/optionable_universe_by_cap.json.
-# Cutoff: drop `small` (< $2B) and `unknown` (unverified / often delisted).
-# Keep mega (>=$200B) + large ($10B–<$200B) + medium ($2B–<$10B).
+# Confirmed against the real product's own Setup Scanner (paired comparison, 2026-08-06):
+# it scans ~578/580 of the same optionable universe (excludes only ~2 non-optionable
+# names), not the mega+large+medium-only cutoff this used to apply. Scanning all tiers
+# matches that — small/unknown-cap names may have thinner OI (noisier GEX), same
+# public-OI-heuristic caveat as everything else here, not a reason to drop them outright.
 _UNIVERSE_JSON = Path(__file__).resolve().parents[1] / "data" / "optionable_universe_by_cap.json"
-_UNIVERSE_INCLUDED_TIERS = ("mega", "large", "medium")
-_UNIVERSE_EXCLUDED_TIERS = ("small", "unknown")
+_UNIVERSE_INCLUDED_TIERS = ("mega", "large", "medium", "small", "unknown")
+_UNIVERSE_EXCLUDED_TIERS = ()
 UNIVERSE_CUTOFF = (
-    "Exclude small (<$2B) and unknown-cap/delisted names; "
-    "scan mega+large+medium only (market cap / AUM >= $2B)."
+    "Scans the full optionable universe (all cap tiers) — matches the real product's "
+    "near-total inclusion. Small/unknown-cap names may have thinner OI/noisier GEX."
 )
 
 # Fallback liquid subset if the JSON is missing (original faster list).
@@ -672,20 +676,42 @@ def _heuristic_cipher_score(model, profile, spot, peak_abs, ticker):
 
 # ── legacy cluster vocabulary (still used by Cluster scan) ──────────────
 
-QUAD_BAND_PCT = 0.03
-QUAD_BAND_DOWN_PCT = 0.07  # AO uses wider downside band (observed 4-6% in parity data)
+# Legacy constants from the pre-2026-08-07 cluster algorithm (spatial threshold walk
+# with gap tolerance). _detect_cluster_zones() was rewritten to a top-N-by-|VEX|
+# selection after a ground-truth capture showed the real product's clusters are always
+# exactly 3-4 strikes, frequently non-contiguous, with per-strike weights as low as
+# 3/100 — none of which a threshold walk can produce. These are retained only because
+# MIN_TRIPLE_PEAKS/MIN_QUAD_PEAKS are still the tier boundaries; the band/threshold
+# values below are NOT read by the current detector (see CLUSTER_BAND_PCT and
+# CLUSTER_RANK_KEY for the live ones) and are kept purely as a record of what was
+# tried, since several rounds of tuning were spent on them.
+_LEGACY_QUAD_BAND_PCT = 0.07
+_LEGACY_QUAD_BAND_DOWN_PCT = 0.07
+_LEGACY_ZONE_STRONG_FRAC = 0.34
+_LEGACY_ZONE_MAX_GAPS = 2
 BATTLE_PCT = 0.01
-# Stacked peaks in the upside band: 3 = triple, 4+ = quad.
+# Stacked peaks: 3 = triple, 4+ = quad. Still live — these set the tier boundary.
 MIN_TRIPLE_PEAKS = 3
 MIN_QUAD_PEAKS = 4
-# Backward-compat alias (older code treated 3+ as "quad").
 MIN_STACK_PEAKS = MIN_TRIPLE_PEAKS
-# Zone detection: |GEX| must be >= this fraction of side's peak to be "strong".
-# Tuned for AccessObsidian parity (lowered from 0.35 to 0.20 for better sensitivity).
-ZONE_STRONG_FRAC = 0.20
-# Allow this many consecutive thin strikes before ending a zone.
-# Increased from 1 to 2 for better cluster continuity.
-ZONE_MAX_GAPS = 2
+
+# ── live cluster/scan configuration ──────────────────────────────────────────
+# Upper bound on scanner fan-out. This is a shared per-account Alpaca rate budget,
+# not a CPU pool — raising it trades scan speed for 429 risk.
+SCAN_MAX_WORKERS = 4
+# How often (in completed tickers) a partial leaderboard is published to the job.
+PARTIAL_EMIT_EVERY = 10
+# Strike window fetched for cluster scans. Must stay wider than CLUSTER_BAND_*_PCT or
+# the selection runs off the end of the fetched chain.
+CLUSTER_DEPTH_PCT = 0.14
+# Cluster selection band around spot, and the per-strike metric ranked within it.
+# Both fitted against a 36-ticker ground-truth capture of the real product's own
+# cluster scan — see _detect_cluster_zones() for the evidence.
+CLUSTER_BAND_PCT = 0.10
+CLUSTER_BAND_DOWN_PCT = 0.10
+CLUSTER_RANK_KEY = "abs_vex"
+# 4th strike must be this fraction of the top strike's metric to promote triple -> quad.
+QUAD_WEIGHT_FRAC = 0.80
 
 CLUSTER_HINT = (
     "Cluster ranking: quad (4+ peaks) > triple (3 peaks) > battle > golden/walls. "
@@ -695,151 +721,167 @@ CLUSTER_HINT = (
 
 
 def _detect_cluster_zones(profile, spot):
-    """Detect cluster zones using AO-style spatial walk (tridentWallEdge).
+    """Detect cluster zones the way the real product does: the top N strikes by
+    |VEX| within a band on each side of spot.
 
-    Walk outward from spot on each side. A strike is "strong" if its |GEX|
-    is >= ZONE_STRONG_FRAC of the side's peak |GEX|. Allow up to ZONE_MAX_GAPS
-    consecutive thin strikes before ending the zone. Returns list of zone dicts.
+    2026-08-07 rewrite. The previous implementation walked outward from spot
+    collecting strikes whose |GEX| cleared a fraction of the side's peak, allowing a
+    couple of thin gaps. A ground-truth capture of the real product's own cluster scan
+    (data/accessobsidian_scans/, 36 tickers) exposed that as the wrong shape entirely:
 
-    This matches AccessObsidian's cluster detection which counts significant
-    strikes in a band rather than isolated peaks from find_peaks.
+      * Its published clusters are ALWAYS exactly 3 or 4 strikes, never more.
+      * Those strikes are frequently NOT contiguous (NET: 337.5, 340, 350 - a 10-point
+        gap), which a gap-limited walk cannot produce.
+      * Their per-strike weights run as low as 3/100 of the cluster's top strike, so no
+        "must clear X% of peak" threshold can be selecting them.
+      * Every row was 0DTE, i.e. the nearest expiration.
+
+    Fitting selection against those 36 ground-truth strike sets: ranking by |VEX|
+    inside a +/-10% band reproduced the exact strike set for 23/36 tickers (87% average
+    per-strike overlap) versus 12/36 for |GEX|, 15/36 for open interest. Choosing the
+    side by summed |VEX| then gives kind 34/36 and side 34/36 end to end.
+
+    Weight/strength/target semantics are exact, not fitted - confirmed 36/36 on the
+    capture: weight_i = 100 * metric_i / max(metric), Strength = sum(weights), and the
+    published CLUSTER TARGET is the top-weighted strike.
+
+    VEX beating GEX here is a selection result, not a claim that clusters "are" vanna;
+    the two are strongly collinear and the real weights correlate ~0.71 with either.
     """
     if not profile or not spot:
         return []
 
-    # Split profile into upside (above spot) and downside (below spot)
-    upside = [p for p in profile if p["strike"] > spot]
-    downside = [p for p in profile if p["strike"] < spot]
-    upside.sort(key=lambda p: p["strike"])   # nearest to spot first
-    downside.sort(key=lambda p: -p["strike"])  # nearest to spot first
-
     zones = []
+    for side_name, band_pct in (("above", CLUSTER_BAND_PCT), ("below", CLUSTER_BAND_DOWN_PCT)):
+        if side_name == "above":
+            banded = [p for p in profile if spot < p["strike"] <= spot * (1 + band_pct)]
+        else:
+            banded = [p for p in profile if spot > p["strike"] >= spot * (1 - band_pct)]
 
-    for side_name, side_strikes, band_pct in [
-        ("above", upside, QUAD_BAND_PCT),
-        ("below", downside, QUAD_BAND_DOWN_PCT),
-    ]:
-        if not side_strikes:
+        ranked = [p for p in banded if (p.get(CLUSTER_RANK_KEY) or 0.0) > 0]
+        ranked.sort(key=lambda p: -(p.get(CLUSTER_RANK_KEY) or 0.0))
+        top = ranked[:MIN_QUAD_PEAKS]
+        if len(top) < MIN_TRIPLE_PEAKS:
             continue
 
-        # Find peak |GEX| on this side
-        side_peak_abs = max(p["abs"] for p in side_strikes)
-        if side_peak_abs <= 0:
-            continue
+        peak_metric = (top[0].get(CLUSTER_RANK_KEY) or 0.0) or 1.0
+        # Promote to a quad only when the 4th strike is nearly as heavy as the top one;
+        # the real product's quads are rare (2 of 36) and tightly packed.
+        if len(top) >= MIN_QUAD_PEAKS and (top[MIN_QUAD_PEAKS - 1].get(CLUSTER_RANK_KEY) or 0.0) / peak_metric >= QUAD_WEIGHT_FRAC:
+            chosen = top[:MIN_QUAD_PEAKS]
+        else:
+            chosen = top[:MIN_TRIPLE_PEAKS]
 
-        strong_threshold = side_peak_abs * ZONE_STRONG_FRAC
+        kind = "quad" if len(chosen) >= MIN_QUAD_PEAKS else "triple"
+        metric_max = max((p.get(CLUSTER_RANK_KEY) or 0.0) for p in chosen) or 1.0
+        weights = [
+            {"strike": p["strike"], "weight": round(100.0 * (p.get(CLUSTER_RANK_KEY) or 0.0) / metric_max, 1)}
+            for p in chosen
+        ]
+        strikes_list = [p["strike"] for p in chosen]
+        abs_sum = sum(p["abs"] for p in chosen) or 1.0
+        # Raw metric sum drives side selection and tier sorting; the normalized
+        # weight sum is the number the product displays as "Strength".
+        rank_sum = sum((p.get(CLUSTER_RANK_KEY) or 0.0) for p in chosen)
+        target_strike = max(chosen, key=lambda p: (p.get(CLUSTER_RANK_KEY) or 0.0))["strike"]
 
-        # Walk outward from spot, collecting strong strikes.
-        # Skip initial thin strikes near spot — start collecting from first strong strike.
-        zone_strikes = []
-        consecutive_thin = 0
-        started = False  # Have we found the first strong strike?
-
-        for p in side_strikes:
-            # Check if within band
-            if side_name == "above":
-                if p["strike"] > spot * (1 + band_pct):
-                    break
-            else:
-                if p["strike"] < spot * (1 - band_pct):
-                    break
-
-            if p["abs"] >= strong_threshold:
-                zone_strikes.append(p)
-                consecutive_thin = 0
-                started = True
-            else:
-                if started:
-                    consecutive_thin += 1
-                    if consecutive_thin > ZONE_MAX_GAPS:
-                        break  # 2+ consecutive thin = zone boundary
-                # else: skip initial thin strikes before first strong
-
-        if len(zone_strikes) >= MIN_TRIPLE_PEAKS:
-            abs_sum = sum(p["abs"] for p in zone_strikes) or 1.0
-            kind = "quad" if len(zone_strikes) >= MIN_QUAD_PEAKS else "triple"
-            strikes_list = [p["strike"] for p in zone_strikes]
-            zones.append({
-                "kind": kind,
-                "label": (
-                    f"Quad cluster ({len(zone_strikes)} peaks, {side_name})"
-                    if kind == "quad"
-                    else f"Triple cluster ({len(zone_strikes)} peaks, {side_name})"
-                ),
-                "strikes": strikes_list,
-                "low": min(strikes_list),
-                "high": max(strikes_list),
-                "center": sum(p["strike"] * p["abs"] for p in zone_strikes) / abs_sum,
-                "net_gex": sum(p["net"] for p in zone_strikes),
-                "strength": abs_sum,
-                "oi": sum(p.get("oi") or 0.0 for p in zone_strikes),
-                "side": side_name,
-                "peak_count": len(zone_strikes),
-            })
+        zones.append({
+            "kind": kind,
+            "label": (
+                f"Quad cluster ({len(chosen)} peaks, {side_name})"
+                if kind == "quad"
+                else f"Triple cluster ({len(chosen)} peaks, {side_name})"
+            ),
+            "strikes": strikes_list,
+            "levels": weights,
+            "low": min(strikes_list),
+            "high": max(strikes_list),
+            "center": sum(p["strike"] * p["abs"] for p in chosen) / abs_sum,
+            "net_gex": sum(p["net"] for p in chosen),
+            "strength": rank_sum,
+            "strength_norm": round(sum(w["weight"] for w in weights), 1),
+            "target_strike": target_strike,
+            "oi": sum(p.get("oi") or 0.0 for p in chosen),
+            "side": side_name,
+            "peak_count": len(chosen),
+        })
 
     return zones
 
 
 def _detect_multi_exp_clusters(rows, expirations, spot, num_exps=3):
-    """Detect clusters that persist across multiple expirations.
-    
-    A persistent cluster appears in multiple expiration profiles, indicating
-    stronger dealer positioning that isn't just a single-exp artifact.
-    
-    Returns zones with an added 'persistence' field (1 to num_exps).
+    """Detect clusters using per-expiration zone detection, unioned across
+    expirations by side (best/most-peaked zone per side wins).
+
+    Returns zones with an added 'persistence' field (1 to num_exps) counting
+    how many individual expirations also show that zone's strikes as part of
+    a qualifying zone on the same side.
+
+    2026-08-06: previously re-ran zone detection on a profile with GEX
+    *summed* across all fetched expirations. That summing conflates
+    unrelated option chains (different DTEs) and was empirically shown, via
+    a 36-ticker paired comparison against the real product, to both (a)
+    fabricate zones that don't exist in any single expiration (e.g. MSTR
+    showed a spurious 4-peak "below" zone from summing, persistence=0,
+    while the real product reported a 3-peak "above" zone that IS present
+    unchanged in every individual expiration), and (b) silently drop
+    legitimate zones entirely for other tickers (e.g. WPM: each individual
+    expiration has a clean 6-7 peak "below" zone, but the summed profile's
+    relative peak ratios shift enough that none qualify — this ticker only
+    matched real data before because classify_setup() falls back to the
+    single-expiration zones when extra_zones is an empty list, which is an
+    incidental side effect of Python list-truthiness, not an intentional
+    fallback). Selecting the best per-expiration zone per side avoids both
+    failure modes and measurably improved the paired match rate.
     """
     if not rows or not expirations or not spot:
         return []
-    
-    # Detect zones for each expiration separately
-    exp_zones = []  # List of (exp_idx, zones) tuples
-    for exp_idx in range(min(num_exps, len(expirations))):
+
+    # Detect zones for each expiration separately (prefer nearest-gamma
+    # expiration — index 1 — since that's what the rest of the pipeline
+    # profiles on; index 0 and 2 only fill in when 1 finds nothing).
+    exp_zones = []  # List of (exp_idx, zones) tuples, in preference order
+    for exp_idx in [1, 0, 2]:
+        if exp_idx >= min(num_exps, len(expirations)):
+            continue
         profile = _strike_profile(rows, expiration_index=exp_idx, expirations=expirations)
         zones = _detect_cluster_zones(profile, spot)
         if zones:
             exp_zones.append((exp_idx, zones))
-    
+
     if not exp_zones:
         return []
-    
-    # Aggregate zones across expirations by strike proximity
-    # A strike is "persistent" if it appears in multiple expirations
-    strike_persistence = {}  # strike -> count of expirations where it's in a cluster
-    
+
+    # Track which strikes appear in a qualifying zone in each expiration,
+    # for persistence counting.
+    strike_exp_count = {}  # rounded strike -> count of expirations where it's in a zone
     for exp_idx, zones in exp_zones:
         for zone in zones:
             for strike in zone.get("strikes", []):
-                # Round to nearest 0.5 for matching across expirations
                 rounded = round(strike * 2) / 2
-                strike_persistence[rounded] = strike_persistence.get(rounded, 0) + 1
-    
-    # Find persistent strikes (appear in 2+ expirations)
-    persistent_strikes = {s for s, count in strike_persistence.items() if count >= 2}
-    
-    if not persistent_strikes:
-        # No persistent clusters - return zones from first expiration
-        return exp_zones[0][1] if exp_zones else []
-    
-    # Re-detect zones using the combined (all-expiration) profile
-    # but annotate with persistence info
-    combined_profile = _strike_profile(rows, expiration_index=None, expirations=expirations)
-    combined_zones = _detect_cluster_zones(combined_profile, spot)
-    
-    # Add persistence to each zone
-    for zone in combined_zones:
+                strike_exp_count[rounded] = strike_exp_count.get(rounded, 0) + 1
+
+    # Union: best (most peaks) zone per side across all expirations.
+    best_by_side = {}
+    for exp_idx, zones in exp_zones:
+        for zone in zones:
+            side = zone.get("side")
+            if side not in best_by_side or zone["peak_count"] > best_by_side[side]["peak_count"]:
+                best_by_side[side] = zone
+
+    result_zones = list(best_by_side.values())
+    for zone in result_zones:
         zone_strikes = zone.get("strikes", [])
         persistent_count = sum(
-            1 for s in zone_strikes 
-            if round(s * 2) / 2 in persistent_strikes
+            1 for s in zone_strikes
+            if strike_exp_count.get(round(s * 2) / 2, 0) >= 2
         )
         zone["persistence"] = persistent_count
         zone["persistence_ratio"] = persistent_count / max(len(zone_strikes), 1)
-        
-        # Boost label for persistent clusters
         if persistent_count >= 2:
             zone["label"] = zone["label"].replace("cluster", f"persistent cluster ({persistent_count} exps)")
-    
-    return combined_zones
+
+    return result_zones
 
 
 def classify_setup(profile, peaks, summary, spot, extra_zones=None):
@@ -1038,7 +1080,152 @@ def _signal_geometry(spot, direction, target, invalidation, *, minimum_reward_ri
     }
 
 
-def _flash_components(model, spot, profile, day_change_pct):
+def _flash_gamma_regime(profile, spot):
+    """Classify near-spot gamma as 'pin' (net-positive, dealers dampen movement) or
+    'mixed' (balanced/negative, two-sided). Standard dealer-gamma heuristic: strongly
+    net-positive GEX near spot implies dealer hedging that pins price; balanced or
+    negative implies no such dampening.
+    """
+    if not profile or not spot:
+        return "mixed"
+    # Read the profile defensively. _strike_profile() always supplies net/abs, but
+    # this helper is reachable with hand-built or partial profiles (the scanner
+    # safety tests pass one with only strike/abs), and a KeyError here propagates
+    # out of _flash_components and fails the whole ticker rather than degrading.
+    near = [p for p in profile if p.get("strike") is not None and abs(p["strike"] - spot) / spot <= 0.02]
+    if not near:
+        return "mixed"
+    net_sum = sum(float(p.get("net") or 0.0) for p in near)
+    abs_sum = sum(float(p.get("abs") or 0.0) for p in near) or 1.0
+    return "pin" if (net_sum / abs_sum) >= 0.35 else "mixed"
+
+
+def _flash_vwap(ticker, spot, bars_fn):
+    """Session VWAP from today's intraday bars, if a bars_fn was supplied."""
+    if bars_fn is None or not spot:
+        return None, None
+    try:
+        payload = bars_fn(ticker, "5m", limit=150)
+        all_bars = payload.get("bars") or []
+        if not all_bars:
+            return None, None
+        # Anchor to the most recent bar's date rather than UTC "today" — after-hours,
+        # UTC has already rolled to the next calendar day while the latest session's
+        # bars are still dated the prior UTC date (same boundary issue as expirations
+        # in matrix() above).
+        session_date = str(all_bars[-1].get("time") or "")[:10]
+        todays_bars = [b for b in all_bars if str(b.get("time") or "")[:10] == session_date]
+        if not todays_bars:
+            return None, None
+        pv_sum = 0.0
+        vol_sum = 0.0
+        for b in todays_bars:
+            hi, lo, close, vol = b.get("high"), b.get("low"), b.get("close"), b.get("volume") or 0
+            if hi is None or lo is None or close is None or vol <= 0:
+                continue
+            pv_sum += ((hi + lo + close) / 3.0) * vol
+            vol_sum += vol
+        if vol_sum <= 0:
+            return None, None
+        vwap = pv_sum / vol_sum
+        return round(vwap, 4), ("above" if spot >= vwap else "below")
+    except Exception:
+        return None, None
+
+
+def _flash_dte(expirations):
+    """Days to the nearest fetched expiration (flash always profiles the nearest one)."""
+    if not expirations:
+        return None
+    label = expirations[0] if isinstance(expirations[0], str) else (expirations[0].get("expiration") or expirations[0].get("date"))
+    if not label:
+        return None
+    try:
+        exp_date = datetime.strptime(str(label)[:10], "%Y-%m-%d").date()
+    except ValueError:
+        return None
+    today = datetime.now(timezone.utc).date()
+    return max(0, (exp_date - today).days)
+
+
+def _edge_local(summary):
+    """Conviction 0-100 from Obsidian detector state. Local metric, not the real
+    product's Edge — see the note at its call site."""
+    if not summary:
+        return None
+    score = 50.0
+    # A deeper collapse off a significant run is a stronger structural signal.
+    if summary.get("significant"):
+        score += 15.0
+    score += 25.0 * float(summary.get("collapse_pct") or 0.0)
+    # Trend agreement with the momentum bias.
+    bias = summary.get("bias")
+    if (bias == "BULLISH" and summary.get("trend_up")) or (bias == "BEARISH" and summary.get("trend_down")):
+        score += 10.0
+    # A live coil is compression, not yet conviction.
+    if summary.get("coiling"):
+        score -= 5.0
+    return round(max(0.0, min(100.0, score)), 1)
+
+
+def _obsidian_state(ticker, bars_fn, timeframe="5m", limit=300):
+    """Run the Obsidian EOD detector for a ticker and shape it for a Flash card.
+
+    Returns None when bars are unavailable — the caller keeps its GEX-only view
+    rather than inventing a momentum narrative it cannot support.
+    """
+    if bars_fn is None or not ticker:
+        return None
+    try:
+        from . import obsidian_eod
+    except ImportError:
+        import obsidian_eod
+    try:
+        payload = bars_fn(ticker, timeframe, limit=limit)
+        bars = (payload or {}).get("bars") or []
+        if len(bars) < 60:
+            return None
+        # Full Session: the scanner runs all day, so gating signals to the final
+        # 30 minutes would leave every card blank outside that window. The EOD
+        # window is still reported via `in_window`/`hot` for callers that care.
+        states, summary = obsidian_eod.compute(bars, {"mode": "Full Session"})
+        if not states:
+            return None
+        events = obsidian_eod.timeline(states, limit=5, bar_minutes=5)
+        latest = summary.get("latest_event") or ""
+        setup_label = summary.get("setup_label") or ""
+        setup_name = summary.get("setup") or ""
+        return {
+            "setup": setup_label,
+            "setup_family": setup_name.lower().replace(" ", "_") if setup_name else "",
+            "setup_id": summary.get("setup_id"),
+            "event_timeline": events,
+            "latest_event": latest,
+            "coiling": bool(summary.get("coiling")),
+            "momentum_bias": summary.get("bias"),
+            "collapse_pct": summary.get("collapse_pct"),
+            "significant": bool(summary.get("significant")),
+            "eod_in_window": bool(summary.get("in_window")),
+            "eod_hot": bool(summary.get("hot")),
+            "trend_up": bool(summary.get("trend_up")),
+            "trend_down": bool(summary.get("trend_down")),
+            # Local conviction composite. The real product shows an "Edge" number
+            # (observed 91-106) that is CONSTANT for the life of a setup episode —
+            # 27 of 30 captured (ticker, setup, entry) episodes carried a single
+            # value — so it is computed once at surface time. 30 episodes was not
+            # enough to recover the actual formula, so this is deliberately a
+            # DIFFERENT field name and is surfaced as "Edge*" with a disclosure:
+            # it is our own composite over signals we can defend (collapse depth,
+            # participation, trend agreement), NOT a reproduction of their Edge.
+            "edge_local": _edge_local(summary),
+            "entry_price": summary.get("entry_price"),
+            "entry_bars_ago": summary.get("entry_bars_ago"),
+        }
+    except Exception:
+        return None
+
+
+def _flash_components(model, spot, profile, day_change_pct, *, ticker=None, expirations=None, bars_fn=None):
     """Intraday Flash score components from nearest-exp surface (audit weights)."""
     if not model or not spot or not profile:
         return None
@@ -1136,6 +1323,19 @@ def _flash_components(model, spot, profile, day_change_pct):
         ):
             state = "completed"
 
+    trigger_kind = "floor" if direction == "BULLISH" else "ceiling"
+    stretch_kind = "ceiling" if direction == "BULLISH" else "floor"
+    trigger_dist = abs(spot - trigger) / spot if trigger is not None else None
+    trigger_proximity = (
+        "at" if trigger_dist is not None and trigger_dist <= 0.0025
+        else "nearing" if trigger_dist is not None and trigger_dist <= 0.008
+        else None
+    )
+
+    regime = _flash_gamma_regime(profile, spot)
+    vwap, vwap_side = _flash_vwap(ticker, spot, bars_fn)
+    dte = _flash_dte(expirations)
+
     return {
         "score": round(max(0.0, min(100.0, score)), 1),
         "targets": [round(t1, 2), round(t2, 2)],
@@ -1145,6 +1345,13 @@ def _flash_components(model, spot, profile, day_change_pct):
         "invalidation": invalidation,
         "agent_state": state,
         "trigger": trigger,
+        "trigger_kind": trigger_kind,
+        "trigger_proximity": trigger_proximity,
+        "stretch_kind": stretch_kind,
+        "regime": regime,
+        "vwap": vwap,
+        "vwap_side": vwap_side,
+        "dte": dte,
         **geometry,
         "components": {
             "gex_fc": round(gex_fc, 3),
@@ -1160,7 +1367,40 @@ def _flash_components(model, spot, profile, day_change_pct):
     }
 
 
-def analyze_ticker(matrix_fn, ticker, feed, mode, strategy, cluster_exp=None):
+def _cluster_strength(primary, profile):
+    """Displayed cluster Strength: 100 x sum(|GEX_i| / chain_peak_|GEX|) over the
+    cluster's strikes.
+
+    2026-08-06: replaces the previous value, which was weight_lab's abs_score — a
+    tier-offset sort key ((n_tiers - tier_index) * tier_gap + kind_boost + factors).
+    That number correlated with the real product's published Strength at only ~0.19
+    (noise) across a 36-ticker paired sample, and its tier flooring made every triple
+    land near ~250 while real triples span 72-260.
+
+    This per-strike normalized sum correlates at ~0.68 on the same sample and is
+    structurally right: each strike contributes at most 1.0 (100 points), so a triple
+    tops out near 300 and a quad near 400 — matching the observed real ranges
+    (triples 72-260, quads 254-304). Absolute calibration is still imperfect (a linear
+    fit suggested real ~= 0.34*this + 122, MAE ~32), but that fit is 2 params on 22
+    points, so it is deliberately NOT applied here — an earlier calibration in this
+    same effort was fit on 6 tickers and failed to generalize at 36.
+    """
+    if not primary:
+        return None
+    # Precomputed in _detect_cluster_zones against the zone's own expiration profile.
+    norm = primary.get("strength_norm")
+    if norm is not None:
+        return norm
+    # Fallback for non-zone setups (golden/battle/walls), which carry a raw |GEX|.
+    if not profile:
+        return None
+    chain_peak = max((p["abs"] for p in profile), default=0.0)
+    if chain_peak <= 0:
+        return None
+    return round(100.0 * float(primary.get("strength") or 0.0) / chain_peak, 1)
+
+
+def analyze_ticker(matrix_fn, ticker, feed, mode, strategy, cluster_exp=None, bars_fn=None):
     cfg = MODE_CONFIG.get(mode, MODE_CONFIG["short"])
     # Flash always uses nearest expiration depth.
     flash_mode = strategy in {"flash", "flash_index", "flash_agentic"}
@@ -1171,18 +1411,53 @@ def analyze_ticker(matrix_fn, ticker, feed, mode, strategy, cluster_exp=None):
         exp_count = max(int(cfg.get("expirations") or 1), 6)
         profile_exp = cluster_exp
     elif strategy == "cluster":
-        # Cluster detection requires gamma — 0DTE has no gamma.
-        # Fetch 3 expirations and use the 2nd one (index 1) which has gamma data.
+        # Fetch 3 expirations (the multi-exp union in _detect_multi_exp_clusters needs
+        # them) but profile the NEAREST one.
+        #
+        # 2026-08-06: this was index 1, on the theory that index 0 is a gamma-less 0DTE.
+        # That theory was wrong on two counts. (a) matrix() now filters out already-
+        # expired contracts, so index 0 is a live expiration, not a dead 0DTE. (b) A
+        # paired test against the real product's published CLUSTER TARGET strike on 36
+        # tickers matched index 0 roughly twice as often as index 1 (22/36 vs 10/36),
+        # and the cluster-strength correlation is likewise materially higher on index 0.
+        # The real product is clearly reading the nearest expiration.
+        # Kept at 3 even though only index 0 is profiled. Dropping to 1 is a plausible
+        # speedup (it narrows the snapshot window), but it could NOT be validated: by
+        # the time it was tried the 36-ticker ground-truth capture had gone stale —
+        # the market had reopened and spot had drifted a mean of 1.8% (max 6.4%,
+        # 19/31 tickers over 1%), which moves the clusters themselves. Both the "with"
+        # and "without" measurements were therefore meaningless. Holding at 3, the
+        # value that measured kind 31/36 + side 31/36 against a same-moment capture.
+        # Retest against a fresh paired capture before changing.
         exp_count = 3
-        profile_exp = 1  # Use 2nd expiration (index 1)
+        # 0DTE. The ground-truth capture of the real product's cluster scan reported
+        # "0DTE" on all 36 rows, and fitting strike selection confirms it: exact
+        # strike-set matches were 23/36 on expiration index 0 versus 6/36 on index 1.
+        # This was previously index 1 because Alpaca publishes no gamma for same-day
+        # contracts, leaving index 0 an all-zero column — resolve_iv()/model_gamma()
+        # in exposure.py now reconstruct it, so index 0 is usable.
+        profile_exp = 0
     else:
         exp_count = 1
         profile_exp = "nearest"
 
+    # Cluster scans need a wider strike window than the default 6%: on a 36-ticker
+    # paired comparison, 8 of the real product's published CLUSTER TARGET strikes
+    # (ENPH +7.3%, APA +7.9%, INTC +7.8%, STM -7.1%, KGC -6.8%, ONON +7.1%,
+    # APLD +6.5%, BP +6.6%) sat OUTSIDE ±6% and so were never even fetched — those
+    # tickers could not possibly be matched, and showed up as "missing" locally.
+    # 12% covers every observed real target with margin.
+    if flash_mode:
+        depth = 0.06
+    elif strategy == "cluster":
+        depth = CLUSTER_DEPTH_PCT
+    else:
+        depth = cfg["depth"]
+
     payload = matrix_fn(
         ticker,
         feed,
-        0.06 if flash_mode else cfg["depth"],
+        depth,
         exp_count,
         force=False,
         chain_pages=cfg.get("pages", 2),
@@ -1198,32 +1473,69 @@ def analyze_ticker(matrix_fn, ticker, feed, mode, strategy, cluster_exp=None):
     peaks = _local_peaks(profile)
     model = cipher_model_from_profile(ticker, profile, peaks, summary, spot)
     
-    # For cluster strategy, use multi-expiration detection for better persistence info
-    if strategy == "cluster" and exp_count >= 3:
-        multi_exp_zones = _detect_multi_exp_clusters(
-            payload.get("rows"), expirations, spot, num_exps=exp_count
-        )
-        # Pass multi-exp zones to classify_setup via a modified profile analysis
-        setups, primary = classify_setup(profile, peaks, summary, spot, extra_zones=multi_exp_zones)
-    else:
-        setups, primary = classify_setup(profile, peaks, summary, spot)
+    # Clusters come from the 0DTE profile alone. The multi-expiration union that used
+    # to run here contradicted the ground-truth capture (every real cluster row is
+    # 0DTE), and unioning a later expiration's zone in would replace the correct
+    # 0DTE cluster with one the real product never reports. _detect_multi_exp_clusters
+    # is retained for callers that specifically want persistence across expirations.
+    setups, primary = classify_setup(profile, peaks, summary, spot)
     
     day_chg = (payload.get("quote") or {}).get("day_change_pct")
 
     if not model:
-        return {
-            "ticker": ticker,
-            "spot": spot,
-            "score": 0.0,
-            "abs_score": 0.0,
-            "direction": "NEUTRAL",
-            "setup_kind": None,
+        # Cluster detection now ranks by |VEX|, but qualification still went through
+        # cipher_model_from_profile(), which needs prominent |GEX| peaks. A name with
+        # a flat/thin GEX surface but a clean VEX cluster was therefore dropped
+        # entirely: U, TMUS and TPR each produced 2 valid zones yet returned
+        # score=0/supports=None and never reached the results list, showing up as
+        # "missing" against the real product's own scan. Fall back to a minimal
+        # model built from the zones so the cluster path no longer depends on a
+        # signal it stopped using.
+        cluster_zones = _detect_cluster_zones(profile, spot) if strategy == "cluster" else []
+        if not cluster_zones:
+            return {
+                "ticker": ticker,
+                "spot": spot,
+                "score": 0.0,
+                "abs_score": 0.0,
+                "direction": "NEUTRAL",
+                "setup_kind": None,
+            }
+        primary_zone = sorted(
+            cluster_zones, key=lambda z: (0 if z["kind"] == "quad" else 1, -z["strength"])
+        )[0]
+        above = primary_zone["side"] == "above"
+        model = {
+            "score": 50.0,
+            "direction": "BULLISH" if above else "BEARISH",
+            "supports": [] if above else primary_zone["strikes"],
+            "resistances": primary_zone["strikes"] if above else [],
+            "pull_target": primary_zone.get("target_strike") or primary_zone["center"],
+            "vacuum_targets": [],
+            "vacuum_count": 0,
+            "close_under": None,
+            "reclaim": None,
+            "first_support": (min(primary_zone["strikes"]) if not above else None),
+            "first_resistance": (min(primary_zone["strikes"]) if above else None),
+            "last_vacuum_target": None,
+            "support_count": 0 if above else len(primary_zone["strikes"]),
+            "resistance_count": len(primary_zone["strikes"]) if above else 0,
+            "golden": primary_zone.get("target_strike"),
+            "call_wall": None,
+            "put_wall": None,
+            "gamma_flip": None,
+            "read": (
+                f"{primary_zone['label']} — VEX-derived cluster; the GEX surface was too "
+                "flat to fit the Cipher model, so structural levels are cluster-only."
+            ),
         }
+        setups, primary = cluster_zones, primary_zone
 
     score = model["score"]
     flash = None
     agent_state = None
     score_source = None
+    cluster_strength = None
     if strategy == "liquidity":
         score = round(_liq_score(model, spot, profile), 1)
     elif strategy == "cluster":
@@ -1232,6 +1544,7 @@ def analyze_ticker(matrix_fn, ticker, feed, mode, strategy, cluster_exp=None):
         score_source = cluster_score.get("score_source") or "cluster_weights"
         # Keep abs_score for hard-tier sort (quad always above triple).
         model_abs = float(cluster_score.get("abs_score") or score)
+        cluster_strength = _cluster_strength(primary, profile)
         # Add GEX forecast for cluster strikes (if history available).
         # GEX is a public-OI heuristic — not verified dealer positioning.
         if primary and primary.get("strikes"):
@@ -1243,8 +1556,36 @@ def analyze_ticker(matrix_fn, ticker, feed, mode, strategy, cluster_exp=None):
             except Exception:
                 pass  # Forecast is optional enhancement
     elif flash_mode:
-        flash = _flash_components(model, spot, profile, day_chg)
+        flash = _flash_components(model, spot, profile, day_chg, ticker=ticker, expirations=expirations, bars_fn=bars_fn)
         if flash:
+            # Momentum-structure layer from the Obsidian EOD detector (the original
+            # TradingView indicator this product's intraday engine is built on).
+            # It supplies the setup name, the event timeline, and the coil/release
+            # state that the real product's Flash Agentic cards are built from —
+            # previously those fields were absent and the cards had no narrative.
+            obs = _obsidian_state(ticker, bars_fn)
+            if obs:
+                flash.update(obs)
+                # Progress toward the first target, anchored on the price at which the
+                # setup surfaced (not the pivot). Formula taken from the real product's
+                # own cards: clamp((spot - entry) / (target - entry), 0, 1) matched 118
+                # of 122 captured values to within 4 points.
+                # Regime has three states in the real product — Pin / Trend / Mixed —
+                # but only Pin and Mixed were ever emitted here, so a decisively
+                # trending tape was mislabelled "Mixed". Gamma pinning still wins
+                # (dealers dampening price is the dominant regime), otherwise a
+                # decisive EMA slope from the Obsidian trend context is "Trend".
+                if flash.get("regime") != "pin":
+                    if obs.get("trend_up") or obs.get("trend_down"):
+                        flash["regime"] = "trend"
+
+                entry = obs.get("entry_price")
+                tgt = flash.get("first_target")
+                if entry is not None and tgt is not None and spot is not None and tgt != entry:
+                    pct = (spot - entry) / (tgt - entry) * 100.0
+                    pct = max(0.0, min(100.0, pct))
+                    flash["target_progress_pct"] = round(pct, 1)
+                    flash["target_progress"] = f"{int(round(pct))}% to target"
             clarity = None
             comps = flash.get("components") or {}
             # Proxy runway clarity from thin path + ATR quality (0–1).
@@ -1261,6 +1602,10 @@ def analyze_ticker(matrix_fn, ticker, feed, mode, strategy, cluster_exp=None):
                 score = flash["score"]
                 flash["score_source"] = "heuristic"
             agent_state = flash["agent_state"]
+            regime_label = "Long-gamma pin" if flash.get("regime") == "pin" else "Mixed gamma"
+            vwap_clause = (
+                f" price {flash['vwap_side']} VWAP." if flash.get("vwap_side") else ""
+            )
             model = {
                 **model,
                 "vacuum_targets": flash["targets"],
@@ -1269,12 +1614,17 @@ def analyze_ticker(matrix_fn, ticker, feed, mode, strategy, cluster_exp=None):
                     f"Flash {agent_state}: trigger { _fmt_level(flash.get('trigger')) } · "
                     f"T1/T2 {', '.join(_fmt_level(t) for t in flash['targets'])} · "
                     f"stretch {_fmt_level(flash.get('stretch'))}. "
-                    f"{model.get('read') or ''}"
+                    f"{model.get('read') or ''} "
+                    f"{regime_label} regime,{vwap_clause}"
                 ).strip(),
             }
 
     direction = model["direction"]
     target = flash.get("first_target") if flash else model.get("pull_target")
+    # Cluster scans publish the cluster's own target strike (highest-OI strike in the
+    # zone) rather than the generic model pull target — see _detect_cluster_zones().
+    if strategy == "cluster" and primary and primary.get("target_strike") is not None:
+        target = primary["target_strike"]
     invalidation = (
         flash.get("invalidation")
         if flash
@@ -1312,7 +1662,7 @@ def analyze_ticker(matrix_fn, ticker, feed, mode, strategy, cluster_exp=None):
         "spot": spot,
         "day_change_pct": day_chg,
         "score": score,
-        "strength": model_abs if strategy == "cluster" else None,
+        "strength": cluster_strength if strategy == "cluster" else None,
         "abs_score": model_abs if strategy == "cluster" else score,
         "direction": direction,
         "state": agent_state.upper() if agent_state else "",
@@ -1425,6 +1775,79 @@ def _update_job(job_id, **kwargs):
         job.update(kwargs)
 
 
+def _apply_strategy_filter(results, strategy):
+    """Strategy-specific qualification. Split out of run_scan so the same rules can be
+    applied to the partial result set mid-scan for incremental streaming."""
+    if strategy == "cluster":
+        return [
+            r for r in results
+            if any(s.get("kind") in {"quad", "triple", "battle"} for s in (r.get("setups") or []))
+        ]
+    if strategy == "liquidity":
+        return [r for r in results if (r.get("score") or 0) >= 40]
+    if strategy == "flash_agentic":
+        # Surface armed/triggered plus completed (UI greys finished plays).
+        return [
+            r for r in results
+            if r.get("agent_state") in {"arming", "triggered", "target_1_hit", "target_2_hit", "completed"}
+            and (r.get("score") or 0) >= 50
+            and r.get("actionable") is True
+        ]
+    if strategy in {"flash", "flash_index"}:
+        return [
+            r for r in results
+            if (r.get("score") or 0) >= 48 and r.get("geometry_valid") is True
+        ]
+    return results
+
+
+_CLUSTER_TIER_ORDER = {"quad": 0, "triple": 1, "battle": 2, "golden": 3, "call_wall": 4, "put_floor": 5}
+
+
+def _cluster_sort_key(item):
+    """Tier first, then displayed Strength descending — the real product's ordering.
+
+    2026-08-07: cluster results used to be ranked by weight_lab's `abs_score`, which
+    is tier_gap-dominated and therefore almost constant inside a tier: a full-universe
+    scan produced 260.7, 260.6, 260.5, 260.3, 260.2, 260.1, 260.0, 259.9 … for every
+    triple. With the tier term cancelling out, the order was decided by the tiny
+    factor remainder, and those factors (oi_log especially) scale with liquidity — so
+    the same mega-caps surfaced on every single scan (SPY, QQQ, HYG, GLD, XLF, TSLA,
+    NVDA, MSFT, GOOGL …) regardless of how good their clusters actually were, while
+    genuinely stronger setups on smaller names never made the top 30.
+
+    `strength_norm` (sum of the per-strike weights, 0-400) is scale-free and spreads
+    properly — 369, 234, 216, 209, 194 … across that same scan — and matches how the
+    real product's own published list is ordered: quads first, then triples by
+    descending Strength.
+    """
+    setup = item.get("cluster") or {}
+    kind = (setup.get("kind") or "").lower()
+    tier = _CLUSTER_TIER_ORDER.get(kind, 9)
+    strength = item.get("strength")
+    if strength is None:
+        strength = setup.get("strength_norm") or 0.0
+    return (tier, -float(strength))
+
+
+def _rank_and_slice(results, limit, strategy=None):
+    if strategy == "cluster":
+        ranked = sorted(results, key=_cluster_sort_key)
+    else:
+        ranked = sorted(results, key=lambda item: item.get("abs_score") or 0.0, reverse=True)
+    top = ranked[: max(1, min(int(limit), 50))]
+    # Clear ranks before re-assigning. This function now runs repeatedly during a
+    # scan to publish partial leaderboards, and it mutates the shared result dicts —
+    # so a ticker that made an early partial top but not the final one kept a stale
+    # `rank`, which then leaked into `clusters` (built from ranked[:40]).
+    for item in ranked:
+        if "rank" in item:
+            item.pop("rank", None)
+    for idx, item in enumerate(top, start=1):
+        item["rank"] = idx
+    return ranked, top
+
+
 def run_scan(
     matrix_fn,
     *,
@@ -1438,6 +1861,7 @@ def run_scan(
     job_id=None,
     progress_cb=None,
     cluster_exp=None,
+    bars_fn=None,
 ):
     mode = mode if mode in MODE_CONFIG else "short"
     strategy = (
@@ -1448,9 +1872,6 @@ def run_scan(
     if strategy == "standard":
         strategy = "cipher"
 
-    # Production path is always serial — parallel fan-out caused Alpaca 429s.
-    # `workers` is accepted for API compat but clamped to 1.
-    _ = workers
 
     if strategy == "flash":
         universe = list(FLASH_UNIVERSE)
@@ -1489,63 +1910,69 @@ def run_scan(
         if progress_cb:
             progress_cb(done, attempted, pct)
         if job_id:
-            _update_job(
-                job_id,
-                status="running",
-                done=done,
-                total=attempted,
-                pct=pct,
-                message=f"Scanning the universe… {done}/{attempted} tickers ({pct}%)",
-            )
+            update = {
+                "status": "running",
+                "done": done,
+                "total": attempted,
+                "pct": pct,
+                "message": f"Scanning the universe… {done}/{attempted} tickers ({pct}%)",
+            }
+            # Publish a running leaderboard so the UI can fill in cards while a
+            # full-universe scan is still working, instead of showing a bare
+            # progress bar for minutes and then everything at once. Recomputed on
+            # an interval rather than every ticker — ranking the partial set on all
+            # 580 completions would cost more than it saves.
+            if done % PARTIAL_EMIT_EVERY == 0 or done == attempted:
+                try:
+                    _, partial_top = _rank_and_slice(
+                        _apply_strategy_filter(list(results), strategy), limit, strategy
+                    )
+                    update["partial_top"] = deepcopy(partial_top)
+                except Exception:
+                    pass  # never let the preview break the scan
+            _update_job(job_id, **update)
 
     _report()
-    # One-by-one: complete list sequentially (no ThreadPool / gather fan-out).
-    for ticker in tickers:
-        try:
-            item = analyze_ticker(
-                matrix_fn,
-                ticker,
-                feed,
-                mode,
-                strategy,
-                cluster_exp,
-            )
-            if item.get("score", 0) >= 45 and item.get("supports") is not None:
-                results.append(item)
-        except Exception as exc:
-            errors.append({"ticker": ticker, "error": str(exc)})
-        done += 1
-        _report()
+    # Bounded fan-out. This was strictly serial because an earlier unbounded fan-out
+    # tripped Alpaca 429s. Two things changed: option_chain() now requests only the
+    # expiration window it needs (SPY dropped from 15 pages/14.5k contracts to 5
+    # pages/4k), and alpaca()/option_open_interest() retry 429 with Retry-After-aware
+    # backoff instead of failing the ticker outright. A small pool is therefore safe
+    # and turns a ~26 minute 580-ticker cluster scan into a few minutes. Kept
+    # deliberately low — this is a shared per-account rate budget, not a CPU pool.
+    worker_count = max(1, min(int(workers or 1), SCAN_MAX_WORKERS))
 
-    if strategy == "cluster":
-        results = [
-            r
-            for r in results
-            if any(s.get("kind") in {"quad", "triple", "battle"} for s in (r.get("setups") or []))
-        ]
-    elif strategy == "liquidity":
-        results = [r for r in results if (r.get("score") or 0) >= 40]
-    elif strategy == "flash_agentic":
-        # Surface armed/triggered plus completed (UI greys finished plays).
-        results = [
-            r
-            for r in results
-            if r.get("agent_state") in {"arming", "triggered", "target_1_hit", "target_2_hit", "completed"}
-            and (r.get("score") or 0) >= 50
-            and r.get("actionable") is True
-        ]
-    elif strategy in {"flash", "flash_index"}:
-        results = [
-            r
-            for r in results
-            if (r.get("score") or 0) >= 48
-            and r.get("geometry_valid") is True
-        ]
+    def _analyze(ticker):
+        return ticker, analyze_ticker(
+            matrix_fn, ticker, feed, mode, strategy, cluster_exp, bars_fn=bars_fn
+        )
 
-    ranked = sorted(results, key=lambda item: item.get("abs_score") or 0.0, reverse=True)
-    top = ranked[: max(1, min(int(limit), 50))]
-    for idx, item in enumerate(top, start=1):
-        item["rank"] = idx
+    if worker_count == 1:
+        for ticker in tickers:
+            try:
+                _, item = _analyze(ticker)
+                if item.get("score", 0) >= 45 and item.get("supports") is not None:
+                    results.append(item)
+            except Exception as exc:
+                errors.append({"ticker": ticker, "error": str(exc)})
+            done += 1
+            _report()
+    else:
+        with ThreadPoolExecutor(max_workers=worker_count) as pool:
+            futures = {pool.submit(_analyze, t): t for t in tickers}
+            for future in as_completed(futures):
+                ticker = futures[future]
+                try:
+                    _, item = future.result()
+                    if item.get("score", 0) >= 45 and item.get("supports") is not None:
+                        results.append(item)
+                except Exception as exc:
+                    errors.append({"ticker": ticker, "error": str(exc)})
+                done += 1
+                _report()
+
+    results = _apply_strategy_filter(results, strategy)
+    ranked, top = _rank_and_slice(results, limit, strategy)
 
     if strategy == "flash":
         hint = FLASH_HINT
@@ -1586,7 +2013,7 @@ def run_scan(
         "caveat": (
             "Research-only reconstruction of Cipher Model Scan from public UI outputs. "
             "Not the proprietary Access Obsidian weights. Not trade advice. "
-            "Scans aren't saved — download CSV to keep results. "
+            "Scans are auto-saved locally — see scan history to revisit past runs, or download CSV. "
             "GEX is a public-OI heuristic under retail assumptions — not verified dealer positioning."
         ),
         "formula": (
@@ -1600,6 +2027,12 @@ def run_scan(
         ),
     }
     _SCAN_CACHE[cache_key] = (time.time(), payload)
+    try:
+        import scan_history
+
+        scan_history.save_scan(payload)
+    except Exception:
+        pass  # Auto-save is best-effort; never fail a scan over it.
     return deepcopy(payload)
 
 
@@ -1614,6 +2047,9 @@ def start_scan_job(matrix_fn, **kwargs):
             "pct": 0,
             "message": "Queued…",
             "result": None,
+            # Running leaderboard, refreshed every PARTIAL_EMIT_EVERY tickers so the
+            # UI can render cards before the full scan finishes.
+            "partial_top": [],
             "error": None,
             "started_at": _utcnow(),
         }
