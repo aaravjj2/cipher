@@ -29,6 +29,8 @@ from core.research_platform.recent_regime_prospective import write_immutable_pro
 from core.research_platform.recent_regime_prospective_evaluation import evaluate_prospective_snapshots
 from core.research_platform.recent_regime_refresh import _candidate_pool_fingerprint, data_refresh_due
 
+from conftest import load_artifact, require_artifact
+
 ROOT = Path(__file__).resolve().parents[1]
 NY = ZoneInfo("America/New_York")
 
@@ -55,7 +57,7 @@ def test_recent_selector_grid_is_small_and_deterministic():
 
 
 def test_recent_pool_fingerprint_ignores_unrelated_matrix_changes(tmp_path: Path):
-    source = json.loads((ROOT / "data" / "governance" / "cross_period_strategy_matrix.json").read_text(encoding="utf-8"))
+    source = load_artifact("data/governance/cross_period_strategy_matrix.json")
     baseline = tmp_path / "baseline.json"
     baseline.write_text(json.dumps(source), encoding="utf-8")
     expected = _candidate_pool_fingerprint(baseline)
@@ -332,7 +334,7 @@ def test_generic_overlay_observation_uses_same_future_open_evaluator(tmp_path: P
 
 
 def test_current_cipher_signal_overlay_report_is_prospective_only():
-    payload = json.loads((ROOT / "data" / "governance" / "cipher_signal_overlay_research.json").read_text(encoding="utf-8"))
+    payload = load_artifact("data/governance/cipher_signal_overlay_research.json")
     assert payload["status"] == "completed"
     assert payload["policy_family"]["count"] == 6
     assert payload["capture_inventory"]["sessions"] >= 1
@@ -353,7 +355,7 @@ def test_current_cipher_signal_overlay_report_is_prospective_only():
 
 
 def test_recent_component_robustness_artifact_has_exact_concentration_checks():
-    payload = json.loads((ROOT / "data" / "governance" / "recent_component_robustness.json").read_text(encoding="utf-8"))
+    payload = load_artifact("data/governance/recent_component_robustness.json")
     assert payload["component"]["candidate_id"] == "candidate_450ab714a604e63bc221ccfb"
     assert payload["summary"]["leave_one_symbol_out_tests"] == 38
     assert payload["summary"]["positive_2025_fraction"] == 1.0
@@ -396,11 +398,15 @@ def test_recent_data_refresh_runs_only_after_close_once_per_weekday():
 
 
 def test_recent_runner_pool_and_report_preserve_exploratory_boundary():
+    # candidate_pool() reads the cross-period matrix internally, so the guard has
+    # to precede it — otherwise the missing artifact surfaces as a raw
+    # FileNotFoundError from inside the script rather than a skip.
+    require_artifact("data/governance/cross_period_strategy_matrix.json")
     module = load_script("run_recent_regime_research")
     rows, pool_hash = module.candidate_pool()
     assert len(rows) == 14
     assert pool_hash.startswith("recent_regime_candidate_pool_")
-    artifact = ROOT / "data" / "governance" / "recent_regime_research.json"
+    artifact = require_artifact("data/governance/recent_regime_research.json")
     payload = json.loads(artifact.read_text(encoding="utf-8"))
     assert payload["candidate_pool"]["count"] == 14
     assert payload["candidate_pool"]["selection_rule"] == "frozen_2026_08_04_recent_evidence_pool"

@@ -8,6 +8,8 @@ from pathlib import Path
 
 import pytest
 
+from conftest import require_artifact
+
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
 
@@ -24,6 +26,10 @@ def load_registration_script():
 
 
 def test_protected_answer_key_is_exactly_744_and_11_of_12():
+    # load_answer_key() reads the frozen price-only scope artifact internally.
+    require_artifact(
+        "data/market_quality/alpaca_holdout_c_price_only_scope_20260803T235944Z.json"
+    )
     module = load_registration_script()
     _, _, answer = module.load_answer_key(module.DEFAULT_SCOPE, module.DEFAULT_COHORT)
     assert answer["partition_count"] == 744

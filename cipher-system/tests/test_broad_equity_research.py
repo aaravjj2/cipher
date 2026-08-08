@@ -7,6 +7,8 @@ from pathlib import Path
 import pandas as pd
 
 
+from conftest import load_artifact, require_artifact
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -64,7 +66,7 @@ def test_cross_period_matrix_uses_candidate_identity_and_no_execution_authority(
         "original_2023_2025": "ds_380c76da95f0c3787529c6b8",
         "locked_2026_ytd": "ds_f20f2e15e7d1041ce6a1858d",
     }
-    artifact = ROOT / "data" / "governance" / "cross_period_strategy_matrix.json"
+    artifact = require_artifact("data/governance/cross_period_strategy_matrix.json")
     payload = json.loads(artifact.read_text(encoding="utf-8"))
     assert payload["identity_key"] == "candidate_id"
     assert payload["summary"]["tested_all_three"] >= 1
@@ -77,9 +79,7 @@ def test_cross_period_matrix_uses_candidate_identity_and_no_execution_authority(
 
 
 def test_2026_ytd_validation_and_stress_artifacts_are_guarded():
-    validation = json.loads(
-        (ROOT / "data" / "governance" / "strategy_research_2026_ytd" / "latest_2026_ytd_locked_validation.json").read_text(encoding="utf-8")
-    )
+    validation = load_artifact("data/governance/strategy_research_2026_ytd/latest_2026_ytd_locked_validation.json")
     assert validation["dataset"]["dataset_id"] == "ds_f20f2e15e7d1041ce6a1858d"
     assert validation["dataset"]["evaluation_start"] == "2026-01-02"
     assert validation["dataset"]["evaluation_end"] == "2026-08-04"
@@ -99,15 +99,13 @@ def test_2026_ytd_validation_and_stress_artifacts_are_guarded():
         if row.get("verdict") != "ERROR"
     )
 
-    robustness = json.loads(
-        (ROOT / "data" / "governance" / "strategy_research_2026_ytd" / "latest_2026_ytd_robustness.json").read_text(encoding="utf-8")
-    )
+    robustness = load_artifact("data/governance/strategy_research_2026_ytd/latest_2026_ytd_robustness.json")
     assert robustness["candidate_count"] == 6
     assert robustness["robust_candidate_count"] == 1
     assert robustness["automatic_promotion"] is False
     assert robustness["execution_authority"] is False
 
-    annual = json.loads((ROOT / "data" / "governance" / "annual_regime_stability.json").read_text(encoding="utf-8"))
+    annual = load_artifact("data/governance/annual_regime_stability.json")
     assert annual["candidate_count"] == 15
     assert annual["stable_candidate_count"] == 0
     assert annual["automatic_promotion"] is False
@@ -115,7 +113,7 @@ def test_2026_ytd_validation_and_stress_artifacts_are_guarded():
 
 
 def test_locked_validation_is_complete_and_cannot_feed_adaptation():
-    artifact = ROOT / "data" / "governance" / "strategy_research_validation" / "latest_locked_broad_validation.json"
+    artifact = require_artifact("data/governance/strategy_research_validation/latest_locked_broad_validation.json")
     payload = json.loads(artifact.read_text(encoding="utf-8"))
     assert payload["dataset"]["dataset_id"] == "ds_fb1e8d9aeb51f12407b08123"
     assert payload["candidate_family_freeze"]["count"] == 92

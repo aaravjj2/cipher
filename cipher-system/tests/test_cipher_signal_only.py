@@ -6,6 +6,8 @@ from pathlib import Path
 
 import pandas as pd
 
+from conftest import load_artifact
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -228,11 +230,7 @@ def test_same_session_option_mark_uses_actual_intraday_session():
 
 
 def test_live_complete_observations_are_all_date_and_expiry_aware():
-    payload = json.loads(
-        (ROOT / "data" / "governance" / "cipher_signal_only" / "latest_complete_observations.json").read_text(
-            encoding="utf-8"
-        )
-    )
+    payload = load_artifact("data/governance/cipher_signal_only/latest_complete_observations.json")
     populations = payload["population_counts"]
     cluster = payload["cluster_expiry_research"]
     summary = cluster["summary"]
@@ -256,11 +254,7 @@ def test_live_complete_observations_are_all_date_and_expiry_aware():
 
 
 def test_live_signal_specifics_has_ticker_and_rule_boundaries():
-    payload = json.loads(
-        (ROOT / "data" / "governance" / "cipher_signal_only" / "latest_ticker_strategy_specifics.json").read_text(
-            encoding="utf-8"
-        )
-    )
+    payload = load_artifact("data/governance/cipher_signal_only/latest_ticker_strategy_specifics.json")
     assert payload["mode"] == "flash_agentic_cluster_only"
     assert payload["ticker_analysis"]["by_source_ticker_horizon"]
     assert payload["candidate_rule_analysis"]["rules"]
@@ -272,11 +266,7 @@ def test_live_signal_specifics_has_ticker_and_rule_boundaries():
 
 
 def test_live_signal_only_report_has_exact_three_source_boundary():
-    payload = json.loads(
-        (ROOT / "data" / "governance" / "cipher_signal_only" / "latest_signal_research.json").read_text(
-            encoding="utf-8"
-        )
-    )
+    payload = load_artifact("data/governance/cipher_signal_only/latest_signal_research.json")
     assert payload["mode"] == "flash_agentic_cluster_only"
     assert payload["active_sources"] == ["flash", "flash_agentic", "cluster"]
     assert payload["capture_inventory"]["sessions"] >= 1
