@@ -101,6 +101,63 @@ because a full 546-ticker pass takes ~27 minutes, and starting at 15:50 would pu
 the tail of the snapshot after the bell, mixing pre- and post-close spot into one
 capture.)
 
+## Filter-mode: the same detector, asked a weaker question
+
+Everything above tests the detector as a **standalone entry trigger** — the hardest
+question available, since the signal must beat random on timing, direction and
+selection at once. Failing it cannot distinguish "carries no information" from
+"carries information that is not an entry trigger", and those call for opposite
+decisions.
+
+`core/backtest_engine.py:run_filter` asks the weaker question: given trades you
+were taking anyway, does the detector's state just before entry separate the good
+ones from the bad? The base is deliberately dumb — a fixed-cadence long entry every
+12 bars, no view on price — so any separation is attributable to the filter, not to
+the base. Each partition is scored against **its own** matched random control,
+because splitting a trade set enough ways always surfaces a flattering slice.
+
+Reproduce: `python3 scripts/run_filter_backtest.py`
+
+10 symbols, 15-minute bars, 1 year, EOD Focus, 6-bar lookback:
+
+```
+BASE (no filter)  n=12022 win=37.5% avg=-0.0534% PF=0.758
+
+partition       n   share    win%      avg%  lift(pp)  verdict
+bearish       159    1.3%    54.1    0.0471    0.1005  BEATS its own random control
+bullish       138    1.1%    44.2   -0.0160    0.0374  within noise
+none        11725   97.5%    37.2   -0.0552   -0.0018  within noise
+```
+
+**This is the first positive result in this document, and it is not an edge yet.**
+
+What holds up. The effect survives lookback windows of 3, 6 and 12 bars and 8 of 9
+control seeds, with lift steady at +0.09 to +0.10pp. The sign replicates in all
+four disjoint time slices tried:
+
+| slice | bear n | bear avg | lift | beats control |
+|---|---|---|---|---|
+| first half | 104 | +0.0587% | +0.11pp | yes |
+| second half | 54 | +0.0251% | +0.08pp | no |
+| train 75% | 130 | +0.0443% | +0.10pp | yes |
+| holdout 25% | **27** | +0.0902% | +0.15pp | no |
+
+It is also **coherent with the standalone finding**: the base is long-only, so
+"a bearish signal preceding a long entry that then does better" is fading the
+detector — the same direction as the 34.7%-follow versus 44.2%-fade result above.
+An incoherent result would be more suspicious than a null one.
+
+What does not. The control clears only where the sample is large (104, 130) and
+fails where it is small (54, 27). That is low power, not a contradiction — but a
+27-trade holdout supports no verdict at all. The partition is 1.3% of trades and
+the effect is +0.09% per trade before any slippage beyond the modelled 2bps. Three
+partitions were examined, so one clearing a control is roughly what chance allows.
+
+Honest status: **promising, unestablished.** The useful part is not the number, it
+is that the question is now separable — a standalone failure no longer collapses
+"no information" and "wrong use of information" into the same verdict. The
+sample needed to settle it is more sessions, not more configurations.
+
 ## If this is picked up again
 
 Ordered by how much they could change the conclusion:

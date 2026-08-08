@@ -70,6 +70,10 @@ class Trade:
     return_pct: float = 0.0
     mae_pct: float = 0.0        # max adverse excursion
     mfe_pct: float = 0.0        # max favourable excursion
+    # Bar index the signal was evaluated on. Filter-mode needs it to look up the
+    # detector's state at entry; a dataclass field rather than a stuck-on attribute
+    # so asdict() carries it into the JSON report.
+    entry_index: int | None = None
 
 
 @dataclass
@@ -395,6 +399,160 @@ def run_control(
         "detector_minus_control": delta,
         "detector_beats_control_range": beats,
     }
+
+
+def baseline_trades(
+    bars_by_symbol: dict[str, list[dict]],
+    *,
+    entry_every: int = 12,
+    direction: str = "LONG",
+    stop_atr: float = DEFAULT_STOP_ATR,
+    target_atr: float = DEFAULT_TARGET_ATR,
+    max_hold_bars: int = DEFAULT_MAX_HOLD_BARS,
+    cost_bps: float = DEFAULT_COST_BPS,
+) -> list[Trade]:
+    """A deliberately dumb base strategy: enter every `entry_every` bars.
+
+    Filter-mode needs a base to gate, and the base must carry no edge of its own —
+    otherwise an improvement could come from the base rather than the filter. A
+    fixed-cadence entry is the cleanest such base: it has no view on price, so any
+    difference between its filtered and unfiltered partitions is attributable to
+    the filter.
+    """
+    trades: list[Trade] = []
+    for symbol, bars in bars_by_symbol.items():
+        if len(bars) < 120:
+            continue
+        atr = _atr(bars)
+        i = 120
+        n = len(bars)
+        while i < n - max_hold_bars - 2:
+            if atr[i] and atr[i] > 0:
+                trade, exit_idx = _simulate(
+                    bars, atr, i, symbol, "BASELINE", direction,
+                    stop_atr=stop_atr, target_atr=target_atr,
+                    max_hold_bars=max_hold_bars, cost_bps=cost_bps,
+                )
+                trade.entry_index = i
+                trades.append(trade)
+                i = max(exit_idx + 1, i + entry_every)
+            else:
+                i += entry_every
+    return trades
+
+
+def run_filter(
+    bars_by_symbol: dict[str, list[dict]],
+    *,
+    signal_states: dict[str, list] | None = None,
+    detector_params: dict | None = None,
+    base_trades: list[Trade] | None = None,
+    lookback_bars: int = 6,
+    control_repeats: int = 20,
+    seed: int = 0,
+    **base_kw,
+) -> dict:
+    """Evaluate a signal as a FILTER on a base strategy, not as an entry trigger.
+
+    Every measurement in this engine so far asked the hardest possible question:
+    can the signal, alone, beat random entry on timing, direction and selection at
+    once? Three strategies failed that test — the Obsidian detector on 0 of 36 exit
+    configurations, the Structural Fib rules at 84.5% against a published 98%. But
+    a failure there cannot distinguish "this signal carries no information" from
+    "this signal carries information that is not an entry trigger", and those call
+    for opposite decisions.
+
+    Filter-mode asks the weaker, likelier question instead: given trades you were
+    going to take anyway, does the signal's state at entry separate the good ones
+    from the bad? Trades are partitioned by whether the detector fired within
+    `lookback_bars` before entry, and the partitions are compared to each other.
+
+    Each partition gets its OWN matched random control, because partitioning is a
+    multiple-comparison machine: split any trade set enough ways and one slice
+    looks good. A partition is only interesting if it clears its own control's best
+    draw, the same bar `run_control` already applies.
+    """
+    if base_trades is None:
+        base_trades = baseline_trades(bars_by_symbol, **{
+            k: v for k, v in base_kw.items()
+            if k in {"entry_every", "direction", "stop_atr", "target_atr",
+                     "max_hold_bars", "cost_bps"}
+        })
+    if not base_trades:
+        return {"error": "base strategy produced no trades"}
+
+    states = signal_states
+    if states is None:
+        try:
+            from . import obsidian_eod
+        except ImportError:
+            import obsidian_eod
+        states = {}
+        for symbol, bars in bars_by_symbol.items():
+            if len(bars) < 120:
+                continue
+            computed, _ = obsidian_eod.compute(bars, detector_params or {"mode": "EOD Focus"})
+            if computed:
+                states[symbol] = computed
+
+    def signal_at(symbol: str, index: int) -> str:
+        """Signal state in the `lookback_bars` window ending at the entry bar.
+
+        Looks BACKWARD only. A forward-looking window would leak the outcome into
+        the partition and manufacture separation out of nothing.
+        """
+        rows = states.get(symbol) or []
+        if not rows:
+            return "none"
+        lo = max(0, index - lookback_bars)
+        for j in range(lo, min(index + 1, len(rows))):
+            setup = (getattr(rows[j], "setup", "") or "").strip()
+            if setup:
+                bias = (getattr(rows[j], "setup_direction", "") or "").upper()
+                return "bullish" if bias == "BULLISH" else "bearish" if bias == "BEARISH" else "fired"
+        return "none"
+
+    partitions: dict[str, list[Trade]] = {}
+    for trade in base_trades:
+        index = getattr(trade, "entry_index", None)
+        key = signal_at(trade.symbol, index) if index is not None else "none"
+        partitions.setdefault(key, []).append(trade)
+
+    base_stats = summarize(base_trades)
+    report = {
+        "base": base_stats,
+        "lookback_bars": lookback_bars,
+        "partitions": {},
+        "caveat": (
+            "Filter evaluation. Partitions are compared against their own matched "
+            "random controls, not only against each other — partitioning inflates "
+            "multiple-comparison risk."
+        ),
+    }
+    for key, trades in sorted(partitions.items()):
+        stats = summarize(trades)
+        entry = {"stats": stats, "share_of_base": round(100.0 * len(trades) / len(base_trades), 1)}
+        if len(trades) >= 20:
+            holder = BacktestResult(strategy="filter", symbols=sorted(bars_by_symbol))
+            holder.trades = trades
+            holder.stats = stats
+            control = run_control(
+                holder, bars_by_symbol, seed=seed, repeats=control_repeats,
+                **{k: v for k, v in base_kw.items()
+                   if k in {"stop_atr", "target_atr", "max_hold_bars", "cost_bps"}},
+            )
+            entry["control"] = control.get("control")
+            entry["beats_control_range"] = control.get("detector_beats_control_range")
+            entry["vs_control"] = control.get("detector_minus_control")
+        else:
+            entry["note"] = f"only {len(trades)} trades — too few to control"
+        # The question filter-mode exists to answer.
+        if base_stats.get("avg_return_pct") is not None and stats.get("avg_return_pct") is not None:
+            entry["lift_vs_base_pp"] = round(
+                stats["avg_return_pct"] - base_stats["avg_return_pct"], 4
+            )
+        report["partitions"][key] = entry
+    return report
 
 
 def walk_forward(bars_by_symbol, *, folds=3, holdout_frac=0.25, **kw):
