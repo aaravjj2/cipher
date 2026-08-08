@@ -1638,7 +1638,20 @@ def analyze_ticker(matrix_fn, ticker, feed, mode, strategy, cluster_exp=None, ba
                 (model.get("vacuum_count") or 0) / 3.0
             )
             clarity = max(0.0, min(1.0, clarity))
-            fitted_flash = _try_fitted_flash_score(model, profile, spot, runway_clarity=clarity, dte=5.0)
+            # Real DTE, not a literal. This passed a hardcoded 5.0 while
+            # flash["dte"] already held the true value from _flash_dte(). Flash
+            # always profiles the nearest expiration, so real DTE is usually 0-2,
+            # and dte_inv = 1/(1+dte) is strongly non-linear down there: against
+            # the fitted head's own mean/std/coefficient, 5.0 understated the
+            # contribution by +14.9 points at DTE 0, +6.0 at 1 and +3.0 at 2.
+            # The literal was suppressing nearly every flash card.
+            # _flash_dte() returns a non-negative int or None; fall back only when
+            # the expiration list was unusable.
+            fitted_dte = flash.get("dte")
+            fitted_flash = _try_fitted_flash_score(
+                model, profile, spot, runway_clarity=clarity,
+                dte=float(fitted_dte) if isinstance(fitted_dte, (int, float)) else 5.0,
+            )
             if fitted_flash is not None:
                 score = round(max(0.0, min(100.0, float(fitted_flash))), 1)
                 flash["score"] = score

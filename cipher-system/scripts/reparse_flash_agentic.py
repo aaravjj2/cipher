@@ -51,16 +51,22 @@ def parse_float(text):
 
 
 def first_card(raw: str) -> list[str] | None:
-    """Tokens of the FIRST card only, or None when the row was already clean."""
-    parts = [p.strip() for p in str(raw).split(" | ")]
-    ticker_positions = [i for i, p in enumerate(parts) if TICKER_RE.fullmatch(p)]
-    if len(ticker_positions) < 2:
+    """Tokens of the FIRST card only, or None when there is no card text.
+
+    Returns tokens for single-card rows too, not just merged ones. The merge repair
+    and the field backfill share this path: a row can be perfectly well split and
+    still be missing runway_clarity_pct, because that was a parser-mapping bug
+    rather than a card-boundary bug.
+    """
+    text = str(raw or "").strip()
+    if not text:
         return None
-    cut = ticker_positions[1]
-    tokens = parts[:cut]
+    parts = [p.strip() for p in text.split(" | ")]
+    ticker_positions = [i for i, p in enumerate(parts) if TICKER_RE.fullmatch(p)]
+    tokens = parts[:ticker_positions[1]] if len(ticker_positions) >= 2 else parts
     while tokens and STATUS_RE.fullmatch(tokens[-1]):
         tokens.pop()
-    return tokens
+    return tokens or None
 
 
 def fields_from(tokens: list[str]) -> dict:
@@ -78,9 +84,32 @@ def fields_from(tokens: list[str]) -> dict:
     m = re.search(r"(\d+(?:\.\d+)?)/100", " | ".join(tokens))
     if m:
         out["score"] = parse_float(m.group(1))
-    m = re.search(r"(\d+)%\s+to target", " | ".join(tokens))
+    joined = " | ".join(tokens)
+    m = re.search(r"(\d+)%\s+to target", joined)
     if m:
         out["target_progress"] = f"{m.group(1)}% to target"
+
+    # RUNWAY prints as "clean (100% clear)" or "wall 980 (64% clear, 4 levels)".
+    # The capture parser only mapped the label "RUNWAY CLARITY", which the agentic
+    # card never emits, so runway_clarity_pct was null on all 432 archived rows —
+    # and it is the label side of runway_clarity_norm, the largest coefficient in
+    # the fitted flash head. 431 of 432 are recoverable from raw_card.
+    pct = re.search(r"(\d+(?:\.\d+)?)\s*%\s*clear", joined, re.IGNORECASE)
+    if pct:
+        out["runway_clarity_pct"] = parse_float(pct.group(1))
+    wall = re.search(r"wall\s+([\d.]+)", joined, re.IGNORECASE)
+    if wall:
+        out["runway_wall_strike"] = parse_float(wall.group(1))
+    levels = re.search(r"(\d+)\s+levels?", joined, re.IGNORECASE)
+    if levels:
+        out["runway_levels"] = parse_float(levels.group(1))
+
+    # PIVOT prints as "1000 (ceiling, nearing)" — the kind and proximity are
+    # separate signals from the strike itself.
+    piv = re.search(r"PIVOT \| [\d.]+ \((\w+),\s*(\w+)\)", joined, re.IGNORECASE)
+    if piv:
+        out["pivot_kind"] = piv.group(1).lower()
+        out["trigger_proximity"] = piv.group(2).lower()
     return out
 
 
