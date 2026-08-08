@@ -616,6 +616,85 @@ export function fetchContractSearch(
   return getJson<ContractSearchResult>(`/api/contract-search?${q.toString()}`, signal);
 }
 
+export type BacktestStats = {
+  trades: number;
+  win_rate: number;
+  total_return_pct: number;
+  avg_return_pct: number;
+  median_return_pct: number;
+  profit_factor: number | null;
+  max_drawdown_pct: number;
+  avg_bars_held: number;
+  exit_mix?: Record<string, number>;
+  by_setup?: Record<string, { n: number; avg_pct: number; win_rate: number }>;
+};
+
+export type BacktestPartition = {
+  stats: BacktestStats;
+  share_of_base: number;
+  lift_vs_base_pp?: number;
+  beats_control_range?: boolean;
+  control?: { win_rate: number; avg_return_pct: number; profit_factor: number } | null;
+  vs_control?: Record<string, number | null>;
+  note?: string;
+};
+
+export type BacktestResultPayload = {
+  mode: "filter" | "standalone";
+  symbols: string[];
+  timeframe: string;
+  years: number;
+  detector_mode: string;
+  elapsed_ms: number;
+  caveat?: string;
+  /** filter mode */
+  base?: BacktestStats;
+  partitions?: Record<string, BacktestPartition>;
+  lookback_bars?: number;
+  /** standalone mode */
+  stats?: BacktestStats;
+  control?: {
+    control?: { win_rate: number; avg_return_pct: number; profit_factor: number } | null;
+    detector_minus_control?: Record<string, number | null>;
+    detector_beats_control_range?: boolean;
+  };
+};
+
+export type BacktestJob = {
+  id: string;
+  status: "queued" | "running" | "done" | "error";
+  mode: string;
+  symbols: string[];
+  timeframe: string;
+  detector_mode: string;
+  pct: number;
+  message: string;
+  error: string | null;
+  started_at: string;
+  result: BacktestResultPayload | null;
+};
+
+export function startBacktest(params: {
+  mode: "filter" | "standalone";
+  symbols?: string;
+  timeframe?: string;
+  years?: number;
+  detector?: string;
+  lookback?: number;
+}, signal?: AbortSignal): Promise<{ job_id: string; status: string }> {
+  const q = new URLSearchParams({ action: "start", mode: params.mode });
+  if (params.symbols) q.set("symbols", params.symbols);
+  if (params.timeframe) q.set("timeframe", params.timeframe);
+  if (params.years != null) q.set("years", String(params.years));
+  if (params.detector) q.set("detector", params.detector);
+  if (params.lookback != null) q.set("lookback", String(params.lookback));
+  return getJson(`/api/signal-backtest?${q.toString()}`, signal);
+}
+
+export function fetchBacktestJob(jobId: string, signal?: AbortSignal): Promise<BacktestJob> {
+  return getJson<BacktestJob>(`/api/signal-backtest?action=status&id=${encodeURIComponent(jobId)}`, signal);
+}
+
 export type EvidenceClock = {
   name: string;
   unlocks: string;

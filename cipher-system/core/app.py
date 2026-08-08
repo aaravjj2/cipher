@@ -41,6 +41,7 @@ import edge_backtest
 import intraday_backtest
 import session_levels
 import evidence_status
+import backtest_jobs
 from zoneinfo import ZoneInfo
 
 # Exchange local time. Session boundaries and trading dates are ET facts, not UTC
@@ -1554,6 +1555,30 @@ class Handler(BaseHTTPRequestHandler):
                 }
             elif parsed.path == "/api/governance":
                 data = governance_status()
+            elif parsed.path == "/api/signal-backtest":
+                action = (pget("action") or "status").lower()
+                if action == "start":
+                    tickers = [t for t in (pget("symbols") or "").split(",") if t.strip()]
+                    job_id = backtest_jobs.start_backtest_job(
+                        mode=(pget("mode") or "filter").lower(),
+                        symbols=tickers or None,
+                        timeframe=pget("timeframe", "15Min"),
+                        years=float(pget("years", "1") or 1),
+                        detector_mode=pget("detector", "EOD Focus"),
+                        lookback_bars=int(pget("lookback", "6") or 6),
+                        entry_every=int(pget("entry_every", "12") or 12),
+                        control_repeats=int(pget("repeats", "20") or 20),
+                    )
+                    data = {"job_id": job_id, "status": "queued"}
+                elif action == "list":
+                    data = {"jobs": backtest_jobs.list_jobs()}
+                else:
+                    job_id = pget("id")
+                    job = backtest_jobs.get_job(job_id) if job_id else None
+                    if job is None:
+                        self.send_json(404, {"error": "Unknown backtest job"})
+                        return
+                    data = job
             elif parsed.path == "/api/evidence-status":
                 data = evidence_status.status()
             elif parsed.path == "/api/research-status":
@@ -2176,6 +2201,7 @@ class Handler(BaseHTTPRequestHandler):
                             "/api/governance",
                             "/api/research-status",
                             "/api/evidence-status",
+                            "/api/signal-backtest",
                             "/api/matrix",
                             "/api/heatmap",
                             "/api/night-vision",
