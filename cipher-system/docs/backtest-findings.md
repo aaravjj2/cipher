@@ -173,3 +173,115 @@ Ordered by how much they could change the conclusion:
 3. **Options expression.** The detector's edge, if any, may be in volatility
    rather than direction — a collapse event is a volatility statement. Equity
    entries cannot capture that.
+
+---
+
+# Replication sweep: does the bearish partition survive being looked for elsewhere?
+
+`scripts/sweep_filter_replication.py`, run 2026-08-08. The finding above was one
+positive cell on one configuration, which is the shape a false positive takes. The
+sweep moves three axes that are independent of it — a symbol set disjoint from the
+original ten and drawn from other sectors, four bar timeframes, and both detector
+modes — for 32 judgeable partitions.
+
+The original configuration is included as a check on the harness, and reproduces
+exactly: 10 symbols, 15Min, EOD Focus, bearish n=159, avg +0.0471%, lift +0.1005pp,
+clears its control. The same numbers appear when run from the UI panel. The sweep is
+therefore measuring what was reported.
+
+## What replicated
+
+The same configuration on ten **different** symbols also clears its control:
+bearish n=153, avg +0.0164%, lift +0.0626pp. That is a genuine out-of-sample
+survival on names the original never touched, and it is the strongest evidence this
+repository has produced. The effect size roughly halves in the crossing.
+
+Direction is asymmetric and the asymmetry is clean: **4 of 16 bearish partitions
+clear their control, and 0 of 16 bullish ones do.** That pattern is harder to
+explain by chance than any single cell, and it agrees with the fade result recorded
+above.
+
+## What did not
+
+Nothing survives a change of timeframe. 5Min, 30Min and 1Hour all fail on both
+symbol sets, in both detector modes. An edge that exists only at 15Min bars and
+nowhere on either side of them is more consistent with a lucky bar alignment than
+with a mechanism.
+
+Overall 4 of 32 partitions clear, a 12.5% hit rate against the ~5% a control clears
+by chance. `P(>=4 | 32, 0.05) = 0.074`, and the tests are **not** independent —
+timeframes and detector modes re-slice the same underlying sessions, which inflates
+the apparent hit count. So the sweep does not establish significance; it fails to
+refute the finding, which is a weaker statement.
+
+Note also that 2 of the 4 clearing partitions have a *negative* average return.
+"Beats its control" there means losing less than random entry, not making money.
+
+## The cost test, which is the decisive one
+
+Cost applies equally to the partition and to its matched control, so it cancels in
+the comparison: `beats_control_range` stays true at 2, 3, 4 and 5 bps per side, and
+`lift_vs_base_pp` does not move at all. Absolute profitability is a different
+question, and the modelled 2bps per side is optimistic:
+
+```
+set        cost/side     n      avg%   beats
+original       2.0     159    0.0471   True
+original       3.0     159    0.0271   True
+original       4.0     159    0.0071   True
+original       5.0     159   -0.0129   True
+disjoint       2.0     153    0.0164   True
+disjoint       3.0     153   -0.0036   True
+disjoint       4.0     153   -0.0236   True
+disjoint       5.0     153   -0.0436   True
+```
+
+Out of sample the edge is gone at 3bps per side. A one-basis-point change in the
+cost assumption erases it. In sample it survives to just under 5bps.
+
+## Verdict
+
+Two claims, and they must not be merged:
+
+- **There is a relative effect, and it replicated out of sample.** The bearish
+  partition does better than random entry matched trade-for-trade, on symbols the
+  finding was not derived from. This is not nothing.
+- **There is no demonstrated tradeable edge.** It exists at one timeframe only, and
+  out of sample it is smaller than the difference between a 2bp and a 3bp
+  execution assumption.
+
+Status stays **promising, unestablished** — but for a sharper reason than before.
+The blocker is no longer sample size alone; it is that the effect is the same order
+of magnitude as the execution cost, so no amount of additional equity-entry data
+will settle it. Testing it where the size could be larger — at gamma walls once the
+OI history accrues, or expressed in options where a collapse is a volatility
+statement rather than a directional one — is the only path that changes the answer.
+
+---
+
+# Structural Fib: the published rates do not hold on the symbols it is claimed for
+
+`scripts/backtest_structural_fib.py --symbols NVDA,AAPL --days 365`, run 2026-08-08.
+Restricted to NVDA and AAPL because those are the two names the strategy is said to
+work on; testing it on ten symbols would have invited the objection that the failure
+was a universe problem.
+
+```
+                 n   touch%   claimed    win%      avg%
+0.5 -> 1       704    80.0%       98%   74.6%   -0.050%
+1   -> 2       470    49.6%       64%   44.0%   -0.050%
+```
+
+`touch%` is the charitable reading — did price ever reach the level before the close,
+no stop, a whole session to wait. Even on that reading, which inflates hit rates
+toward certainty, 98% measures 80% and 64% measures 49.6%.
+
+The 1.5% pre-market rule, which is the strategy's own filter for which days to trade,
+does not select better days: trending days score **77.6%** on the 0.5->1 leg against
+80.0% for all signals. The filter the method is built around is not doing the work
+attributed to it.
+
+The more important number is the last column. A 74.6% win rate with a **negative**
+average return means wins are small and losses are large — the profile of an
+uncapped loss against a capped gain. A headline win rate that high is compatible
+with losing money, and here it does.
