@@ -57,7 +57,7 @@ def test_recent_selector_grid_is_small_and_deterministic():
 
 
 def test_recent_pool_fingerprint_ignores_unrelated_matrix_changes(tmp_path: Path):
-    source = load_artifact("data/governance/cross_period_strategy_matrix.json")
+    source = json.loads(require_artifact("data/governance/cross_period_strategy_matrix.json", non_empty_key="matrix").read_text(encoding="utf-8"))
     baseline = tmp_path / "baseline.json"
     baseline.write_text(json.dumps(source), encoding="utf-8")
     expected = _candidate_pool_fingerprint(baseline)
@@ -401,7 +401,7 @@ def test_recent_runner_pool_and_report_preserve_exploratory_boundary():
     # candidate_pool() reads the cross-period matrix internally, so the guard has
     # to precede it — otherwise the missing artifact surfaces as a raw
     # FileNotFoundError from inside the script rather than a skip.
-    require_artifact("data/governance/cross_period_strategy_matrix.json")
+    require_artifact("data/governance/cross_period_strategy_matrix.json", non_empty_key="matrix")
     module = load_script("run_recent_regime_research")
     rows, pool_hash = module.candidate_pool()
     assert len(rows) == 14

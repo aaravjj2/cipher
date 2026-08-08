@@ -66,7 +66,7 @@ def test_cross_period_matrix_uses_candidate_identity_and_no_execution_authority(
         "original_2023_2025": "ds_380c76da95f0c3787529c6b8",
         "locked_2026_ytd": "ds_f20f2e15e7d1041ce6a1858d",
     }
-    artifact = require_artifact("data/governance/cross_period_strategy_matrix.json")
+    artifact = require_artifact("data/governance/cross_period_strategy_matrix.json", non_empty_key="matrix")
     payload = json.loads(artifact.read_text(encoding="utf-8"))
     assert payload["identity_key"] == "candidate_id"
     assert payload["summary"]["tested_all_three"] >= 1
