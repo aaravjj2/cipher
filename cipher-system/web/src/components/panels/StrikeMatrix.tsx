@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { DownloadIcon, RefreshIcon, StrikeMatrixIcon } from "@/components/icons";
 import {
@@ -282,6 +282,37 @@ export function StrikeMatrix({
     return { maxAbs: max, starKey: key };
   }, [displayStrikes, expirations, activeCells]);
 
+  // Golden strike = the row holding the largest |exposure| cell, i.e. the same cell
+  // the grid already paints gold and lists first under Top Pulls.
+  const goldenStrike = useMemo(() => {
+    const [strike] = starKey.split("|");
+    const parsed = Number(strike);
+    return Number.isFinite(parsed) ? parsed : null;
+  }, [starKey]);
+
+  // Auto-snap to golden: scroll the heaviest strike into view whenever the grid
+  // changes. Without it the golden cell is usually off-screen on load — the strike
+  // list spans the whole chain, and the one row worth looking at first is wherever
+  // the exposure happens to peak. Re-runs on ticker, range and metric because each
+  // can move which strike is golden.
+  const gridRef = useRef<HTMLDivElement | null>(null);
+  const [autoSnap, setAutoSnap] = useState(true);
+
+  useEffect(() => {
+    if (!autoSnap || goldenStrike == null || !gridRef.current) return;
+    const row = gridRef.current.querySelector<HTMLElement>(
+      `[data-strike="${goldenStrike}"]`
+    );
+    if (!row) return;
+    // `center`, not `nearest`. `nearest` leaves an already-barely-visible row where it
+    // is, which on load parks the golden strike flush against the bottom edge with its
+    // neighbours cut off — the surrounding strikes are most of why you want to look at
+    // it. The deps are all deliberate or meaningful changes (ticker/range/metric, or
+    // the peak genuinely moving), not the refresh tick, so this does not fight a user
+    // who is reading a different strike between refreshes.
+    row.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [autoSnap, goldenStrike, ticker, range, metric]);
+
   const atmStrike = useMemo(
     () =>
       displayStrikes.reduce(
@@ -335,6 +366,21 @@ export function StrikeMatrix({
       >
         Auto refresh
       </button>
+      <button
+        type="button"
+        onClick={() => setAutoSnap((v) => !v)}
+        aria-pressed={autoSnap}
+        title="Snap to golden — keep the heaviest-exposure strike in view as the grid updates"
+        className="shrink-0 whitespace-nowrap rounded-[8px] px-[12px] py-[7px] text-[12px] font-semibold"
+        style={{
+          background: autoSnap ? "var(--nav-active)" : "var(--panel-2)",
+          border: "1px solid var(--line)",
+          color: autoSnap ? "var(--text)" : "var(--text-dim)",
+          fontFamily: "var(--font-mono)",
+        }}
+      >
+        Snap
+      </button>
     </>
   );
 
@@ -382,6 +428,7 @@ export function StrikeMatrix({
           <div className="flex flex-row gap-3 items-start">
             {/* Grid — its own horizontal scroll container so it never breaks page-level scroll */}
             <div
+              ref={gridRef}
               className="grid-scroll relative flex-1 min-w-0 overflow-x-auto rounded-[10px]"
               style={{ border: "1px solid var(--line)" }}
             >

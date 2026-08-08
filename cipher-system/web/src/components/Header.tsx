@@ -163,9 +163,21 @@ export function Header({
           <MenuIcon width={24} height={24} />
         </button>
 
-        {/* Brand */}
-        <div className="brand flex flex-row items-center gap-[10px] h-[26px] lg:w-[209px] shrink-0">
+        {/*
+          Brand: mark only. The "CIPHER / <PANEL>" text block held a fixed
+          lg:w-[209px], and the panel toolbars that portal into this row
+          (Strike Matrix's density + range + metric pills, Night Vision's overlay
+          toggles) were overflowing as a result — "Matrix" rendered clipped to
+          "Matri" behind a horizontal scrollbar. The wordmark was the least
+          load-bearing thing competing for that space: the active panel is already
+          named in the sidebar, highlighted, so the subtitle was a third copy of
+          information the user can see twice over. Dropping it and the fixed width
+          shifts the whole row left and gives the toolbar room to lay out.
+          The full name stays as the mark's title for accessibility.
+        */}
+        <div className="brand flex flex-row items-center h-[26px] shrink-0">
           <span
+            title={`Cipher — ${panelName}`}
             className="brand-mark block w-[26px] h-[26px] rounded-[7px] shrink-0 bg-no-repeat bg-cover bg-center"
             style={{
               backgroundImage: "url(/seo/cipher-logo.jpg)",
@@ -173,21 +185,6 @@ export function Header({
                 "inset 0 0 0 1px rgba(255,255,255,0.06), 0 4px 14px color-mix(in srgb, var(--accent) 25%, transparent)",
             }}
           />
-          {/* Brand text hidden below `lg:` — mobile screenshot shows only the mark beside the hamburger/search, approximate per spec. */}
-          <span className="hidden lg:flex flex-col justify-center min-w-0">
-            <span
-              className="brand-name block text-[13px] font-bold leading-tight truncate"
-              style={{ letterSpacing: "0.18em", color: "var(--text)" }}
-            >
-              CIPHER
-            </span>
-            <span
-              className="brand-sub block text-[10px] leading-tight truncate"
-              style={{ letterSpacing: "0.22em", color: "var(--text-mute)" }}
-            >
-              {panelName.toUpperCase()}
-            </span>
-          </span>
         </div>
 
         {/* Ticker search */}
@@ -396,13 +393,22 @@ export function Header({
           </div>
         )}
 
-        {/* Welcome text + logout pinned to the far right on desktop via ml-auto on the welcome span */}
-        <span className="hidden lg:inline lg:ml-auto" style={{ color: "var(--text-mute)" }}>
+        {/*
+          Welcome text + logout pinned to the far right on desktop via ml-auto on the welcome span.
+          The greeting is decoration and it competes with the panel toolbar for the same row: it
+          costs 124px plus its gap, and the Strike Matrix toolbar — the widest of the panels —
+          needs 818px but was only handed 698px, so "Auto refresh" clipped mid-word. Reclaiming the
+          greeting's ~138px yields 836px, which clears 818 with a little slack. The 1850px
+          threshold is that shortfall added back to the 1707px viewport it was measured at, so the
+          greeting reappears only once the toolbar is already satisfied. `ml-auto` moves to the
+          logout button below it so the right edge still pins.
+        */}
+        <span className="hidden min-[1850px]:inline min-[1850px]:ml-auto" style={{ color: "var(--text-mute)" }}>
           Welcome {displayName}! 🚀
         </span>
         <button
           type="button"
-          className="ml-auto lg:ml-0 shrink-0 rounded-[8px] px-[14px] py-2"
+          className="ml-auto min-[1850px]:ml-0 shrink-0 rounded-[8px] px-[14px] py-2"
           style={{ border: "1px solid var(--line)", color: "var(--text-dim)" }}
         >
           Logout

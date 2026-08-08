@@ -96,6 +96,9 @@ export function StrikeLabelCell({
 }) {
   return (
     <div
+      // Anchor for Strike Matrix's auto-snap-to-golden: rows render as fragments,
+      // so this sticky label is the one element per strike that can be scrolled to.
+      data-strike={strike}
       className={cn("k-cell", isAtm && "atm")}
       style={{
         position: "sticky",
