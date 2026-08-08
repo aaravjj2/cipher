@@ -28,6 +28,15 @@ import type { ExposureMetric } from "@/types/cipher";
 const AUTO_REFRESH_MS = 30_000;
 
 type ExpirationMode = "1exp" | "compact" | "full" | "leap";
+// Expiration depth per pill, matching core/exposure.py's documented UI presets
+// (1 Exp=1, Compact=5, Full=12, Leap=36 — see MAX_MATRIX_EXPIRATIONS).
+const EXPIRATION_COUNTS: Record<ExpirationMode, number> = {
+  "1exp": 1,
+  compact: 5,
+  full: 12,
+  leap: 36,
+};
+
 const EXPIRATION_OPTIONS: { label: string; value: ExpirationMode }[] = [
   { label: "1 Exp", value: "1exp" },
   { label: "Compact", value: "compact" },
@@ -342,7 +351,7 @@ export function NightVision({
       try {
         const [barsRes, nvRes] = await Promise.all([
           fetchBars(ticker, apiTimeframe, signal),
-          fetchNightVision(ticker, signal),
+          fetchNightVision(ticker, signal, EXPIRATION_COUNTS[expirationMode]),
         ]);
         setBars(barsRes.bars.slice(-CHART_BAR_COUNT));
         setNightVision(nvRes);
@@ -356,7 +365,7 @@ export function NightVision({
         if (background) setIsRefreshing(false);
       }
     },
-    [ticker, apiTimeframe]
+    [ticker, apiTimeframe, expirationMode]
   );
 
   useEffect(() => {

@@ -98,7 +98,9 @@ function SidebarNav({ collapsed, activePanel, onSelect }: SidebarNavProps) {
                 aria-current={isActive ? "page" : undefined}
                 title={collapsed ? item.label : undefined}
                 className={cn(
-                  "flex flex-row items-center gap-[10px] w-full h-[34px] rounded-[8px]",
+                  // min-h, not a fixed h: the CIPHER X rows stack a badge under the
+                  // label and would otherwise be clipped by the 34px box.
+                  "flex flex-row items-center gap-[10px] w-full min-h-[34px] py-[4px] rounded-[8px]",
                   "text-[12.5px] font-semibold transition-colors duration-150 ease-in-out",
                   collapsed ? "justify-center px-0" : "px-[11px]",
                   isActive
@@ -117,13 +119,15 @@ function SidebarNav({ collapsed, activePanel, onSelect }: SidebarNavProps) {
                   style={{ color: isActive ? "var(--text)" : "var(--text-mute)" }}
                 />
                 {!collapsed && (
-                  <span className="flex items-center gap-1 min-w-0 flex-1">
-                    <span className="truncate">{item.label}</span>
-                    {item.cipherX && (
-                      <span className="shrink-0">
-                        <CipherXBadge />
-                      </span>
-                    )}
+                  // Badge stacks UNDER the label rather than beside it. Inline, the
+                  // 45px badge left only ~64px for the label inside a 161px button,
+                  // which clipped "Chart Saves" (needs 76px) and "Setup Scanner"
+                  // (94px) to "Chart Sa…" / "Setup S…". The real product's own nav
+                  // text reads "Chart Saves\nCIPHER X" — a newline, i.e. stacked —
+                  // so this matches it and removes the truncation at the same time.
+                  <span className="flex flex-col items-start min-w-0 flex-1 leading-tight">
+                    <span className="truncate max-w-full">{item.label}</span>
+                    {item.cipherX && <CipherXBadge />}
                   </span>
                 )}
               </button>

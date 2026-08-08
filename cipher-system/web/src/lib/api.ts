@@ -204,8 +204,17 @@ export type RealNightVisionResponse = RealMatrixResponse & {
   premarket_range_pct?: number | null;
 };
 
-export function fetchNightVision(ticker: string, signal?: AbortSignal): Promise<RealNightVisionResponse> {
-  return getJson<RealNightVisionResponse>(`/api/night-vision?symbol=${encodeURIComponent(ticker)}`, signal);
+export function fetchNightVision(
+  ticker: string,
+  signal?: AbortSignal,
+  expirationCount?: number
+): Promise<RealNightVisionResponse> {
+  const params = new URLSearchParams({ symbol: ticker });
+  // core/app.py's /api/night-vision accepts `expirations` and always has; Night
+  // Vision never sent it, so its 1 Exp / Compact / Full / Leap pills only changed
+  // a label while the levels underneath stayed on the server default.
+  if (expirationCount != null) params.set("expirations", String(expirationCount));
+  return getJson<RealNightVisionResponse>(`/api/night-vision?${params.toString()}`, signal);
 }
 
 // Real query params confirmed from core/app.py's /api/flow handler: min (or premium),

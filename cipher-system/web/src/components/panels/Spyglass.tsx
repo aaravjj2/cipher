@@ -410,7 +410,12 @@ function SpyglassView({ ticker }: { ticker: string }) {
   useEffect(() => {
     setTradeDate(new Date().toISOString().slice(0, 10));
   }, []);
-  const [premium, setPremium] = useState<PremiumBucket>("50");
+  // "All px", not the ≤$0.50 contract-price cap. The two price filters compose:
+  // maxPrice caps the per-contract price while minPremium floors the notional, so
+  // the old default asked for prints of ≤$0.50 options worth ≥$5,000 — 100+
+  // contracts of a near-worthless strike. Measured on AAPL: 400 prints with no
+  // cap, 0 with pmax=0.5. The panel opened on an empty table every single time.
+  const [premium, setPremium] = useState<PremiumBucket>("all");
   const [size, setSize] = useState<SizeBucket>("5k");
   const [callPut, setCallPut] = useState<CallPutFilter>("all");
   const [bidAsk, setBidAsk] = useState<BidAskFilter>("bidAsk");
