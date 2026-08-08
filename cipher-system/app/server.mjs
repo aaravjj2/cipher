@@ -1,5 +1,7 @@
 /** Browser-facing application server. Credentials remain in the local core service. */
 import { createServer } from "node:http";
+import { gzip as gzipCb } from "node:zlib";
+import { promisify } from "node:util";
 import { chmod, readFile } from "node:fs/promises";
 import { dirname, extname, join, normalize, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -41,6 +43,10 @@ const mime = {
   ".woff": "font/woff",
   ".txt": "text/plain; charset=utf-8",
 };
+const gzip = promisify(gzipCb);
+// Below this, framing and CPU cost more than the bytes saved.
+const GZIP_MIN_BYTES = 1400;
+
 const sendJson = (res, status, body) => {
   res.writeHead(status, {
     "content-type": "application/json; charset=utf-8",
@@ -106,7 +112,7 @@ const routes = {
   "/api/backtest": "/api/backtest",
 };
 
-async function proxyCore(res, requestPath, query, { method = "GET", body = null, headers = {} } = {}) {
+async function proxyCore(res, requestPath, query, { method = "GET", body = null, headers = {}, acceptEncoding = "" } = {}) {
   const target = new URL(requestPath, coreUrl);
   for (const [key, value] of query) target.searchParams.set(key, value);
   const init = { method, headers: { accept: "application/json", ...headers } };
@@ -118,11 +124,29 @@ async function proxyCore(res, requestPath, query, { method = "GET", body = null,
   }
   const response = await fetch(target, init);
   const data = Buffer.from(await response.arrayBuffer());
-  res.writeHead(response.status, {
+  // Grid payloads are large and highly repetitive: SPY's full chain is 1.43 MB
+  // raw and 152 KB gzipped, a 9.4x reduction. Uncompressed that is the dominant
+  // cost of a depth change, and it becomes the dominant cost of everything once
+  // this is served over a network rather than from localhost.
+  const outHeaders = {
     "content-type": response.headers.get("content-type") || "application/json; charset=utf-8",
     "cache-control": "no-store",
     "x-content-type-options": "nosniff",
-  });
+    vary: "accept-encoding",
+  };
+  const accepts = String(acceptEncoding || "");
+  if (data.length > GZIP_MIN_BYTES && /\bgzip\b/.test(accepts)) {
+    try {
+      const packed = await gzip(data);
+      outHeaders["content-encoding"] = "gzip";
+      res.writeHead(response.status, outHeaders);
+      res.end(packed);
+      return;
+    } catch {
+      /* fall through to the uncompressed response */
+    }
+  }
+  res.writeHead(response.status, outHeaders);
   res.end(data);
 }
 
@@ -230,7 +254,10 @@ createServer(async (req, res) => {
         const ct = req.headers["content-type"];
         if (ct) headers["content-type"] = ct;
       }
-      return await proxyCore(res, routes[url.pathname], query, { method, body, headers });
+      return await proxyCore(res, routes[url.pathname], query, {
+        method, body, headers,
+        acceptEncoding: req.headers["accept-encoding"] || "",
+      });
     } catch {
       return sendJson(res, 503, {
         error: "Local market-data service is unavailable. Start the Cipher app launcher.",
