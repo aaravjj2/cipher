@@ -102,8 +102,25 @@ function PillGroup<T extends string>({
 }
 
 /** Standalone bordered toggle pill — used for Snap-to-spot/golden and FC/Auto/TR/SP.
- * No corresponding real-data field is exposed by /api/matrix, so these stay visual-only
- * toggles, per the same judgment call as Night Vision's SPY/QQQ + TS overlays. */
+ *
+ * These are still visual-only, but their real semantics are now known (confirmed by
+ * the product's owner, 2026-08-08) and recorded here so the next implementer does
+ * not have to re-derive them from screenshots:
+ *
+ *   FC   — highlight the largest upside and downside walls. Buildable today:
+ *          /api/matrix already returns per-strike net_gex, so this is a max/min
+ *          selection over the existing grid plus a highlight style. No new endpoint.
+ *   Auto — auto-refresh every few seconds. StrikeMatrix already implements exactly
+ *          this (AUTO_REFRESH_MS + an "Auto refresh" pill); reuse that, do not
+ *          reinvent it.
+ *   SP   — open the Night Vision chart alongside, i.e. a split/dual-pane view.
+ *          This is a layout change in page.tsx rather than a data change.
+ *   TR   — semantics still unconfirmed; leave inert until they are.
+ *
+ * Deliberately not built yet — noted, not scheduled. Wiring them is a UI task with
+ * no data dependency, unlike the parity and evidence work that gates everything
+ * else.
+ */
 function ToggleButton({
   label,
   active,
