@@ -166,6 +166,58 @@ def read_json(path: Path | None) -> dict[str, Any]:
     return payload if isinstance(payload, dict) else {}
 
 
+def load_script(name: str):
+    """Import a sibling script by path, the way the test suite does."""
+    import importlib.util
+
+    path = ROOT / "scripts" / f"{name}.py"
+    spec = importlib.util.spec_from_file_location(name, path)
+    if not spec or not spec.loader:
+        raise ImportError(f"cannot load {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def rederive_cohort(scope: dict, cohort: dict, scope_path: Path | None) -> dict[str, Any]:
+    """Re-run the cohort construction and compare it against the artifact's claim.
+
+    This audit used to read `strict_independent_origins` and `pass` straight out of
+    the cohort artifact — the very file it is auditing — and report them as verified.
+    That is transcription, not verification, and it was actively wrong: the artifact
+    claims 12 origins and `pass: true`, while re-running the unchanged code over the
+    same scope yields 11 and `pass: false`. The artifact's windows also lack the
+    `context_start` key the current implementation emits, so it was produced by a
+    laxer version that no longer exists in git.
+
+    A false `origin_gap: 0` then propagated into every consumer of this report.
+    """
+    out: dict[str, Any] = {"cohort_claim_reproduces": None, "rederivation_error": None}
+    try:
+        module = load_script("construct_alpaca_holdout_c_cohort")
+        derived = module.build_cohort_payload(
+            scope,
+            scope_artifact=str(scope_path) if scope_path else "",
+            period=str(cohort.get("holdout_period") or ""),
+        )
+    except Exception as exc:  # noqa: BLE001 - an audit must never crash on its subject
+        out["rederivation_error"] = f"{type(exc).__name__}: {exc}"
+        return out
+
+    derived_block = derived.get("selected_block") or {}
+    claimed_block = cohort.get("selected_block") or {}
+    fields = ("strict_independent_origins", "sessions", "start", "end", "minimum_common_tickers")
+    out["derived"] = {k: derived_block.get(k) for k in fields}
+    out["derived"]["pass"] = bool(derived.get("pass"))
+    out["claimed"] = {k: claimed_block.get(k) for k in fields}
+    out["claimed"]["pass"] = bool(cohort.get("pass"))
+    out["cohort_claim_reproduces"] = out["derived"] == out["claimed"]
+    out["mismatched_fields"] = sorted(
+        k for k in out["derived"] if out["derived"].get(k) != out["claimed"].get(k)
+    )
+    return out
+
+
 def holdout_evidence(scope_path: Path | None, cohort_path: Path | None) -> dict[str, Any]:
     scope = read_json(scope_path)
     cohort = read_json(cohort_path)
@@ -173,10 +225,26 @@ def holdout_evidence(scope_path: Path | None, cohort_path: Path | None) -> dict[
     requirements = cohort.get("requirements") or {}
     normalized_root = ROOT / "data" / "normalized" / "alpaca_sip_holdout_c_1m"
     partitions = sum(1 for path in normalized_root.rglob("*.parquet") if path.is_file()) if normalized_root.exists() else 0
-    origins = int(selected.get("strict_independent_origins") or 0)
+
+    # DERIVED values win over claimed ones. A cohort whose claim does not reproduce
+    # must never be reported as passing.
+    rederived = rederive_cohort(scope, cohort, scope_path)
+    derived_block = (rederived.get("derived") or {}) if rederived.get("cohort_claim_reproduces") is not None else {}
+    origins = int(
+        derived_block.get("strict_independent_origins")
+        if derived_block.get("strict_independent_origins") is not None
+        else (selected.get("strict_independent_origins") or 0)
+    )
     required = int(requirements.get("minimum_strict_independent_origins") or 12)
     minimum_tickers = int(selected.get("minimum_common_tickers") or 0)
+    cohort_pass = (
+        bool(derived_block.get("pass"))
+        if rederived.get("cohort_claim_reproduces") is not None and derived_block
+        else bool(cohort.get("pass"))
+    )
     return {
+        "cohort_rederivation": rederived,
+        "cohort_pass_claimed": bool(cohort.get("pass")),
         "scope_artifact": str(scope_path) if scope_path else None,
         "cohort_artifact": str(cohort_path) if cohort_path else None,
         "scope_provider": scope.get("provider"),
@@ -191,9 +259,11 @@ def holdout_evidence(scope_path: Path | None, cohort_path: Path | None) -> dict[
         "required_strict_independent_origins": required,
         "origin_gap": max(0, required - origins),
         "minimum_common_tickers": minimum_tickers,
-        "cohort_pass": bool(cohort.get("pass")),
+        "cohort_pass": cohort_pass,
         "ranking_outcomes_evaluated": bool(cohort.get("ranking_outcomes_evaluated")),
         "volume_features_or_evaluation": bool(cohort.get("volume_features_or_evaluation")),
+        # Derived, not claimed. This read 12/pass=true off an artifact whose own
+        # code yields 11/pass=false.
         "post_merge_recount_matches_11_of_12": origins == 11 and required == 12,
     }
 

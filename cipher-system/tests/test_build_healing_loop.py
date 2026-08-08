@@ -252,7 +252,10 @@ def test_default_build_suite_contains_compile_node_and_full_pytest_only():
         "python_compile",
         "node_server_syntax",
         "node_launcher_syntax",
-        "node_browser_syntax",
+        # The browser bundle moved to cipher-system/web; app/public/app.js no
+        # longer exists, so `node --check` on it failed every run. The current
+        # frontend is verified by its own typecheck over the whole source tree.
+        "web_typecheck",
         "pytest_full",
     ]
     command_text = " ".join(part for step in steps for part in step.command).lower()

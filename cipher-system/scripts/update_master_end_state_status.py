@@ -293,9 +293,21 @@ def build_status() -> dict[str, Any]:
 
     counts = registry_counts()
     app_text = (ROOT / "core" / "app.py").read_text(encoding="utf-8", errors="ignore")
-    js_text = (ROOT / "app" / "public" / "app.js").read_text(encoding="utf-8", errors="ignore")
-    html_text = (ROOT / "app" / "public" / "index.html").read_text(encoding="utf-8", errors="ignore")
-    ui_ready = "/api/research-status" in app_text and "renderResearchStatus" in js_text and 'data-view="researchStatus"' in html_text
+    # The research-status surface moved when the vanilla app/public bundle was replaced
+    # by the Next.js frontend in cipher-system/web. Read the frontend SOURCE rather than
+    # the built bundle: the build output is regenerable and was previously absent
+    # entirely, which crashed this function on a missing app/public/app.js.
+    ui_text = ""
+    for path in sorted((ROOT / "web" / "src").rglob("*.tsx")):
+        try:
+            ui_text += path.read_text(encoding="utf-8", errors="ignore")
+        except OSError:
+            continue
+    ui_ready = (
+        "/api/research-status" in app_text
+        and "fetchResearchStatus" in ui_text
+        and 'data-view="researchStatus"' in ui_text
+    )
 
     if cohort_pass:
         track1 = track(1, "Price-only Qlib/RD-Agent factor discovery", "completed_real", reason="A frozen cohort passed and the governed factor study completed.", evidence=[str(factor_path)] if factor_path else [], metrics={"strict_independent_origins": observed_origins})
@@ -466,7 +478,7 @@ def build_status() -> dict[str, Any]:
         "Operator research-status UI",
         "completed_infrastructure" if ui_ready else "pending",
         reason="The local read-only UI and API expose real completed, skipped, and blocked track states." if ui_ready else "The research-status API/UI is not yet wired.",
-        evidence=[str(ROOT / "core" / "app.py"), str(ROOT / "app" / "public" / "app.js")],
+        evidence=[str(ROOT / "core" / "app.py"), str(ROOT / "web" / "src" / "components" / "panels" / "Settings.tsx")],
         metrics={"ui_ready": ui_ready},
     )
     tracks = [track1, track2, track3, track4, track5, track6, track7, track8]

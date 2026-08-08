@@ -219,9 +219,14 @@ def default_validation_steps(
             timeout_seconds=60,
         ),
         ValidationStep(
-            "node_browser_syntax",
-            (node, "--check", "cipher-system/app/public/app.js"),
-            timeout_seconds=60,
+            # The browser bundle moved to cipher-system/web (Next.js) and
+            # app/public became regenerable build output — app.js no longer
+            # exists, so `node --check` on it failed every run. The equivalent
+            # check for the current frontend is its own typecheck, which covers
+            # the whole source tree rather than one concatenated bundle.
+            "web_typecheck",
+            ("npm", "--prefix", "cipher-system/web", "run", "typecheck"),
+            timeout_seconds=300,
         ),
         ValidationStep(
             "pytest_full",

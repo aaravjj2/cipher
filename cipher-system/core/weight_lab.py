@@ -181,6 +181,94 @@ def _time_features(*, dte=None, as_of: date | None = None, dist_to_event=None) -
     }
 
 
+def _group_key(row: dict) -> str:
+    """Independent-observation key: one (session date, ticker) is ONE sample.
+
+    Intraday capture re-reads the same card every ~70 seconds, so a naive row count
+    is pseudo-replication. Measured on the captured agentic corpus: 432 rows collapse
+    to 14 unique (day, ticker) pairs, and 358 of the 432 come from a single day.
+    Counting rows would clear every threshold in _fit_warnings() while the true
+    independent sample is ~14.
+    """
+    # _parse_asof_date already handles the three shapes labels arrive in: an explicit
+    # date field, an as_of timestamp, or a YYYY-MM-DD embedded in the source filename
+    # (which is how every commercial CSV carries its session).
+    day = _parse_asof_date(row)
+    if day is None:
+        raw = str(row.get("captured_at") or "")[:10]
+        day = raw if _DATE_RE.fullmatch(raw) else None
+    return f"{day.isoformat() if hasattr(day, 'isoformat') else (day or '')}:{row.get('ticker') or ''}"
+
+
+def _degenerate_features(X_raw, feature_names: list[str]) -> tuple[list[str], list[tuple[str, str]]]:
+    """Features that carry no information, and pairs that carry the same information.
+
+    Both failure modes were live in weights_flash.json and neither was reported:
+    6 of 13 coefficients were exactly zero because those columns were constant
+    across the 22 label rows, and pull_from_support_pct / stretch_from_support_pct
+    were the same column fitted twice — identical mean, std and coefficient to
+    6.2e-15. A fit cannot be trusted while either is silent.
+    """
+    constant: list[str] = []
+    stds = X_raw.std(axis=0)
+    for i, name in enumerate(feature_names):
+        if stds[i] < 1e-9:
+            constant.append(name)
+
+    collinear: list[tuple[str, str]] = []
+    live = [i for i in range(len(feature_names)) if stds[i] >= 1e-9]
+    for a_idx in range(len(live)):
+        for b_idx in range(a_idx + 1, len(live)):
+            i, j = live[a_idx], live[b_idx]
+            col_i, col_j = X_raw[:, i], X_raw[:, j]
+            denom = float(np.std(col_i) * np.std(col_j))
+            if denom < 1e-12:
+                continue
+            corr = float(np.mean((col_i - col_i.mean()) * (col_j - col_j.mean())) / denom)
+            if abs(corr) > 0.999:
+                collinear.append((feature_names[i], feature_names[j]))
+    return constant, collinear
+
+
+def _grouped_cv_r2(X, y, groups: list[str], l2: float) -> float | None:
+    """Leave-one-group-out R², the only honest score for a pseudo-replicated corpus.
+
+    Returns None when there are too few groups to hold one out meaningfully.
+    """
+    unique = sorted(set(groups))
+    if len(unique) < 3:
+        return None
+    preds = np.zeros_like(y, dtype=float)
+    arr = np.array(groups)
+    for held in unique:
+        test = arr == held
+        train = ~test
+        if train.sum() < 2 or test.sum() == 0:
+            return None
+        coef, _, _ = _ridge(X[train], y[train], l2=l2)
+        preds[test] = coef[0] + X[test] @ coef[1:]
+    ss_res = float(np.sum((y - preds) ** 2))
+    ss_tot = float(np.sum((y - y.mean()) ** 2))
+    if ss_tot < 1e-12:
+        return None
+    return 1.0 - ss_res / ss_tot
+
+
+# A fit must clear all of these before it is allowed to drive live scores. The
+# thresholds encode this project's own history: a 6-ticker cluster calibration
+# looked fine and then failed at 36 tickers (core/scanner.py:1372-1402), and the
+# flash head shipped on 22 rows with R² 0.98 and six dead coefficients.
+ACTIVATION_GATE = {
+    "min_groups": 30,
+    "min_tickers": 12,
+    "min_days": 10,
+    "min_r2_cv": 0.0,
+    # Out-of-sample must retain at least half the in-sample fit; a large gap is
+    # the signature of memorising the labels.
+    "min_cv_to_insample_ratio": 0.5,
+}
+
+
 def _fit_warnings(n: int, r2: float, tau: float | None = None) -> list[str]:
     warnings: list[str] = []
     if n < 30:
@@ -693,7 +781,18 @@ def fit_flash_weights(*, use_local_features=True, l2=1.0, rank_loss=False) -> di
         else:
             feat = label_feat
             source = "label_only"
-        rows.append({"ticker": ticker, "score": lab["score"], "rank": lab.get("rank"), "feat": feat, "source": source})
+        # `source` becomes a provenance tag here, which drops the label filename that
+        # _parse_asof_date reads the session date out of. Carry the date explicitly so
+        # grouping and the n_days gate see it.
+        as_of = _parse_asof_date(lab)
+        rows.append({
+            "ticker": ticker,
+            "score": lab["score"],
+            "rank": lab.get("rank"),
+            "feat": feat,
+            "source": source,
+            "session_date": as_of.isoformat() if as_of else None,
+        })
 
     return _fit_and_write(
         rows, FLASH_FEATURE_NAMES, WEIGHTS_FLASH_PATH, l2=l2, head="flash", rank_loss=rank_loss
@@ -817,6 +916,22 @@ def score_cluster_setup(
 
     Guarantees any quad outranks any triple, which outranks battle/golden/walls,
     regardless of factor values (tier_gap dominates).
+
+    2026-08-06: investigated matching the real product's displayed "Strength"
+    number directly (not just the tier ordering). Real values for same-tier
+    (triple) setups span a huge range — 72 to 260 across a 31-ticker paired
+    sample — far wider than this formula's factor_contrib term (0-20) can
+    produce once tier_gap floors each tier. Checked whether factor_contrib's
+    *inputs* (the weighted factor sum before the 20x scale) at least correlate
+    with the real number, to see if widening the scale would help: measured
+    correlation was 0.19 (essentially noise) against the same 31 tickers. That
+    rules out a simple rescale — the current factor vector (strength_norm,
+    proximity, side_above, oi_log, vacuum_thin, peak_count_norm, persistence,
+    momentum), all derived from public OI/GEX, does not predict the real
+    displayed magnitude. The real number likely reflects something not
+    reconstructable from public OI (e.g. actual dealer positioning) rather
+    than a differently-scaled version of the same public-data signal. Did not
+    change factor_contrib's scale — a rescale here would fit noise, not signal.
     """
     weights = weights or load_cluster_score_weights()
     order = list(weights.get("hard_rank_order") or _DEFAULT_CLUSTER_SCORE_WEIGHTS["hard_rank_order"])
@@ -955,6 +1070,14 @@ def _fit_and_write(
     stds = np.where(stds < 1e-9, 1.0, stds)
     X = (X_raw - means) / stds
 
+    # Independent-sample accounting BEFORE fitting, so the diagnostics describe the
+    # data rather than the fit's opinion of itself.
+    groups = [_group_key(r) for r in rows]
+    n_groups = len(set(groups))
+    n_tickers = len({r.get("ticker") for r in rows if r.get("ticker")})
+    n_days = len({g.split(":", 1)[0] for g in groups if g.split(":", 1)[0]})
+    constant_features, collinear_pairs = _degenerate_features(X_raw, feature_names)
+
     fit_mode = "ridge"
     loss_note = "Default ordinary ridge (score MSE + L2)."
     if rank_loss:
@@ -974,13 +1097,44 @@ def _fit_and_write(
     pred_ranks = np.empty(len(rows), dtype=float)
     pred_ranks[pred_order] = np.arange(1, len(rows) + 1)
     tau = _kendall_tau(np.array(true_ranks, dtype=float), pred_ranks)
-    warnings = _fit_warnings(len(rows), float(r2), float(tau))
+
+    r2_cv = _grouped_cv_r2(X, y, groups, l2)
+    # Warnings key off n_groups, not len(rows). Row count is pseudo-replicated by
+    # intraday re-capture and would silently clear every threshold.
+    warnings = _fit_warnings(n_groups, float(r2), float(tau))
+    if n_groups < len(rows):
+        warnings.append(
+            f"{len(rows)} rows collapse to {n_groups} independent (day, ticker) groups; "
+            f"sample-size checks use the group count."
+        )
+    if constant_features:
+        warnings.append(
+            f"Constant features carry no information and will fit to zero: "
+            f"{', '.join(constant_features)}."
+        )
+    for a, b in collinear_pairs:
+        warnings.append(f"Features '{a}' and '{b}' are collinear (|r|>0.999) — the same column twice.")
+    if r2_cv is None:
+        warnings.append("Grouped cross-validation not computable (fewer than 3 groups).")
+    elif r2_cv <= 0:
+        warnings.append(f"Grouped CV R² is {r2_cv:.3f} — no out-of-sample skill.")
+    elif r2 > 0 and r2_cv < 0.5 * r2:
+        warnings.append(
+            f"Grouped CV R² ({r2_cv:.3f}) is far below in-sample ({r2:.3f}) — overfit."
+        )
 
     weights = {
         "as_of": _utcnow(),
         "head": head,
         "n": len(rows),
+        "n_rows": len(rows),
+        "n_groups": n_groups,
+        "n_tickers": n_tickers,
+        "n_days": n_days,
         "r_squared": round(r2, 4),
+        "r2_cv": None if r2_cv is None else round(float(r2_cv), 4),
+        "degenerate_features": constant_features,
+        "collinear_pairs": [list(pair) for pair in collinear_pairs],
         "kendall_tau_rank": round(float(tau), 4),
         "l2": l2,
         "fit_mode": fit_mode,
@@ -1068,8 +1222,73 @@ def set_active(active: bool) -> dict:
     return payload
 
 
+def activation_blockers(weights: dict | None) -> list[str]:
+    """Why a fit may not go live. Empty list means it clears the gate.
+
+    Deactivation is never blocked — only activation. The thresholds encode this
+    project's own history rather than a textbook: a 6-ticker cluster calibration
+    looked good and failed at 36 tickers, and the flash head shipped on 22 rows
+    with R² 0.98, six dead coefficients and two identical columns.
+    """
+    if not weights:
+        return ["no fitted weights on disk"]
+    gate = ACTIVATION_GATE
+    blockers: list[str] = []
+
+    # Older weights files predate these fields; absence is itself disqualifying,
+    # because it means the fit was never checked.
+    for key, label in (("n_groups", "independent groups"), ("n_tickers", "tickers"), ("n_days", "days")):
+        if weights.get(key) is None:
+            blockers.append(f"fit predates group accounting (no {key}) — refit before activating")
+            return blockers
+
+    if weights["n_groups"] < gate["min_groups"]:
+        blockers.append(f"only {weights['n_groups']} independent groups (need {gate['min_groups']})")
+    if weights["n_tickers"] < gate["min_tickers"]:
+        blockers.append(f"only {weights['n_tickers']} tickers (need {gate['min_tickers']})")
+    if weights["n_days"] < gate["min_days"]:
+        blockers.append(f"only {weights['n_days']} sessions (need {gate['min_days']})")
+
+    r2_cv = weights.get("r2_cv")
+    if r2_cv is None:
+        blockers.append("no grouped cross-validation score")
+    else:
+        if r2_cv <= gate["min_r2_cv"]:
+            blockers.append(f"grouped CV R² {r2_cv:.3f} shows no out-of-sample skill")
+        r2 = weights.get("r_squared")
+        if r2 and r2 > 0 and r2_cv < gate["min_cv_to_insample_ratio"] * r2:
+            blockers.append(
+                f"grouped CV R² {r2_cv:.3f} is under half of in-sample {r2:.3f} — overfit"
+            )
+
+    if weights.get("degenerate_features"):
+        blockers.append(
+            f"constant features carry no information: {', '.join(weights['degenerate_features'])}"
+        )
+    if weights.get("collinear_pairs"):
+        pairs = ", ".join(f"{a}~{b}" for a, b in weights["collinear_pairs"])
+        blockers.append(f"collinear feature pairs (same column twice): {pairs}")
+    return blockers
+
+
 def set_flash_active(active: bool) -> dict:
     ensure_dirs()
+    if active:
+        blockers = activation_blockers(load_flash_weights())
+        if blockers:
+            # Enforce the gate rather than merely refusing entry. A head that
+            # cannot pass must not be left running just because it was switched on
+            # earlier — which is exactly how the degenerate n=22 fit stayed live.
+            payload = _active_payload()
+            if payload.get("flash_active"):
+                payload["flash_active"] = False
+                payload["as_of"] = _utcnow()
+                ACTIVE_PATH.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+                _clear_scanner_cache()
+                payload["deactivated_by_gate"] = True
+            payload["activated"] = False
+            payload["blocked_by"] = blockers
+            return payload
     payload = _active_payload()
     payload.update(
         {

@@ -36,6 +36,20 @@ smoke_warn "/api/health"
 smoke_warn "/api/weight-lab?action=status"
 smoke_warn "/api/backtest?action=list"
 
+# Frontend staleness smoke — the counterpart to the core route smoke above. The server
+# serves app/public, but `npm run build` writes web/out, and nothing links them. When
+# app/public is older than the newest source file the UI silently serves an old bundle,
+# which is indistinguishable from a browser cache problem from the outside.
+if [[ -f "$ROOT/app/public/index.html" ]]; then
+  newest_src=$(find "$ROOT/web/src" -type f -newer "$ROOT/app/public/index.html" -print -quit 2>/dev/null || true)
+  if [[ -n "$newest_src" ]]; then
+    echo "WARNING: app/public is older than web/src — the served UI is stale." >&2
+    echo "         Run: bash scripts/sync_web_build.sh" >&2
+  else
+    echo "OK frontend bundle up to date"
+  fi
+fi
+
 echo "Starting Cipher Research app on :${PORT} …"
 node "$ROOT/app/server.mjs" > /tmp/cipher-web.log 2>&1 &
 WEB_PID=$!

@@ -13,6 +13,7 @@ import re
 import sqlite3
 import threading
 import time
+import uuid
 from collections.abc import Callable
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
@@ -28,6 +29,7 @@ import sys
 CORE_DIR = Path(__file__).resolve().parent
 if str(CORE_DIR) not in sys.path:
     sys.path.insert(0, str(CORE_DIR))
+import disk_cache
 from scanner import SCAN_UNIVERSE, UNIVERSE_META, get_scan_job, run_scan, start_scan_job
 import weight_lab
 import cluster_backtest
@@ -37,8 +39,17 @@ import historical_backtest
 import price_backtest
 import edge_backtest
 import intraday_backtest
+import session_levels
+import evidence_status
+import backtest_jobs
+from zoneinfo import ZoneInfo
+
+# Exchange local time. Session boundaries and trading dates are ET facts, not UTC
+# ones — see the prior_close note in quote().
+ET_ZONE = ZoneInfo("America/New_York")
 from exposure import (
-    number, parse_contract, gex, vex, model_gamma, model_vanna,
+    number, parse_contract, gex, vex, model_gamma, model_vanna, oi_is_proxy,
+    iv_is_ill_conditioned,
     profile_summary, classify_aggressor, premium_tier,
     _depth_is_full_chain, _depth_to_points,
     _clamp_expiration_count, _matrix_chain_pages, _matrix_oi_horizon_days,
@@ -49,6 +60,38 @@ ROOT = Path(__file__).resolve().parents[1]
 ENV = ROOT / ".env"
 DATA = "https://data.alpaca.markets"
 CONTRACTS = "https://paper-api.alpaca.markets/v2/options/contracts"
+
+# core/flash_agentic_live_loop.py writes here — a continuous background loop that
+# captures the real AccessObsidian Flash Agentic panel via Kimi WebBridge (browser
+# automation on the user's own logged-in session) and records newly spotted signals.
+FLASH_AGENTIC_DATA_DIR = ROOT / "data" / "flash_agentic"
+FLASH_AGENTIC_LIVE_STATUS = FLASH_AGENTIC_DATA_DIR / "live_status.json"
+ACCESSOBSIDIAN_SCANS_DIR = ROOT / "data" / "accessobsidian_scans"
+
+
+def _latest_flash_agentic_capture() -> dict | None:
+    """Most recently captured flash_agentic.json under data/accessobsidian_scans/."""
+    if not ACCESSOBSIDIAN_SCANS_DIR.is_dir():
+        return None
+    candidates = list(ACCESSOBSIDIAN_SCANS_DIR.glob("*/*/flash_agentic.json"))
+    if not candidates:
+        return None
+    latest = max(candidates, key=lambda p: p.stat().st_mtime)
+    try:
+        payload = json.loads(latest.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return None
+    payload["_captured_file_mtime"] = latest.stat().st_mtime
+    return payload
+
+
+def _flash_agentic_live_status() -> dict | None:
+    if not FLASH_AGENTIC_LIVE_STATUS.is_file():
+        return None
+    try:
+        return json.loads(FLASH_AGENTIC_LIVE_STATUS.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return None
 
 OI_CACHE: dict = {}
 CHAIN_CACHE: dict = {}
@@ -216,6 +259,11 @@ def local_settings():
     return key, secret, options_feed, stock_feed
 
 
+DEFAULT_SCAN_WORKERS = 4
+RATE_LIMIT_RETRIES = 4
+RATE_LIMIT_BACKOFF_SECONDS = 1.5
+
+
 def alpaca(path, query=None, base=DATA):
     key, secret, _, _ = local_settings()
     url = base + path
@@ -229,18 +277,36 @@ def alpaca(path, query=None, base=DATA):
             "Accept": "application/json",
         },
     )
-    try:
-        with urlopen(request, timeout=45) as response:
-            return json.loads(response.read().decode("utf-8"))
-    except HTTPError as exc:
-        detail = (
-            "the selected feed may require an eligible subscription"
-            if exc.code == 403
-            else "check symbol and configured market-data access"
-        )
-        raise ValueError(f"Alpaca market-data request failed (HTTP {exc.code}); {detail}.") from exc
-    except URLError as exc:
-        raise ValueError("Unable to reach Alpaca market data. Check the network and retry.") from exc
+    # Alpaca answers 429 when the account's request budget is exceeded, which a long
+    # Setup Scanner run can reach. Previously a single 429 aborted the whole call and
+    # the ticker was recorded as a hard error, so a transient throttle silently cost
+    # results. Honour Retry-After when present, otherwise back off exponentially.
+    last_exc = None
+    for attempt in range(RATE_LIMIT_RETRIES):
+        try:
+            with urlopen(request, timeout=45) as response:
+                return json.loads(response.read().decode("utf-8"))
+        except HTTPError as exc:
+            last_exc = exc
+            if exc.code == 429 and attempt < RATE_LIMIT_RETRIES - 1:
+                retry_after = exc.headers.get("Retry-After") if exc.headers else None
+                try:
+                    delay = float(retry_after) if retry_after else RATE_LIMIT_BACKOFF_SECONDS * (2 ** attempt)
+                except (TypeError, ValueError):
+                    delay = RATE_LIMIT_BACKOFF_SECONDS * (2 ** attempt)
+                time.sleep(min(delay, 20.0))
+                continue
+            detail = (
+                "the selected feed may require an eligible subscription"
+                if exc.code == 403
+                else "rate limited — retries exhausted"
+                if exc.code == 429
+                else "check symbol and configured market-data access"
+            )
+            raise ValueError(f"Alpaca market-data request failed (HTTP {exc.code}); {detail}.") from exc
+        except URLError as exc:
+            raise ValueError("Unable to reach Alpaca market data. Check the network and retry.") from exc
+    raise ValueError(f"Alpaca market-data request failed (HTTP {getattr(last_exc, 'code', '?')}).")
 
 
 def resolve_options_feed(requested: str | None) -> str:
@@ -276,13 +342,28 @@ def option_open_interest(ticker, expiration_gte=None, expiration_lte=None):
                 "Accept": "application/json",
             },
         )
-        try:
-            with urlopen(request, timeout=45) as response:
-                raw = json.loads(response.read().decode("utf-8"))
-        except HTTPError as exc:
-            raise ValueError(f"Alpaca option-contract metadata failed (HTTP {exc.code}).") from exc
-        except URLError as exc:
-            raise ValueError("Unable to reach Alpaca option-contract metadata. Check the network and retry.") from exc
+        # Same 429 backoff as alpaca() — this endpoint is hit once per ticker during a
+        # scan and was the one that actually threw HTTP 429 under load.
+        raw = None
+        for attempt in range(RATE_LIMIT_RETRIES):
+            try:
+                with urlopen(request, timeout=45) as response:
+                    raw = json.loads(response.read().decode("utf-8"))
+                break
+            except HTTPError as exc:
+                if exc.code == 429 and attempt < RATE_LIMIT_RETRIES - 1:
+                    retry_after = exc.headers.get("Retry-After") if exc.headers else None
+                    try:
+                        delay = float(retry_after) if retry_after else RATE_LIMIT_BACKOFF_SECONDS * (2 ** attempt)
+                    except (TypeError, ValueError):
+                        delay = RATE_LIMIT_BACKOFF_SECONDS * (2 ** attempt)
+                    time.sleep(min(delay, 20.0))
+                    continue
+                raise ValueError(f"Alpaca option-contract metadata failed (HTTP {exc.code}).") from exc
+            except URLError as exc:
+                raise ValueError("Unable to reach Alpaca option-contract metadata. Check the network and retry.") from exc
+        if raw is None:
+            break
         for item in raw.get("option_contracts") or raw.get("contracts") or []:
             symbol = str(item.get("symbol") or "").upper()
             if symbol:
@@ -362,9 +443,24 @@ def quote(ticker):
         daily = bars(ticker, "1d", limit=6).get("bars") or []
         closes = [bar for bar in daily if number(bar.get("close")) is not None]
         if closes and result["price_context"] is not None:
-            today_utc = datetime.now(timezone.utc).date().isoformat()
-            latest_time = str(closes[-1].get("time") or "")
-            if len(closes) >= 2 and latest_time.startswith(today_utc):
+            # Trading date in EXCHANGE time, not UTC. A daily bar is stamped
+            # 04:00Z (midnight ET), so between 20:00 ET and midnight ET the UTC
+            # date has already rolled forward while the session has not: the
+            # "is the newest bar today?" test failed and prior_close fell back to
+            # TODAY's own close. NVDA then read -0.08% after the bell against the
+            # real product's +2.20%, because it was comparing today's price to
+            # today's close instead of yesterday's.
+            today_et = datetime.now(ET_ZONE).date()
+
+            def bar_date(bar):
+                try:
+                    stamp = datetime.fromisoformat(str(bar.get("time")).replace("Z", "+00:00"))
+                except (ValueError, TypeError):
+                    return None
+                return stamp.astimezone(ET_ZONE).date()
+
+            latest_date = bar_date(closes[-1])
+            if len(closes) >= 2 and latest_date == today_et:
                 prev = number(closes[-2].get("close"))
             else:
                 prev = number(closes[-1].get("close"))
@@ -385,18 +481,45 @@ def option_chain(ticker, feed, force=False, max_pages=8, expiration_gte=None, ex
     cache_key = (ticker.upper(), feed, int(max_pages), expiration_gte, expiration_lte)
     with _CACHE_LOCK:
         cached = CHAIN_CACHE.get(cache_key)
-        if not force and cached and time.time() - cached[0] < 15:
+        # 60s matches the real product's own "server cache 60s" footer. The chain is
+        # the expensive call (multi-page snapshot fetch), and a 580-ticker Setup Scanner
+        # run previously blew through the old 15s window before it could reuse anything.
+        if not force and cached and time.time() - cached[0] < 60:
             return deepcopy(cached[1])
+    # Fall back to the disk cache before paying for the network. This is what lets a
+    # restart (or a second scan soon after the first) start warm instead of cold.
+    disk_key = "chain|" + "|".join(str(part) for part in cache_key)
+    if not force:
+        spilled = disk_cache.get(disk_key, ttl=60)
+        if spilled is not None:
+            with _CACHE_LOCK:
+                CHAIN_CACHE[cache_key] = (time.time(), spilled)
+            return deepcopy(spilled)
+
+    # Push the expiration window into the snapshot request instead of downloading the
+    # whole chain and filtering client-side. These args used to be forwarded only to
+    # option_open_interest(), so every caller pulled every listed contract out to the
+    # furthest LEAP: SPY came back as 14,572 contracts over 15 pages (~8.0s) when the
+    # matrix needed a couple of weeks of expirations. Measured on SPY: unfiltered
+    # 7.96s/15 pages, +200d 5.98s/11, +60d 4.52s/8, +14d 2.02s/5.
+    # (Deliberately NOT filtering by strike_price_gte/lte — probing showed that makes
+    # the request markedly slower, 7.66s vs 0.55s for the same page.)
+    window = {}
+    if expiration_gte:
+        window["expiration_date_gte"] = expiration_gte
+    if expiration_lte:
+        window["expiration_date_lte"] = expiration_lte
 
     def pull(active_feed):
-        pages, query = [], {"feed": active_feed, "limit": 1000}
+        pages = []
+        query = {"feed": active_feed, "limit": 1000, **window}
         for _ in range(max(1, int(max_pages))):
             raw = alpaca(f"/v1beta1/options/snapshots/{ticker.upper()}", query)
             pages.append(raw)
             token = raw.get("next_page_token")
             if not token:
                 break
-            query = {"feed": active_feed, "limit": 1000, "page_token": token}
+            query = {"feed": active_feed, "limit": 1000, "page_token": token, **window}
         return pages
 
     try:
@@ -447,6 +570,7 @@ def option_chain(ticker, feed, force=False, max_pages=8, expiration_gte=None, ex
             contracts.append(meta)
     with _CACHE_LOCK:
         CHAIN_CACHE[cache_key] = (time.time(), contracts)
+    disk_cache.put(disk_key, contracts)
     return deepcopy(contracts)
 
 
@@ -460,7 +584,7 @@ def matrix(ticker, feed, depth, expiration_count, force=False, chain_pages=None)
     cache_key = (ticker.upper(), feed, str(depth), int(expiration_count), int(chain_pages))
     with _CACHE_LOCK:
         cached = MATRIX_CACHE.get(cache_key)
-        if not force and cached and time.time() - cached[0] < 12:
+        if not force and cached and time.time() - cached[0] < 60:
             return deepcopy(cached[1])
     context = quote(ticker)
     spot = context["price_context"]
@@ -468,14 +592,35 @@ def matrix(ticker, feed, depth, expiration_count, force=False, chain_pages=None)
         raise ValueError("No usable underlying price is available to center the matrix.")
     depth_pts = _depth_to_points(spot, depth)
     full_chain = _depth_is_full_chain(depth)
-    # Constrain OI query to the expiration range the matrix actually needs.
-    oi_gte = datetime.now(timezone.utc).date().isoformat()
-    oi_lte = (
-        datetime.now(timezone.utc).date() + timedelta(days=_matrix_oi_horizon_days(expiration_count))
-    ).isoformat()
-    contracts = option_chain(ticker, feed, force=force, max_pages=chain_pages, expiration_gte=oi_gte, expiration_lte=oi_lte)
+    # Constrain the chain/OI queries to the expiration range the matrix actually needs.
+    # A tight first window keeps the snapshot fetch small (see option_chain), but a
+    # ticker with only monthly expirations can legitimately need months of calendar to
+    # supply `expiration_count` of them — so widen and retry if the tight window came
+    # up short rather than silently returning fewer columns than requested.
+    today = datetime.now(timezone.utc).date()
+    oi_gte = today.isoformat()
+    wide_days = _matrix_oi_horizon_days(expiration_count)
+    tight_days = min(wide_days, max(10, expiration_count * 4))
+
+    def _fetch(days):
+        lte = (today + timedelta(days=days)).isoformat()
+        got = option_chain(
+            ticker, feed, force=force, max_pages=chain_pages,
+            expiration_gte=oi_gte, expiration_lte=lte,
+        )
+        return [c for c in got if c["expiry"] and c["expiry"] >= oi_gte], lte
+
+    contracts, oi_lte = _fetch(tight_days)
+    if tight_days < wide_days and len({c["expiry"] for c in contracts}) < expiration_count:
+        contracts, oi_lte = _fetch(wide_days)
+    # (_fetch above already drops contracts that expired earlier today. Alpaca keeps
+    # same-day expiries in the snapshot after the close, and an expired "nearest"
+    # expiration carries no live GEX/OI, which used to make Flash/Flash Index return
+    # empty for SPY/QQQ/IWM after hours.)
     used_feed = contracts[0]["feed"] if contracts else feed
-    expirations = sorted({c["expiry"] for c in contracts if c["expiry"]})[:expiration_count]
+    all_expirations = sorted({c["expiry"] for c in contracts if c["expiry"]})
+    total_expirations_available = len(all_expirations)
+    expirations = all_expirations[:expiration_count]
     strikes = sorted(
         {
             c["strike"]
@@ -497,6 +642,9 @@ def matrix(ticker, feed, depth, expiration_count, force=False, chain_pages=None)
             "put_mid": None,
             "listed": False,
             "oi_assumed_zero": False,
+            "gamma_modeled": False,
+            "iv_min_tick": False,
+            "oi_from_volume": False,
             "available": False,
         }
         for c in contracts
@@ -504,6 +652,10 @@ def matrix(ticker, feed, depth, expiration_count, force=False, chain_pages=None)
     }
     missing_gamma = 0
     oi_assumed_zero = 0
+
+    # one-element lists so the per-contract loop below can mutate them
+    gamma_modeled_contracts = [0]
+    oi_proxy_contracts = [0]
     for contract in contracts:
         key = (contract["expiry"], contract["strike"])
         if key not in by_cell:
@@ -519,6 +671,17 @@ def matrix(ticker, feed, depth, expiration_count, force=False, chain_pages=None)
         cell["volume"] += number(contract.get("volume")) or 0.0
         if contract.get("mid") is not None:
             cell[side + "_mid"] = contract["mid"]
+        # Provenance: a cell whose exposure leans on a reconstructed gamma or a
+        # volume-for-OI substitution is weaker evidence than one built from feed
+        # greeks and real open interest, and should not read as equally solid.
+        if number(contract.get("gamma")) is None:
+            cell["gamma_modeled"] = True
+            gamma_modeled_contracts[0] += 1
+        if oi_is_proxy(contract):
+            cell["oi_from_volume"] = True
+            oi_proxy_contracts[0] += 1
+        if iv_is_ill_conditioned(contract):
+            cell["iv_min_tick"] = True
         value = gex(contract, spot)
         if value is None:
             missing_gamma += 1
@@ -563,6 +726,8 @@ def matrix(ticker, feed, depth, expiration_count, force=False, chain_pages=None)
                     "put_mid": cell.get("put_mid"),
                     "listed": bool(cell.get("listed")),
                     "oi_assumed_zero": bool(cell.get("oi_assumed_zero")),
+                    "gamma_modeled": bool(cell.get("gamma_modeled")),
+                    "oi_from_volume": bool(cell.get("oi_from_volume")),
                     "available": cell["available"],
                 }
             )
@@ -581,6 +746,7 @@ def matrix(ticker, feed, depth, expiration_count, force=False, chain_pages=None)
         "depth_points": None if full_chain else depth_pts,
         "depth_mode": "full_chain" if full_chain else "window",
         "expirations": expirations,
+        "total_expirations_available": total_expirations_available,
         "rows": rows,
         "formula": "Gamma × open interest × 100 × spot² × 0.01; puts receive a negative sign. Null OI remains unknown.",
         "caveat": "This is a public-OI heuristic, not verified dealer positioning.",
@@ -590,6 +756,10 @@ def matrix(ticker, feed, depth, expiration_count, force=False, chain_pages=None)
             # Back-compat alias for older UI/debug consumers.
             "contracts_missing_gamma_or_oi": missing_gamma,
             "contracts_oi_assumed_zero": oi_assumed_zero,
+            # Provenance counters — how much of this grid is reconstructed rather
+            # than taken straight from the feed. See exposure.resolve_iv/contract_size.
+            "contracts_gamma_modeled": gamma_modeled_contracts[0],
+            "contracts_oi_from_volume": oi_proxy_contracts[0],
             "open_interest_source": "Alpaca option-contract metadata",
             "open_interest_as_of": max((c.get("open_interest_date") or "" for c in contracts), default=None),
             "calculated_cells": sum(1 for row in rows for cell in row["cells"] if cell["available"]),
@@ -732,6 +902,23 @@ def night_vision(ticker, feed, depth, expiration_count, force=False):
         "Ghost projects the next ~15 minutes from the dealer-hedging surface (GEX magnets). "
         "Heuristic only — not a forecast. Most useful on SPY/QQQ."
     )
+
+    # Prior-session and extended-hours levels. The real product draws these on every
+    # chart next to the exposure levels and treats them as reaction zones; nothing
+    # here produced them before. Failures are non-fatal — a missing bar feed should
+    # cost the session lines, not the whole Night Vision payload.
+    try:
+        minute = bars(ticker, "5m", limit=1000).get("bars") or []
+        daily = bars(ticker, "1d", limit=30).get("bars") or []
+        payload["session_levels"] = session_levels.compute(minute, daily_bars=daily)
+        premarket_pct = session_levels.premarket_range_pct(minute)
+        payload["premarket_range_pct"] = (
+            round(premarket_pct, 4) if premarket_pct is not None else None
+        )
+    except Exception as exc:  # noqa: BLE001 - bar feed is optional context here
+        payload["session_levels"] = {"levels": [], "note": f"unavailable: {exc}"}
+        payload["premarket_range_pct"] = None
+
     return payload
 
 
@@ -892,6 +1079,137 @@ def bars(ticker, timeframe, limit=200):
     return deepcopy(result)
 
 
+def occ_symbol(ticker, expiration, strike, option_type):
+    """Build an OCC option symbol, the inverse of exposure.parse_contract()."""
+    date = datetime.fromisoformat(expiration).strftime("%y%m%d")
+    kind = "C" if str(option_type).lower().startswith("c") else "P"
+    return f"{ticker.upper()}{date}{kind}{int(round(float(strike) * 1000)):08d}"
+
+
+def contract_search(ticker, feed, strike, option_type, expiration=None, trade_date=None):
+    """Every trade in one contract for one session, split into bought vs sold.
+
+    Backs Spyglass's Contract Search, which previously had no backend at all: the
+    view rendered its inputs and an empty state because no capture had shown what
+    the real product returns.
+
+    The buy/sell split is INFERRED, and the reason matters. Alpaca serves a full
+    options trade tape (/v1beta1/options/trades) with price, size and timestamp, but
+    it serves no historical options *quote* tape — /v1beta1/options/quotes returns
+    404 on this account, and snapshots carry only the current bid/ask. Classifying a
+    09:31 trade against a 16:00 quote would be worse than useless, so side comes
+    from the tick rule instead: a trade above the previous trade is a buy, below is
+    a sell, and an unchanged price inherits the last non-flat direction. That is a
+    standard microstructure inference, not exchange-reported side, and the response
+    labels it as such rather than presenting it as fact.
+    """
+    contracts = option_chain(ticker, resolve_options_feed(feed))
+    strike = float(strike)
+    kind = "call" if str(option_type).lower().startswith("c") else "put"
+    matches = [
+        c for c in contracts
+        if c.get("type") == kind and number(c.get("strike")) is not None
+        and abs(number(c["strike"]) - strike) < 1e-6
+        and (expiration is None or c.get("expiry") == expiration)
+    ]
+    if not matches:
+        available = sorted({number(c["strike"]) for c in contracts
+                            if c.get("type") == kind and number(c.get("strike")) is not None})
+        near = sorted(available, key=lambda s: abs(s - strike))[:8]
+        return {
+            "ticker": ticker.upper(), "strike": strike, "type": kind,
+            "expiration": expiration, "found": False,
+            "nearest_strikes": sorted(near),
+            "message": f"No listed {kind} at strike {strike} for {ticker.upper()}.",
+        }
+    # Without an expiration the nearest-dated listing is the sensible default, which
+    # is also the one a trader typing just a strike almost always means.
+    matches.sort(key=lambda c: c.get("expiry") or "")
+    chosen = matches[0]
+    symbol = chosen.get("symbol") or occ_symbol(ticker, chosen["expiry"], strike, kind)
+
+    day = trade_date or datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    query = {"symbols": symbol, "limit": 10000,
+             "start": f"{day}T00:00:00Z", "end": f"{day}T23:59:59Z"}
+    trades, token, pages = [], None, 0
+    while pages < 10:
+        if token:
+            query["page_token"] = token
+        payload = alpaca("/v1beta1/options/trades", query)
+        trades.extend((payload.get("trades") or {}).get(symbol) or [])
+        token = payload.get("next_page_token")
+        pages += 1
+        if not token:
+            break
+
+    buy_vol = sell_vol = flat_vol = 0
+    buy_prem = sell_prem = 0.0
+    direction = 0
+    prev_price = None
+    largest = []
+    for t in trades:
+        price = number(t.get("p"))
+        size = int(t.get("s") or 0)
+        if price is None or size <= 0:
+            continue
+        if prev_price is not None:
+            if price > prev_price:
+                direction = 1
+            elif price < prev_price:
+                direction = -1
+            # equal price keeps the previous direction (zero-tick rule)
+        prev_price = price
+        premium = price * size * 100.0
+        if direction > 0:
+            buy_vol += size
+            buy_prem += premium
+        elif direction < 0:
+            sell_vol += size
+            sell_prem += premium
+        else:
+            flat_vol += size
+        largest.append({"time": t.get("t"), "price": price, "size": size,
+                        "premium": round(premium, 2),
+                        "side": "buy" if direction > 0 else "sell" if direction < 0 else "unknown",
+                        "exchange": t.get("x")})
+    largest.sort(key=lambda r: -r["premium"])
+    total_vol = buy_vol + sell_vol + flat_vol
+    total_prem = sum(r["premium"] for r in largest)
+
+    return {
+        "ticker": ticker.upper(),
+        "symbol": symbol,
+        "strike": strike,
+        "type": kind,
+        "expiration": chosen.get("expiry"),
+        "trade_date": day,
+        "found": True,
+        "trades": len(largest),
+        "volume": total_vol,
+        "buy_volume": buy_vol,
+        "sell_volume": sell_vol,
+        "unclassified_volume": flat_vol,
+        "buy_pct": round(100.0 * buy_vol / total_vol, 1) if total_vol else None,
+        "premium": round(total_prem, 2),
+        "buy_premium": round(buy_prem, 2),
+        "sell_premium": round(sell_prem, 2),
+        "vwap": round(total_prem / (total_vol * 100.0), 4) if total_vol else None,
+        # Snapshot values, for context against the day's tape.
+        "open_interest": number(chosen.get("open_interest")),
+        "bid": number(chosen.get("bid")),
+        "ask": number(chosen.get("ask")),
+        "last": number(chosen.get("last")),
+        "largest_trades": largest[:25],
+        "expirations_available": sorted({c.get("expiry") for c in matches if c.get("expiry")}),
+        "method": "tick rule (Lee-Ready style): trade above the previous trade counts "
+                  "as bought, below as sold, unchanged inherits the last direction",
+        "caveat": "Buy/sell side is inferred from trade-price direction, not reported "
+                  "by the exchange. Alpaca serves no historical options quote tape, so "
+                  "trades cannot be matched against the bid/ask that prevailed at the "
+                  "time. Treat the split as an estimate.",
+    }
+
+
 def flow(ticker, feed, min_premium=5000, max_price=None, option_type="all", side="all", moneyness="all", force=False):
     """Build a Spyglass tape from latest option trades on the chain snapshots."""
     feed = resolve_options_feed(feed)
@@ -1006,6 +1324,99 @@ def flow(ticker, feed, min_premium=5000, max_price=None, option_type="all", side
         "prints": filtered[:150],
         "caveat": "Aggressor side is inferred from trade vs bid/ask; not a verified buyer/seller label.",
     }
+
+
+# Curated pharma/biotech/medtech universe for the Bio flow scan — no GICS/sector feed is
+# wired into this service, so this is a hand-picked list (cross-checked against names
+# actually surfaced in a real Bio scan capture: AMGN, BSX, UTHR, INSM, BMY, LLY, MRNA,
+# ISRG, RMD, SYK, REGN, ABBV), not an exhaustive or auto-derived sector universe.
+BIO_UNIVERSE = [
+    "JNJ", "PFE", "MRK", "ABBV", "LLY", "BMY", "AMGN", "GILD", "BIIB", "REGN",
+    "VRTX", "ISRG", "MDT", "SYK", "BSX", "EW", "ZBH", "MRNA", "BNTX", "DXCM",
+    "PODD", "TMO", "DHR", "A", "IQV", "ILMN", "BAX", "BDX", "ZTS", "IDXX",
+    "ALGN", "HOLX", "MOH", "BMRN", "ALNY", "SRPT", "IONS", "NBIX", "INCY", "EXEL",
+    "BGNE", "ACAD", "AXSM", "TXG", "UTHR", "INSM", "RMD", "CI", "ELV", "HUM",
+    "CVS", "CNC", "HCA", "UNH",
+]
+
+
+def flow_bulk(tickers, feed, job_id=None, **filters):
+    """Loop flow() across a fixed ticker universe (Bio scan) and merge by premium desc.
+
+    ~1.6s/ticker average measured against BIO_UNIVERSE (54 names) → ~90s total, far past
+    a reasonable blocking HTTP request. job_id, if given, reports progress the same way
+    scanner.py's run_scan() does for the Setup Scanner's async jobs.
+    """
+    all_prints = []
+    errors = []
+    for i, ticker in enumerate(tickers):
+        try:
+            result = flow(ticker, feed, **filters)
+            all_prints.extend(result.get("prints") or [])
+        except Exception as exc:
+            errors.append({"ticker": ticker, "error": str(exc)})
+        if job_id:
+            _update_bio_job(job_id, done=i + 1, total=len(tickers))
+    all_prints.sort(key=lambda item: item.get("premium") or 0, reverse=True)
+    return {
+        "as_of": utcnow(),
+        "feed": resolve_options_feed(feed),
+        "universe_size": len(tickers),
+        "names_with_prints": len({p["ticker"] for p in all_prints}),
+        "min_premium": float(filters.get("min_premium") or 5000),
+        "count": len(all_prints),
+        "prints": all_prints[:400],
+        "errors": errors,
+        "caveat": "Aggressor side is inferred from trade vs bid/ask; not a verified buyer/seller label.",
+    }
+
+
+_BIO_JOBS: dict = {}
+_BIO_JOB_LOCK = threading.Lock()
+
+
+def _update_bio_job(job_id, **fields):
+    with _BIO_JOB_LOCK:
+        job = _BIO_JOBS.get(job_id)
+        if not job:
+            return
+        job.update(fields)
+        if "done" in fields and "total" in fields and fields["total"]:
+            job["pct"] = int(100 * fields["done"] / fields["total"])
+            job["message"] = f"Scanning pharma, biotech & medtech… {fields['done']}/{fields['total']} names"
+
+
+def start_bio_job(feed, **filters):
+    job_id = uuid.uuid4().hex[:12]
+    with _BIO_JOB_LOCK:
+        _BIO_JOBS[job_id] = {
+            "id": job_id,
+            "status": "queued",
+            "done": 0,
+            "total": len(BIO_UNIVERSE),
+            "pct": 0,
+            "message": "Queued…",
+            "result": None,
+            "error": None,
+            "started_at": utcnow(),
+        }
+
+    def _worker():
+        _update_bio_job(job_id, status="running")
+        try:
+            result = flow_bulk(BIO_UNIVERSE, feed, job_id=job_id, **filters)
+            _update_bio_job(job_id, status="done", pct=100, result=result, message="Scan complete")
+        except Exception as exc:
+            _update_bio_job(job_id, status="error", error=str(exc), message=str(exc))
+
+    threading.Thread(target=_worker, daemon=True).start()
+    return job_id
+
+
+def get_bio_job(job_id):
+    with _BIO_JOB_LOCK:
+        job = _BIO_JOBS.get(job_id)
+        return deepcopy(job) if job else None
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -1144,6 +1555,32 @@ class Handler(BaseHTTPRequestHandler):
                 }
             elif parsed.path == "/api/governance":
                 data = governance_status()
+            elif parsed.path == "/api/signal-backtest":
+                action = (pget("action") or "status").lower()
+                if action == "start":
+                    tickers = [t for t in (pget("symbols") or "").split(",") if t.strip()]
+                    job_id = backtest_jobs.start_backtest_job(
+                        mode=(pget("mode") or "filter").lower(),
+                        symbols=tickers or None,
+                        timeframe=pget("timeframe", "15Min"),
+                        years=float(pget("years", "1") or 1),
+                        detector_mode=pget("detector", "EOD Focus"),
+                        lookback_bars=int(pget("lookback", "6") or 6),
+                        entry_every=int(pget("entry_every", "12") or 12),
+                        control_repeats=int(pget("repeats", "20") or 20),
+                    )
+                    data = {"job_id": job_id, "status": "queued"}
+                elif action == "list":
+                    data = {"jobs": backtest_jobs.list_jobs()}
+                else:
+                    job_id = pget("id")
+                    job = backtest_jobs.get_job(job_id) if job_id else None
+                    if job is None:
+                        self.send_json(404, {"error": "Unknown backtest job"})
+                        return
+                    data = job
+            elif parsed.path == "/api/evidence-status":
+                data = evidence_status.status()
             elif parsed.path == "/api/research-status":
                 data = research_status()
             elif parsed.path == "/api/quote":
@@ -1198,11 +1635,18 @@ class Handler(BaseHTTPRequestHandler):
                 )
             elif parsed.path == "/api/bars":
                 data = bars(ticker, pget("timeframe", "5m"), limit=int(pget("limit", "200")))
-            elif parsed.path in {"/api/flow", "/api/spyglass"}:
-                max_price = pget("pmax")
-                data = flow(
+            elif parsed.path == "/api/contract-search":
+                data = contract_search(
                     ticker,
                     feed,
+                    pget("strike"),
+                    pget("type", "call"),
+                    expiration=pget("expiration") or None,
+                    trade_date=pget("date") or None,
+                )
+            elif parsed.path in {"/api/flow", "/api/spyglass"}:
+                max_price = pget("pmax")
+                flow_kwargs = dict(
                     min_premium=float(pget("min") or pget("premium") or "5000"),
                     max_price=float(max_price) if max_price not in (None, "", "all") else None,
                     option_type=str(pget("type", "all")).lower(),
@@ -1210,6 +1654,21 @@ class Handler(BaseHTTPRequestHandler):
                     moneyness=str(pget("money") or pget("moneyness") or "all").lower(),
                     force=str(pget("fresh", "0")).lower() in {"1", "true", "yes"},
                 )
+                if str(pget("sector", "")).lower() == "bio":
+                    if str(pget("async", "0")).lower() in {"1", "true", "yes"}:
+                        job_id = start_bio_job(feed, **flow_kwargs)
+                        data = {"job_id": job_id, "status": "queued", "universe_size": len(BIO_UNIVERSE)}
+                    else:
+                        data = flow_bulk(BIO_UNIVERSE, feed, **flow_kwargs)
+                else:
+                    data = flow(ticker, feed, **flow_kwargs)
+            elif parsed.path == "/api/flow/job":
+                job_id = pget("id")
+                job = get_bio_job(job_id) if job_id else None
+                if not job:
+                    self.send_json(404, {"error": "Unknown bio flow job"})
+                    return
+                data = job
             elif parsed.path in {"/api/stream", "/api/live"}:
                 return self.stream_live(params)
             elif parsed.path in {"/api/scan", "/api/scanner"}:
@@ -1233,8 +1692,17 @@ class Handler(BaseHTTPRequestHandler):
                 elif universe is None and strategy == "flash_agentic":
                     universe = list(FLASH_UNIVERSE)
                 async_flag = str(pget("async", "0")).lower() in {"1", "true", "yes"}
-                # Serial only (workers clamped to 1 in run_scan) — avoids Alpaca 429s.
-                workers = 1
+                # Bounded fan-out; run_scan clamps to SCAN_MAX_WORKERS. Safe now that
+                # the chain fetch is expiration-windowed and 429s are retried with
+                # backoff. `workers` is overridable per-request for A/B testing.
+                try:
+                    workers = int(pget("workers", str(DEFAULT_SCAN_WORKERS)))
+                except (TypeError, ValueError):
+                    workers = DEFAULT_SCAN_WORKERS
+                # Flash strategies use bars_fn for a real session VWAP; the small
+                # flash universe (12-13 tickers) makes the extra per-ticker bars
+                # fetch cheap, unlike the 580-ticker cluster/cipher scans.
+                flash_bars_fn = bars if strategy in {"flash", "flash_index", "flash_agentic"} else None
                 if async_flag:
                     job_id = start_scan_job(
                         matrix,
@@ -1245,6 +1713,7 @@ class Handler(BaseHTTPRequestHandler):
                         universe=universe,
                         workers=workers,
                         cluster_exp=cluster_exp,
+                        bars_fn=flash_bars_fn,
                     )
                     data = {"job_id": job_id, "status": "queued", "universe_size": len(universe or SCAN_UNIVERSE)}
                 else:
@@ -1257,6 +1726,7 @@ class Handler(BaseHTTPRequestHandler):
                         universe=universe,
                         workers=workers,
                         cluster_exp=cluster_exp,
+                        bars_fn=flash_bars_fn,
                     )
             elif parsed.path == "/api/scan/job":
                 job_id = pget("id")
@@ -1265,6 +1735,50 @@ class Handler(BaseHTTPRequestHandler):
                     self.send_json(404, {"error": "Unknown scan job"})
                     return
                 data = job
+            elif parsed.path == "/api/scan/history":
+                import scan_history
+
+                scan_id = pget("id")
+                if scan_id:
+                    loaded = scan_history.load_scan(scan_id)
+                    if not loaded:
+                        self.send_json(404, {"error": "Unknown saved scan"})
+                        return
+                    data = loaded
+                else:
+                    data = {
+                        "scans": scan_history.list_scans(
+                            strategy=pget("strategy"),
+                            limit=int(pget("limit", "50")),
+                        )
+                    }
+            elif parsed.path == "/api/flash-agentic/live":
+                capture = _latest_flash_agentic_capture()
+                status = _flash_agentic_live_status()
+                loop_running = False
+                pid_path = FLASH_AGENTIC_DATA_DIR / "live_loop.pid"
+                if pid_path.is_file():
+                    try:
+                        pid = int(pid_path.read_text(encoding="utf-8").strip())
+                        os.kill(pid, 0)
+                        loop_running = True
+                    except (ValueError, ProcessLookupError, PermissionError, OSError):
+                        loop_running = False
+                data = {
+                    "loop_running": loop_running,
+                    # The running loop writes "cycle"; on clean shutdown it writes a
+                    # final payload with "cycles" instead, so a stopped loop reported
+                    # cycle=None and looked like it had never run.
+                    "cycle": (status or {}).get("cycle") or (status or {}).get("cycles"),
+                    "loop_status": (status or {}).get("status"),
+                    "status_updated_at": (status or {}).get("updated_at"),
+                    "captured_at": (capture or {}).get("captured_at"),
+                    "rows": (capture or {}).get("rows") or [],
+                    "caveat": (
+                        "Captured from the real AccessObsidian Flash Agentic panel via browser "
+                        "automation on the logged-in session — not independently computed."
+                    ),
+                }
             elif parsed.path == "/api/scan/universe":
                 data = {
                     "count": len(SCAN_UNIVERSE),
@@ -1686,11 +2200,14 @@ class Handler(BaseHTTPRequestHandler):
                             "/api/quote",
                             "/api/governance",
                             "/api/research-status",
+                            "/api/evidence-status",
+                            "/api/signal-backtest",
                             "/api/matrix",
                             "/api/heatmap",
                             "/api/night-vision",
                             "/api/bars",
                             "/api/flow",
+                            "/api/contract-search",
                             "/api/stream",
                             "/api/scan",
                             "/api/scan/job",

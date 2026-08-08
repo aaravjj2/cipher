@@ -143,6 +143,34 @@ def parse_float(value: str) -> float | None:
         return None
 
 
+def parse_runway(value: str, row: dict | None = None) -> float | None:
+    """Percent-clear from a RUNWAY clause, plus the wall detail when present.
+
+    The clause takes two shapes on the agentic card:
+        "clean (100% clear)"
+        "wall 980 (64% clear, 4 levels)"
+    A bare parse_float() on either returns None, which is why every captured row
+    had a null runway_clarity_pct. The wall strike and level count are recorded
+    alongside when the second shape appears, since they describe *why* the runway
+    is not clean.
+    """
+    if not value:
+        return None
+    text = str(value)
+    if row is not None:
+        wall = re.search(r"wall\s+([\d.]+)", text, flags=re.IGNORECASE)
+        if wall:
+            row["runway_wall_strike"] = parse_float(wall.group(1))
+        levels = re.search(r"(\d+)\s+levels?", text, flags=re.IGNORECASE)
+        if levels:
+            row["runway_levels"] = parse_float(levels.group(1))
+    pct = re.search(r"(\d+(?:\.\d+)?)\s*%\s*clear", text, flags=re.IGNORECASE)
+    if pct:
+        return parse_float(pct.group(1))
+    # Fall back to the old behaviour so a plain "64%" still parses.
+    return parse_float(text)
+
+
 def parse_levels(lines: list[str], start: int) -> tuple[list[dict[str, float]], int]:
     levels: list[dict[str, float]] = []
     idx = start
@@ -210,6 +238,8 @@ def parse_liq(text: str) -> list[dict[str, Any]]:
                 "target": None,
                 "target_pct_away": None,
                 "runway_clarity_pct": None,
+            "runway_wall_strike": None,
+            "runway_levels": None,
                 "levels": [],
             }
             j = idx + 4
@@ -314,13 +344,30 @@ def parse_flash(text: str) -> list[dict[str, Any]]:
         if status_start:
             row_lines.append(lines[idx])
             j = idx + 1
+        seen_ticker = False
         while j < len(lines):
             if j != idx and re.fullmatch(r"#\d+", lines[j]):
                 break
             if j != idx and lines[j].upper() in {"ACTIVE", "ARMING", "TRIGGERED", "COMPLETED"} and j + 3 < len(lines) and re.fullmatch(r"\$[A-Z][A-Z0-9.]{0,6}", lines[j + 1]):
                 break
+            # A second "$TICKER" means the next card has started. The status-word
+            # check above misses it whenever the following card opens on a state
+            # this parser did not know about — "DONE · 282s" being the one that bit:
+            # 26 of 432 captured rows swallowed the next card, and the field scrape
+            # below then took SPOT/PIVOT/TARGET from the wrong ticker while keeping
+            # the first one's name. Every card carries exactly one $TICKER, so that
+            # is the reliable boundary.
+            if re.fullmatch(r"\$[A-Z][A-Z0-9.]{0,6}", lines[j]):
+                if seen_ticker:
+                    break
+                seen_ticker = True
             row_lines.append(lines[j])
             j += 1
+        # Drop a trailing status marker belonging to the next card ("DONE · 282s").
+        while row_lines and re.fullmatch(
+            r"(DONE|ACTIVE|ARMING|TRIGGERED|COMPLETED)(\s*·\s*\d+s)?", row_lines[-1], re.I
+        ):
+            row_lines.pop()
         raw = " | ".join(row_lines)
         ticker = ""
         for line in row_lines:
@@ -373,6 +420,13 @@ def parse_flash(text: str) -> list[dict[str, Any]]:
             "STRETCH": "stretch",
             "INVALIDATION": "invalidation",
             "RUNWAY CLARITY": "runway_clarity_pct",
+            # The agentic card labels this segment "RUNWAY", not "RUNWAY CLARITY",
+            # and prints it as "clean (100% clear)" or "wall 980 (64% clear, 4 levels)".
+            # Only the long label was mapped, so runway_clarity_pct came back null on
+            # every captured agentic row — 0 of 432 — while runway_clarity_norm carries
+            # the largest coefficient (+4.94) in the fitted flash head. The label side
+            # of the most important feature was empty the whole time.
+            "RUNWAY": "runway_clarity_pct",
         }
         read_lines: list[str] = []
         for k, line in enumerate(row_lines):
@@ -416,7 +470,7 @@ def parse_flash(text: str) -> list[dict[str, Any]]:
             if key and k + 1 < len(row_lines):
                 value = row_lines[k + 1]
                 if key == "runway_clarity_pct":
-                    row[key] = parse_float(value)
+                    row[key] = parse_runway(value, row)
                 else:
                     row[key] = parse_float(value.split(" ", 1)[0])
         row["cipher_read"] = " ".join(read_lines)

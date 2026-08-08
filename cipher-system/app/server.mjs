@@ -1,5 +1,7 @@
 /** Browser-facing application server. Credentials remain in the local core service. */
 import { createServer } from "node:http";
+import { gzip as gzipCb } from "node:zlib";
+import { promisify } from "node:util";
 import { chmod, readFile } from "node:fs/promises";
 import { dirname, extname, join, normalize, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -34,7 +36,17 @@ const mime = {
   ".json": "application/json; charset=utf-8",
   ".png": "image/png",
   ".svg": "image/svg+xml",
+  ".ico": "image/x-icon",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".woff2": "font/woff2",
+  ".woff": "font/woff",
+  ".txt": "text/plain; charset=utf-8",
 };
+const gzip = promisify(gzipCb);
+// Below this, framing and CPU cost more than the bytes saved.
+const GZIP_MIN_BYTES = 1400;
+
 const sendJson = (res, status, body) => {
   res.writeHead(status, {
     "content-type": "application/json; charset=utf-8",
@@ -81,22 +93,28 @@ const routes = {
   "/api/quote": "/api/quote",
   "/api/governance": "/api/governance",
   "/api/research-status": "/api/research-status",
+  "/api/evidence-status": "/api/evidence-status",
+  "/api/signal-backtest": "/api/signal-backtest",
   "/api/matrix": "/api/matrix",
   "/api/heatmap": "/api/heatmap",
   "/api/night-vision": "/api/night-vision",
   "/api/bars": "/api/bars",
   "/api/flow": "/api/flow",
   "/api/spyglass": "/api/flow",
+  "/api/flow/job": "/api/flow/job",
+  "/api/contract-search": "/api/contract-search",
   "/api/scan": "/api/scan",
   "/api/scanner": "/api/scan",
   "/api/scan/job": "/api/scan/job",
+  "/api/scan/history": "/api/scan/history",
+  "/api/flash-agentic/live": "/api/flash-agentic/live",
   "/api/scan/universe": "/api/scan/universe",
   "/api/ranking-lab": "/api/ranking-lab",
   "/api/weight-lab": "/api/weight-lab",
   "/api/backtest": "/api/backtest",
 };
 
-async function proxyCore(res, requestPath, query, { method = "GET", body = null, headers = {} } = {}) {
+async function proxyCore(res, requestPath, query, { method = "GET", body = null, headers = {}, acceptEncoding = "" } = {}) {
   const target = new URL(requestPath, coreUrl);
   for (const [key, value] of query) target.searchParams.set(key, value);
   const init = { method, headers: { accept: "application/json", ...headers } };
@@ -108,11 +126,29 @@ async function proxyCore(res, requestPath, query, { method = "GET", body = null,
   }
   const response = await fetch(target, init);
   const data = Buffer.from(await response.arrayBuffer());
-  res.writeHead(response.status, {
+  // Grid payloads are large and highly repetitive: SPY's full chain is 1.43 MB
+  // raw and 152 KB gzipped, a 9.4x reduction. Uncompressed that is the dominant
+  // cost of a depth change, and it becomes the dominant cost of everything once
+  // this is served over a network rather than from localhost.
+  const outHeaders = {
     "content-type": response.headers.get("content-type") || "application/json; charset=utf-8",
     "cache-control": "no-store",
     "x-content-type-options": "nosniff",
-  });
+    vary: "accept-encoding",
+  };
+  const accepts = String(acceptEncoding || "");
+  if (data.length > GZIP_MIN_BYTES && /\bgzip\b/.test(accepts)) {
+    try {
+      const packed = await gzip(data);
+      outHeaders["content-encoding"] = "gzip";
+      res.writeHead(response.status, outHeaders);
+      res.end(packed);
+      return;
+    } catch {
+      /* fall through to the uncompressed response */
+    }
+  }
+  res.writeHead(response.status, outHeaders);
   res.end(data);
 }
 
@@ -220,7 +256,10 @@ createServer(async (req, res) => {
         const ct = req.headers["content-type"];
         if (ct) headers["content-type"] = ct;
       }
-      return await proxyCore(res, routes[url.pathname], query, { method, body, headers });
+      return await proxyCore(res, routes[url.pathname], query, {
+        method, body, headers,
+        acceptEncoding: req.headers["accept-encoding"] || "",
+      });
     } catch {
       return sendJson(res, 503, {
         error: "Local market-data service is unavailable. Start the Cipher app launcher.",
