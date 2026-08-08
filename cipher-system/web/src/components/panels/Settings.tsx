@@ -4,9 +4,11 @@ import { useEffect, useState, type ComponentType, type ReactNode, type SVGProps 
 import { ClockIcon, CrownIcon, KeyIcon } from "@/components/icons";
 import {
   fetchHealth,
+  fetchEvidenceStatus,
   fetchResearchStatus,
   fetchWeightLabStatus,
   type RealHealth,
+  type EvidenceStatus,
   type RealResearchStatus,
   type RealWeightLabStatus,
 } from "@/lib/api";
@@ -274,6 +276,83 @@ function ResearchStatusCard() {
   );
 }
 
+/**
+ * Evidence accrual — how far along the questions that are waiting on DATA are.
+ *
+ * Three answers are currently gated on capture rather than on code: cluster/GEX
+ * backtesting needs point-in-time open interest, the fitted flash head needs a
+ * paired label corpus, and filter-mode needs a larger sample. None of that was
+ * visible anywhere, which made slow progress indistinguishable from no progress
+ * and left "how long until X" answerable only by reading SQLite by hand.
+ */
+function EvidenceStatusCard() {
+  const [status, setStatus] = useState<EvidenceStatus | null>(null);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchEvidenceStatus(controller.signal)
+      .then(setStatus)
+      .catch(() => setError(true));
+    return () => controller.abort();
+  }, []);
+
+  return (
+    <Card>
+      <CardHeading icon={ClockIcon} title="Evidence accrual" />
+      <p className="text-[13px] leading-relaxed" style={{ color: "var(--text-dim)" }}>
+        Questions waiting on data rather than on code. Reaching a threshold means the
+        question becomes answerable — not that the answer will be favourable.
+      </p>
+
+      {error && (
+        <p className="text-[12px]" style={{ color: "var(--text-mute)" }}>
+          Evidence status unavailable — the core service may not be running.
+        </p>
+      )}
+
+      {status?.clocks.map((clock) => {
+        const pct = Math.max(0, Math.min(100, clock.progress_pct ?? 0));
+        const done = clock.need != null && clock.have >= clock.need;
+        return (
+          <div key={clock.name} className="flex flex-col gap-1.5">
+            <div className="flex flex-row items-baseline justify-between gap-3">
+              <span className="text-[13px] font-semibold" style={{ color: "var(--text)" }}>
+                {clock.name}
+              </span>
+              <span className="text-[12px]" style={{ fontFamily: "var(--font-mono)", color: "var(--text-dim)" }}>
+                {clock.have}
+                {clock.need != null ? ` / ${clock.need}` : ""} {clock.unit}
+              </span>
+            </div>
+            <div className="h-[8px] w-full overflow-hidden rounded-full" style={{ background: "var(--panel-2)" }}>
+              <div
+                className="h-full rounded-full transition-[width] duration-300"
+                style={{ width: `${pct}%`, background: done ? "var(--success)" : "var(--accent)" }}
+              />
+            </div>
+            <span className="text-[11px]" style={{ color: "var(--text-mute)" }}>
+              unlocks {clock.unlocks}
+              {clock.latest_capture ? ` · latest ${clock.latest_capture}` : ""}
+            </span>
+          </div>
+        );
+      })}
+
+      {status?.parity?.median_rel_err_pct && (
+        <div className="flex flex-col gap-1.5 pt-1" style={{ borderTop: "1px solid var(--line-soft)" }}>
+          <span className="text-[13px] font-semibold" style={{ color: "var(--text)" }}>
+            Parity vs the real product
+          </span>
+          {Object.entries(status.parity.median_rel_err_pct).map(([surface, err]) => (
+            <StatRow key={surface} label={`${surface} median error`} value={`${err}%`} />
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
+
 function WeightLabCard() {
   const [status, setStatus] = useState<RealWeightLabStatus | null>(null);
   const [error, setError] = useState(false);
@@ -346,6 +425,7 @@ export function Settings() {
       <PreferencesCard />
       <ConnectionCard />
       <ResearchStatusCard />
+      <EvidenceStatusCard />
       <WeightLabCard />
     </section>
   );

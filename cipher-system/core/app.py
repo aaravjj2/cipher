@@ -40,6 +40,7 @@ import price_backtest
 import edge_backtest
 import intraday_backtest
 import session_levels
+import evidence_status
 from zoneinfo import ZoneInfo
 
 # Exchange local time. Session boundaries and trading dates are ET facts, not UTC
@@ -1553,6 +1554,8 @@ class Handler(BaseHTTPRequestHandler):
                 }
             elif parsed.path == "/api/governance":
                 data = governance_status()
+            elif parsed.path == "/api/evidence-status":
+                data = evidence_status.status()
             elif parsed.path == "/api/research-status":
                 data = research_status()
             elif parsed.path == "/api/quote":
@@ -2172,6 +2175,7 @@ class Handler(BaseHTTPRequestHandler):
                             "/api/quote",
                             "/api/governance",
                             "/api/research-status",
+                            "/api/evidence-status",
                             "/api/matrix",
                             "/api/heatmap",
                             "/api/night-vision",

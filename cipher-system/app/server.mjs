@@ -93,6 +93,7 @@ const routes = {
   "/api/quote": "/api/quote",
   "/api/governance": "/api/governance",
   "/api/research-status": "/api/research-status",
+  "/api/evidence-status": "/api/evidence-status",
   "/api/matrix": "/api/matrix",
   "/api/heatmap": "/api/heatmap",
   "/api/night-vision": "/api/night-vision",

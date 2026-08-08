@@ -616,6 +616,41 @@ export function fetchContractSearch(
   return getJson<ContractSearchResult>(`/api/contract-search?${q.toString()}`, signal);
 }
 
+export type EvidenceClock = {
+  name: string;
+  unlocks: string;
+  have: number;
+  need: number | null;
+  unit: string;
+  progress_pct: number | null;
+  note?: string;
+  latest_capture?: string | null;
+  snapshots?: number;
+  tickers?: number | { have: number; need: number | null };
+  days?: { have: number; need: number | null };
+  rows?: number;
+  fitted_head_active?: boolean | null;
+};
+
+export type EvidenceStatus = {
+  as_of: string;
+  clocks: EvidenceClock[];
+  parity: {
+    name: string;
+    measured?: boolean;
+    source?: string;
+    median_rel_err_pct?: Record<string, number>;
+    tickers?: number | null;
+    note?: string;
+  };
+  caveat: string;
+};
+
+/** Accrual progress on the questions that are waiting on data rather than code. */
+export function fetchEvidenceStatus(signal?: AbortSignal): Promise<EvidenceStatus> {
+  return getJson<EvidenceStatus>("/api/evidence-status", signal);
+}
+
 export type RealScanUniverse = {
   count: number;
   /** Optionable tickers, ordered by the backend's own liquidity/size ranking. */
