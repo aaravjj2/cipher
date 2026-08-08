@@ -11,6 +11,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -35,6 +36,7 @@ PINNED_CIKS = {
     "GE": {"cik_str": 40545, "ticker": "GE", "title": "GE Aerospace"},
 }
 FINBERT_MODEL_ID = "ProsusAI/finbert"
+YAHOO_SOURCE = "yahoo_finance_search_v3"
 FINBERT_REVISION = "4556d13015211d73dccd3fdd39d39232506f3e43"
 USER_AGENT = "CipherResearch/1.0 https://github.com/aaravjj2/cipher read-only"
 RAW_ROOT = ROOT / "data" / "raw" / "public_events"
@@ -187,6 +189,41 @@ def fetch_sec_documents(
     return documents, source_records, ticker_raw
 
 
+MARKET_CONTEXT_PREFIXES = (
+    "market update",
+    "stocks settle",
+    "stocks close",
+    "stock market",
+    "futures",
+)
+
+
+def yahoo_headline_relevance(
+    *,
+    title: str,
+    symbol: str,
+    raw_related: set[str],
+    company_names: tuple[str, ...],
+) -> str:
+    lowered = title.casefold().strip()
+    if lowered.startswith(MARKET_CONTEXT_PREFIXES):
+        return "multi_ticker_market_context"
+    if re.search(rf"(?<![A-Z0-9]){re.escape(symbol)}(?![A-Z0-9])", title.upper()):
+        return "direct_ticker_or_company"
+    generic = {"inc", "incorporated", "corp", "corporation", "company", "co", "holdings", "class"}
+    for company_name in company_names:
+        tokens = [
+            token.casefold()
+            for token in re.findall(r"[A-Za-z0-9]+", company_name)
+            if len(token) >= 4 and token.casefold() not in generic
+        ]
+        if tokens and any(token in lowered for token in tokens[:2]):
+            return "direct_ticker_or_company"
+    if raw_related == {symbol}:
+        return "single_ticker_provider_metadata"
+    return "multi_ticker_context_only"
+
+
 def fetch_yahoo_documents(
     session: requests.Session,
     *,
@@ -212,6 +249,15 @@ def fetch_yahoo_documents(
         except Exception as exc:
             statuses.append({"symbol": symbol, "status": "failed", "error": f"{type(exc).__name__}: {exc}"})
             continue
+        quote_rows = payload.get("quotes") if isinstance(payload.get("quotes"), list) else []
+        quote_row = quote_rows[0] if quote_rows and isinstance(quote_rows[0], dict) else {}
+        company_names = tuple(
+            dict.fromkeys(
+                str(value).strip()
+                for value in (quote_row.get("shortname"), quote_row.get("longname"))
+                if str(value or "").strip()
+            )
+        )
         added = 0
         for item in payload.get("news", []):
             external_id = str(item.get("uuid") or hashlib.sha256(str(item).encode("utf-8")).hexdigest())
@@ -225,21 +271,29 @@ def fetch_yahoo_documents(
             title = str(item.get("title") or "").strip()
             if not title:
                 continue
-            related = tuple(
-                sorted(
-                    {
-                        str(value).upper()
-                        for value in item.get("relatedTickers", [])
-                        if str(value).upper() in SYMBOLS
-                    }
-                    | {symbol}
-                )
+            raw_related = {
+                str(value).upper()
+                for value in item.get("relatedTickers", [])
+                if str(value).strip()
+            }
+            # Yahoo search can return broadly related or sponsored stories. If
+            # provider ticker metadata exists, require the queried symbol to be
+            # present rather than force-labeling every returned story with it.
+            if raw_related and symbol not in raw_related:
+                continue
+            selected_symbols = set(symbols)
+            related = tuple(sorted((raw_related & selected_symbols) or {symbol}))
+            relevance = yahoo_headline_relevance(
+                title=title,
+                symbol=symbol,
+                raw_related=raw_related,
+                company_names=company_names,
             )
             publisher = str(item.get("publisher") or "Yahoo Finance search")
             link = str(item.get("link") or "")
             documents.append(
                 NewsDocument(
-                    source="yahoo_finance_search",
+                    source=YAHOO_SOURCE,
                     external_id=external_id,
                     title=title,
                     text=f"{title} — publisher: {publisher}",
@@ -252,6 +306,15 @@ def fetch_yahoo_documents(
                     metadata={
                         "publisher": publisher,
                         "story_type": item.get("type"),
+                        "query_symbol": symbol,
+                        "provider_related_tickers": sorted(raw_related),
+                        "query_company_names": list(company_names),
+                        "source_url": link or None,
+                        "headline_relevance": relevance,
+                        "company_specific": relevance in {
+                            "direct_ticker_or_company",
+                            "single_ticker_provider_metadata",
+                        },
                         "source_scope": "headline_metadata_only_not_article_body",
                         "directional_signal_allowed": False,
                     },
@@ -263,8 +326,15 @@ def fetch_yahoo_documents(
     return documents, statuses
 
 
-def attempt_gdelt(session: requests.Session, *, since_days: int, max_records: int) -> dict[str, Any]:
-    query = " OR ".join(f'"{symbol}"' for symbol in ("AAPL", "MSFT", "NVDA", "GE"))
+def attempt_gdelt(
+    session: requests.Session,
+    *,
+    symbols: tuple[str, ...],
+    since_days: int,
+    max_records: int,
+) -> dict[str, Any]:
+    query_symbols = symbols[:8] or ("SPY",)
+    query = " OR ".join(f'"{symbol}"' for symbol in query_symbols)
     url = (
         "https://api.gdeltproject.org/api/v2/doc/doc"
         f"?query={quote_plus(query)}&mode=artlist&maxrecords={max_records}"
@@ -327,25 +397,53 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--days", type=int, default=45)
     parser.add_argument("--max-per-symbol", type=int, default=6)
+    parser.add_argument(
+        "--symbols",
+        default=",".join(SYMBOLS),
+        help="Comma-separated symbols; defaults to the governed baseline universe.",
+    )
+    parser.add_argument("--skip-sec", action="store_true")
     parser.add_argument("--skip-finbert", action="store_true")
     args = parser.parse_args()
+    selected_symbols = tuple(
+        dict.fromkeys(
+            str(value).strip().upper()
+            for value in args.symbols.split(",")
+            if str(value).strip()
+        )
+    )
+    if not selected_symbols:
+        raise SystemExit("--symbols must contain at least one ticker")
     now = datetime.now(timezone.utc)
     since = now - timedelta(days=max(1, args.days))
     session = requests.Session()
     session.headers.update({"User-Agent": USER_AGENT, "Accept-Encoding": "gzip, deflate"})
-    sec_documents, sec_status, ticker_raw = fetch_sec_documents(
-        session,
-        symbols=SYMBOLS,
-        since=since,
-        max_per_symbol=max(1, args.max_per_symbol),
-    )
+    if args.skip_sec:
+        sec_documents = []
+        sec_status = [
+            {"symbol": symbol, "status": "skipped_by_operator"}
+            for symbol in selected_symbols
+        ]
+        ticker_raw = {"status": "skipped_by_operator"}
+    else:
+        sec_documents, sec_status, ticker_raw = fetch_sec_documents(
+            session,
+            symbols=selected_symbols,
+            since=since,
+            max_per_symbol=max(1, args.max_per_symbol),
+        )
     yahoo_documents, yahoo_status = fetch_yahoo_documents(
         session,
-        symbols=SYMBOLS,
+        symbols=selected_symbols,
         max_per_symbol=max(1, args.max_per_symbol),
     )
     documents = [*sec_documents, *yahoo_documents]
-    gdelt = attempt_gdelt(session, since_days=min(max(1, args.days), 30), max_records=20)
+    gdelt = attempt_gdelt(
+        session,
+        symbols=selected_symbols,
+        since_days=min(max(1, args.days), 30),
+        max_records=20,
+    )
 
     registry = ResearchRegistry(GOV / "research_registry.sqlite")
     artifacts = ArtifactStore(ROOT / "data" / "artifacts" / "public_events")
@@ -379,7 +477,7 @@ def main() -> int:
         "schema_version": 1,
         "created_at": now.isoformat(),
         "period": {"since": since.isoformat(), "through": now.isoformat()},
-        "symbols": list(SYMBOLS),
+        "symbols": list(selected_symbols),
         "sources": {
             "sec_edgar": {"status": "complete" if sec_documents else "unavailable_or_no_recent_documents", "documents": len(sec_documents), "ticker_map_raw": ticker_raw, "symbols": sec_status},
             "yahoo_finance_search": {"status": "complete" if yahoo_documents else "unavailable", "documents": len(yahoo_documents), "symbols": yahoo_status},

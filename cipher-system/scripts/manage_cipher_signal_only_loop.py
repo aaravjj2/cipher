@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Start, stop, or inspect the Flash/Agentic/Cluster-only research loop."""
+"""Start, stop, or inspect the independent Cipher source research loop."""
 from __future__ import annotations
 
 import argparse
@@ -19,9 +19,11 @@ LOG_DIR = ROOT / "logs"
 PID_PATH = GOV / "signal_research_loop.pid"
 STATUS_PATH = GOV / "signal_research_loop_status.json"
 RUNNER = ROOT / "scripts" / "run_cipher_signal_only_loop.py"
-REPORT = GOV / "latest_signal_research.json"
-SPECIFICS = GOV / "latest_ticker_strategy_specifics.json"
-COMPLETE_REPORT = GOV / "latest_complete_observations.json"
+INDEPENDENT_REPORT = GOV / "latest_independent_signal_analysis.json"
+CLUSTER_REPORT = GOV / "latest_cluster_individual_analysis.json"
+TRADE_REPORT = GOV / "latest_cluster_trade_candidates.json"
+STRATEGY_REPORT = ROOT / "data" / "governance" / "cipher_strategy" / "latest_strategy_decision.json"
+POSTMORTEM_REPORT = ROOT / "data" / "governance" / "cipher_strategy" / "latest_trade_postmortems.json"
 CYCLE = GOV / "latest_signal_research_cycle.json"
 
 
@@ -33,6 +35,13 @@ def read_json(path: Path) -> dict[str, Any]:
     except (OSError, json.JSONDecodeError):
         return {}
     return payload if isinstance(payload, dict) else {}
+
+
+def nested(row: dict[str, Any], *keys: str) -> Any:
+    value: Any = row
+    for key in keys:
+        value = value.get(key) if isinstance(value, dict) else None
+    return value
 
 
 def active_pid() -> int | None:
@@ -59,57 +68,104 @@ def atomic_json(path: Path, payload: dict[str, Any]) -> None:
     temporary.replace(path)
 
 
+def source_summary(payload: dict[str, Any], name: str) -> dict[str, Any]:
+    sources = payload.get("sources") if isinstance(payload.get("sources"), dict) else {}
+    source = sources.get(name) if isinstance(sources.get(name), dict) else {}
+    episodes = source.get("episodes") if isinstance(source.get("episodes"), dict) else {}
+    states = source.get("terminal_states") if isinstance(source.get("terminal_states"), dict) else {}
+    scoring = source.get("forward_scoring") if isinstance(source.get("forward_scoring"), dict) else {}
+    return {
+        "episodes": episodes.get("total"),
+        "eligible_regular_session_episodes": episodes.get("eligible_regular_session"),
+        "terminal_states": states.get("count"),
+        "matured": scoring.get("matured"),
+        "pending": scoring.get("pending"),
+        "unscorable": scoring.get("unscorable"),
+        "by_direction_horizon": scoring.get("by_direction_horizon"),
+        "by_setup_horizon": scoring.get("by_setup_horizon"),
+        "by_score_bucket_horizon": scoring.get("by_score_bucket_horizon"),
+        "by_ticker_horizon": scoring.get("by_ticker_horizon"),
+    }
+
+
 def summary() -> dict[str, Any]:
-    report = read_json(REPORT)
     cycle = read_json(CYCLE)
-    specifics = read_json(SPECIFICS)
-    complete = read_json(COMPLETE_REPORT)
-    inventory = report.get("capture_inventory") if isinstance(report.get("capture_inventory"), dict) else {}
-    scoring = report.get("forward_scoring") if isinstance(report.get("forward_scoring"), dict) else {}
-    populations = complete.get("population_counts") if isinstance(complete.get("population_counts"), dict) else {}
-    cluster_research = complete.get("cluster_expiry_research") if isinstance(complete.get("cluster_expiry_research"), dict) else {}
-    cluster_summary = cluster_research.get("summary") if isinstance(cluster_research.get("summary"), dict) else {}
-    fixed_complete = complete.get("fixed_horizon_flash_agentic") if isinstance(complete.get("fixed_horizon_flash_agentic"), dict) else {}
+    independent = read_json(INDEPENDENT_REPORT)
+    cluster = read_json(CLUSTER_REPORT)
+    trade = read_json(TRADE_REPORT)
+    strategy = read_json(STRATEGY_REPORT)
+    postmortems = read_json(POSTMORTEM_REPORT)
+    cluster_summary = cluster.get("summary") if isinstance(cluster.get("summary"), dict) else {}
+    trade_board = trade.get("current_trade_board") if isinstance(trade.get("current_trade_board"), dict) else {}
+    delayed = trade.get("delayed_entry_research") if isinstance(trade.get("delayed_entry_research"), dict) else {}
     return {
         "latest_cycle_status": cycle.get("status"),
         "latest_cycle_created_at": cycle.get("created_at"),
-        "mode": report.get("mode") or cycle.get("mode"),
-        "active_sources": report.get("active_sources"),
-        "capture_sessions": inventory.get("sessions"),
-        "capture_episodes": inventory.get("episodes"),
-        "daily_latest_states": ((report.get("daily_latest_states") or {}).get("count")),
-        "matured_observations": scoring.get("matured_observations"),
-        "pending_observations": scoring.get("pending_observations"),
-        "unscorable_observations": scoring.get("unscorable_observations"),
-        "by_source_horizon": scoring.get("by_source_horizon"),
-        "pair_agreement": ((report.get("cross_source") or {}).get("pair_agreement")),
-        "freshness": report.get("freshness"),
-        "ticker_analysis": specifics.get("ticker_analysis"),
-        "direction_analysis": specifics.get("direction_analysis"),
-        "timing_analysis": specifics.get("timing_analysis"),
-        "candidate_rule_analysis": specifics.get("candidate_rule_analysis"),
-        "latest_session_snapshot": specifics.get("latest_session_snapshot"),
-        "complete_unique_episodes": populations.get("all_unique_episodes"),
-        "complete_daily_terminal_states": populations.get("all_daily_terminal_source_ticker_states"),
-        "cluster_expiry_records": populations.get("cluster_expiry_records"),
-        "cluster_latest_completed_market_session": cluster_summary.get("latest_completed_market_session"),
-        "cluster_matured_at_expiry": cluster_summary.get("matured_at_expiry"),
-        "cluster_pending_expiry": cluster_summary.get("pending_expiry"),
-        "cluster_finalized_at_expiry": cluster_summary.get("finalized_at_expiry"),
-        "cluster_pending_mark_to_latest": cluster_summary.get("pending_mark_to_latest"),
-        "cluster_completed_session_target_distance_analysis": cluster_summary.get("completed_sessions_by_target_distance_bucket"),
-        "cluster_completed_session_time_analysis": cluster_summary.get("completed_sessions_by_signal_time_bucket"),
-        "cluster_completed_session_option_path_diagnostics": cluster_summary.get("option_path_diagnostics_completed_sessions"),
-        "cluster_completed_session_candidate_hypotheses": cluster_summary.get("candidate_hypotheses_completed_sessions"),
-        "cluster_current_partial_candidate_hypotheses": cluster_summary.get("candidate_hypotheses_current_partial"),
-        "complete_flash_agentic_summary": fixed_complete.get("summary"),
-        "other_research_branches": "paused_frozen_reference_only",
+        "mode": cycle.get("mode") or "independent_source_analysis_only",
+        "cross_source_logic_active": False,
+        "flash": source_summary(independent, "flash"),
+        "agentic": source_summary(independent, "flash_agentic"),
+        "cluster": {
+            "analysis_unit": cluster_summary.get("analysis_unit"),
+            "total_episodes": cluster_summary.get("total_cluster_episodes"),
+            "eligible_regular_session_episodes": cluster_summary.get("eligible_regular_session_episodes"),
+            "excluded_episodes": cluster_summary.get("excluded_episodes"),
+            "matured_at_expiry": cluster_summary.get("matured_at_expiry"),
+            "pending_expiry": cluster_summary.get("pending_expiry"),
+            "unscorable": cluster_summary.get("unscorable"),
+            "latest_completed_market_session": cluster_summary.get("latest_completed_market_session"),
+            "tier_counts": cluster_summary.get("tier_counts"),
+            "by_direction": cluster_summary.get("by_direction"),
+            "by_rank_bucket": cluster_summary.get("by_rank_bucket"),
+            "by_strength_bucket": cluster_summary.get("by_strength_bucket"),
+            "by_target_distance_bucket": cluster_summary.get("by_target_distance_bucket"),
+            "by_signal_time_bucket": cluster_summary.get("by_signal_time_bucket"),
+            "by_research_tier": cluster_summary.get("by_research_tier"),
+            "by_appearance_bucket": cluster_summary.get("by_appearance_bucket"),
+            "by_ticker": cluster_summary.get("by_ticker"),
+            "finalized_at_expiry": cluster_summary.get("finalized_at_expiry"),
+            "pending_mark_to_latest": cluster_summary.get("pending_mark_to_latest"),
+            "option_path_diagnostics": cluster_summary.get("option_path_diagnostics"),
+        },
+        "cluster_trade_board": {
+            "report_id": trade.get("report_id"),
+            "latest_signal_session": trade.get("latest_signal_session"),
+            "candidate_count": len(trade_board.get("candidates") or []),
+            "status_counts": trade_board.get("status_counts"),
+            "top_candidates": (trade_board.get("candidates") or [])[:8],
+            "delayed_entry_all": delayed.get("all_first_qualifying_tier_a"),
+            "delayed_entry_persisted": delayed.get("persisted_tier_a_to_last_same_day_capture"),
+        },
+        "cluster_strategy": {
+            "strategy_id": strategy.get("strategy_id"),
+            "latest_signal_session": strategy.get("latest_signal_session"),
+            "eligible_candidates": strategy.get("eligible_candidates"),
+            "overlay_coverage": strategy.get("overlay_coverage"),
+            "news_context_status": strategy.get("news_context_status"),
+            "input_snapshot": strategy.get("input_snapshot"),
+            "execution_authority": False,
+        },
+        "trade_postmortems": {
+            "report_id": postmortems.get("report_id"),
+            "created_at": postmortems.get("created_at"),
+            "trades": nested(postmortems, "summary", "trades"),
+            "unique_tickers": nested(postmortems, "summary", "unique_tickers"),
+            "matured_at_expiry": nested(postmortems, "summary", "matured_at_expiry"),
+            "pending_expiry": nested(postmortems, "summary", "pending_expiry"),
+            "attribution_counts": nested(postmortems, "summary", "attribution_counts"),
+            "outcome_counts": nested(postmortems, "summary", "outcome_counts"),
+            "uncertainty_counts": nested(postmortems, "summary", "uncertainty_counts"),
+            "flash_available_at_signal": nested(postmortems, "summary", "flash_available_at_signal"),
+            "agentic_available_at_signal": nested(postmortems, "summary", "agentic_available_at_signal"),
+            "execution_authority": False,
+        },
+        "other_research_branches": "combined_source_artifacts_frozen_reference_only",
     }
 
 
 def write_status(action: str, *, pid: int | None, state: str, detail: str | None = None) -> dict[str, Any]:
     payload = {
-        "schema_version": 1,
+        "schema_version": 2,
         "updated_at": datetime.now(timezone.utc).isoformat(),
         "action": action,
         "state": state,
@@ -117,27 +173,37 @@ def write_status(action: str, *, pid: int | None, state: str, detail: str | None
         "detail": detail,
         "runner": str(RUNNER),
         "focus": [
-            "flash_source_quality",
-            "agentic_source_quality",
-            "cluster_source_quality",
-            "source_freshness_and_capture_gaps",
-            "daily_latest_directional_states",
-            "cross_source_agreement_and_conflict",
-            "cross_source_lead_lag",
-            "setup_family_performance",
-            "score_bucket_calibration",
-            "one_five_twenty_one_session_future_open_scoring",
-            "complete_all_date_episode_and_terminal_state_observations",
+            "cluster_every_unique_episode",
             "cluster_second_listed_expiration_reconstruction",
+            "cluster_individual_rank_strength_target_and_time_context",
+            "cluster_same_ticker_episode_sequence_without_other_sources",
             "cluster_underlying_move_through_expiration",
             "cluster_atm_and_target_option_moves_through_expiration",
             "cluster_debit_spread_move_through_expiration",
             "cluster_finalized_vs_pending_expiry_separation",
-            "symbol_and_dataset_coverage",
-            "ticker_level_performance",
-            "source_ticker_setup_interactions",
-            "deduplicated_candidate_rule_comparison",
-            "leave_one_ticker_out_rule_stress",
+            "cluster_next_session_entry_research",
+            "cluster_liquidity_gated_trade_board_without_execution",
+            "raw_cluster_scan_immutable_snapshot_before_analysis",
+            "deterministic_cluster_spread_strategy_without_execution",
+            "flash_agentic_non_gating_confidence_context",
+            "catalyst_and_relative_move_attribution_context",
+            "every_modeled_trade_postmortem",
+            "entry_time_flash_agentic_context_separate_from_post_entry_context",
+            "company_specific_vs_market_headline_attribution",
+            "spread_fill_and_leg_timing_uncertainty",
+            "flash_standalone_episode_and_terminal_state_analysis",
+            "flash_standalone_one_five_twenty_one_session_scoring",
+            "agentic_standalone_episode_and_terminal_state_analysis",
+            "agentic_standalone_one_five_twenty_one_session_scoring",
+        ],
+        "disabled_active_logic": [
+            "cross_source_confirmation",
+            "cross_source_veto",
+            "cross_source_majority_vote",
+            "cross_source_lead_lag",
+            "combined_candidate_rules",
+            "flash_agentic_hard_trade_gate",
+            "news_directional_trade_gate",
         ],
         "automatic_promotion": False,
         "paper_or_live_execution": False,
@@ -160,7 +226,7 @@ def start(interval_seconds: int, *, run_on_start: bool) -> dict[str, Any]:
         str(RUNNER),
         "--loop",
         "--interval-seconds",
-        str(max(3600, interval_seconds)),
+        str(max(30, interval_seconds)),
     ]
     if run_on_start:
         command.append("--run-on-start")
@@ -173,7 +239,7 @@ def start(interval_seconds: int, *, run_on_start: bool) -> dict[str, Any]:
         stdin=subprocess.DEVNULL,
         start_new_session=True,
         close_fds=True,
-        env={**os.environ, "CIPHER_SIGNAL_ONLY_LOOP": "1"},
+        env={**os.environ, "CIPHER_INDEPENDENT_SOURCE_LOOP": "1"},
     )
     PID_PATH.write_text(f"{process.pid}\n", encoding="utf-8")
     time.sleep(1)
@@ -214,7 +280,7 @@ def status() -> dict[str, Any]:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("action", choices=("start", "stop", "status"))
-    parser.add_argument("--interval-seconds", type=int, default=3600)
+    parser.add_argument("--interval-seconds", type=int, default=30)
     parser.add_argument("--run-on-start", action="store_true")
     args = parser.parse_args()
     if args.action == "start":
