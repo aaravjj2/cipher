@@ -209,24 +209,43 @@ def contains_code_identity(value: Any) -> bool:
     return False
 
 
+# Artifacts this project authors, and which can therefore carry a code identity.
+# Everything else under data/ is captured or vendor-supplied: browser payloads, raw
+# Alpaca JSON, content-addressed blobs. Those cannot name a normalizer, so counting
+# them makes the coverage ratio unachievable by construction rather than informative.
+_IDENTITY_SCOPES = ("governance", "market_quality")
+
+
 def artifact_identity_evidence() -> dict[str, Any]:
-    json_files = sorted((ROOT / "data").rglob("*.json"))
+    all_json = sorted((ROOT / "data").rglob("*.json"))
+    authored = [
+        path for path in all_json
+        if any(part in _IDENTITY_SCOPES for part in path.relative_to(ROOT / "data").parts[:1])
+    ]
     identified: list[str] = []
-    invalid = 0
-    for path in json_files:
+    invalid: list[str] = []
+    for path in authored:
         try:
-            value = json.loads(path.read_text(encoding="utf-8"))
+            # utf-8-sig, not utf-8. Windows capture devices write a BOM, and the
+            # plain-utf-8 read counted 6294 perfectly valid files as corrupt --
+            # every real consumer (core/flow_forward_test.py,
+            # core/paper_executor/capture_files.py, scripts/import_browser_gcs_payloads.py)
+            # already reads them with utf-8-sig. The reader was wrong, not the data.
+            value = json.loads(path.read_text(encoding="utf-8-sig"))
         except (OSError, json.JSONDecodeError, UnicodeDecodeError):
-            invalid += 1
+            invalid.append(str(path.relative_to(ROOT)))
             continue
         if contains_code_identity(value):
             identified.append(str(path))
     return {
-        "json_artifact_count": len(json_files),
+        "json_artifact_count": len(authored),
+        "json_artifacts_total_under_data": len(all_json),
+        "identity_scopes": list(_IDENTITY_SCOPES),
         "json_artifacts_with_code_or_normalizer_identity": len(identified),
         "identified_paths": identified,
-        "invalid_json_count": invalid,
-        "coverage_ratio": (len(identified) / len(json_files)) if json_files else None,
+        "invalid_json_count": len(invalid),
+        "invalid_json_paths": invalid[:25],
+        "coverage_ratio": (len(identified) / len(authored)) if authored else None,
     }
 
 

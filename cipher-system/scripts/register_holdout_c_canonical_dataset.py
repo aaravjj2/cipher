@@ -571,7 +571,22 @@ def run(scope_path: Path, cohort_path: Path) -> dict[str, Any]:
             raise BaselineDiscrepancyError(
                 f"canonical transaction exposes {len(paths)} linked partitions instead of {EXPECTED_PARTITIONS}"
             )
-        canonical_scope = build_scope(paths, created_at=parse_time(str(answer_key["scope_created_at"])))
+        # The baseline scope was built over a bounded period ("2023-01-01..2025-12-31"),
+        # and build_scope() date-filters `daily_results` while hashing every selected
+        # path. Omitting start/end here re-derived over the full 2017-2025 panel, so
+        # daily_results came back at roughly double the baseline's 6696 rows, the
+        # sha comparison could never match, and the transaction rolled back reporting
+        # "did not match the protected answer key" — which reads like corrupted data
+        # rather than a missing argument. This is very likely why the original
+        # registration left no artifact behind.
+        baseline_period = str(baseline_scope.get("period") or "")
+        period_start, _, period_end = baseline_period.partition("..")
+        canonical_scope = build_scope(
+            paths,
+            start=period_start or None,
+            end=period_end or None,
+            created_at=parse_time(str(answer_key["scope_created_at"])),
+        )
         canonical_cohort = build_cohort_payload(
             canonical_scope,
             scope_artifact=f"canonical-dataset:{registered_dataset.dataset_id}",
