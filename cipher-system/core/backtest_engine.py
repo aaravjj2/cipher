@@ -29,10 +29,35 @@ from dataclasses import dataclass, field, asdict
 from datetime import datetime, timezone
 
 
-DEFAULT_COST_BPS = 2.0          # per side, in basis points of notional
+# Per side, in basis points of notional. This is a fallback, not a finding: it is
+# the number every verdict in docs/backtest-findings.md turns on, and a guess in
+# that position is not defensible. `core/execution_cost.py` measures it from the
+# captured quote corpus; pass that profile as `cost_profile=` to charge the
+# measured per-symbol half-spread instead. Measurement over 2026-07-22..07-31 put
+# the median liquid-name half-spread at ~1.0bp, so this fallback is conservative
+# for large caps and optimistic for wider names such as AMD (3.7bp).
+DEFAULT_COST_BPS = 2.0
 DEFAULT_STOP_ATR = 1.0
 DEFAULT_TARGET_ATR = 1.5
 DEFAULT_MAX_HOLD_BARS = 24
+
+
+def _cost_for(symbol: str, fallback: float, profile: dict | None) -> float:
+    """Per-symbol half-spread when a measured profile is supplied, else `fallback`.
+
+    With no profile this returns `fallback` unchanged, so every existing caller
+    and every recorded result keeps its exact prior behaviour.
+    """
+    if not profile:
+        return fallback
+    try:
+        from . import execution_cost
+    except ImportError:  # core/ has no __init__.py; app.py imports these flat
+        import execution_cost
+    value, _provenance = execution_cost.equity_half_spread_bps(
+        symbol, profile=profile, fallback=fallback
+    )
+    return value
 
 
 def data_availability_note() -> dict:
@@ -46,13 +71,17 @@ def data_availability_note() -> dict:
                           "needs only OHLCV. An earlier 288-bar figure was the window the "
                           "driver requested, not a feed limit.",
         "gex_cluster_strategies": "NOT backtestable at present. GEX = gamma x open "
-                                  "interest, so it needs point-in-time OI. "
-                                  "data/gex_history.sqlite holds only 5 usable "
-                                  "universe-wide capture days (2026-07-27..07-31) and "
-                                  "stopped on 07-31. Backtesting clusters against "
-                                  "today's OI over past prices is lookahead bias.",
-        "remedy": "core/gex_capture.py --all now runs again; once a few months of "
-                  "daily snapshots accrue, cluster strategies become testable.",
+                                  "interest, so it needs point-in-time OI. As of "
+                                  "2026-08-08 the GCP VM's data/gex_history.sqlite "
+                                  "holds 12 capture days (2026-07-22..08-07, 42,752 "
+                                  "snapshots over 545 tickers) against the 60 the "
+                                  "evidence gate asks for. Backtesting clusters "
+                                  "against today's OI over past prices is lookahead "
+                                  "bias — which is exactly what core/strategy_backtest.py "
+                                  "does, and why its results are not usable.",
+        "remedy": "cipher-gex.service captures daily on the VM and the count rises on "
+                  "its own. Nothing here can be accelerated by back-filling: a missed "
+                  "session's OI cannot be reconstructed from any vendor.",
     }
 
 
@@ -194,6 +223,7 @@ def run_backtest(
     target_atr: float = DEFAULT_TARGET_ATR,
     max_hold_bars: int = DEFAULT_MAX_HOLD_BARS,
     cost_bps: float = DEFAULT_COST_BPS,
+    cost_profile: dict | None = None,
     detector_params: dict | None = None,
     invert: bool = False,
     states_by_symbol: dict[str, list] | None = None,
@@ -253,7 +283,8 @@ def run_backtest(
             trade, exit_idx = _simulate(
                 bars, atr, i, symbol, setup, direction,
                 stop_atr=stop_atr, target_atr=target_atr,
-                max_hold_bars=max_hold_bars, cost_bps=cost_bps,
+                max_hold_bars=max_hold_bars,
+                cost_bps=_cost_for(symbol, cost_bps, cost_profile),
             )
             result.trades.append(trade)
 
@@ -318,6 +349,7 @@ def run_control(
     target_atr: float = DEFAULT_TARGET_ATR,
     max_hold_bars: int = DEFAULT_MAX_HOLD_BARS,
     cost_bps: float = DEFAULT_COST_BPS,
+    cost_profile: dict | None = None,
     **_ignored,
 ) -> dict:
     """Random-entry control matched to `reference` trade-for-trade.
@@ -358,7 +390,8 @@ def run_control(
                 trade, _exit = _simulate(
                     bars, atr, i, symbol, "RANDOM", direction,
                     stop_atr=stop_atr, target_atr=target_atr,
-                    max_hold_bars=max_hold_bars, cost_bps=cost_bps,
+                    max_hold_bars=max_hold_bars,
+                cost_bps=_cost_for(symbol, cost_bps, cost_profile),
                 )
                 trades.append(trade)
         if trades:
@@ -410,6 +443,7 @@ def baseline_trades(
     target_atr: float = DEFAULT_TARGET_ATR,
     max_hold_bars: int = DEFAULT_MAX_HOLD_BARS,
     cost_bps: float = DEFAULT_COST_BPS,
+    cost_profile: dict | None = None,
 ) -> list[Trade]:
     """A deliberately dumb base strategy: enter every `entry_every` bars.
 
@@ -431,7 +465,8 @@ def baseline_trades(
                 trade, exit_idx = _simulate(
                     bars, atr, i, symbol, "BASELINE", direction,
                     stop_atr=stop_atr, target_atr=target_atr,
-                    max_hold_bars=max_hold_bars, cost_bps=cost_bps,
+                    max_hold_bars=max_hold_bars,
+                cost_bps=_cost_for(symbol, cost_bps, cost_profile),
                 )
                 trade.entry_index = i
                 trades.append(trade)
@@ -476,7 +511,7 @@ def run_filter(
         base_trades = baseline_trades(bars_by_symbol, **{
             k: v for k, v in base_kw.items()
             if k in {"entry_every", "direction", "stop_atr", "target_atr",
-                     "max_hold_bars", "cost_bps"}
+                     "max_hold_bars", "cost_bps", "cost_profile"}
         })
     if not base_trades:
         return {"error": "base strategy produced no trades"}
@@ -539,7 +574,8 @@ def run_filter(
             control = run_control(
                 holder, bars_by_symbol, seed=seed, repeats=control_repeats,
                 **{k: v for k, v in base_kw.items()
-                   if k in {"stop_atr", "target_atr", "max_hold_bars", "cost_bps"}},
+                   if k in {"stop_atr", "target_atr", "max_hold_bars", "cost_bps",
+                            "cost_profile"}},
             )
             entry["control"] = control.get("control")
             entry["beats_control_range"] = control.get("detector_beats_control_range")

@@ -285,3 +285,80 @@ The more important number is the last column. A 74.6% win rate with a **negative
 average return means wins are small and losses are large — the profile of an
 uncapped loss against a capped gain. A headline win rate that high is compatible
 with losing money, and here it does.
+
+---
+
+# The execution cost was a guess. Now it is measured, and the guess was pessimistic.
+
+`core/execution_cost.py` + `scripts/build_execution_cost_profile.py`, run 2026-08-08.
+
+Every verdict above turned on `DEFAULT_COST_BPS = 2.0`, a hardcoded assumption. The
+section above concluded that the out-of-sample effect "is smaller than the difference
+between a 2bp and a 3bp execution assumption" — which made the assumption, not the
+data, the deciding input. `data/tradier_stream.sqlite` holds millions of captured
+quote events with `bid` and `ask`, so the assumption could simply be checked.
+
+Half-spread in basis points of price, regular hours, 2026-07-22..07-31 (6 capture
+days locally; the VM holds more):
+
+```
+symbol     samples     p25  median     p75     p95
+SPY         424953   0.125   0.125   0.225   0.275
+QQQ         458431   0.225   0.275   0.425   0.575
+IWM         360641   0.175   0.325   0.325   0.525
+AAPL        243883   0.325   0.475   0.725   1.075
+NVDA        308808   0.525   0.525   0.775   1.025
+AMZN        189221   0.575   0.825   1.075   1.675
+GOOGL       197761   0.625   0.875   1.125   1.525
+MSFT        147169   0.775   1.025   1.425   2.275
+TSLA        150840   1.125   1.475   1.925   2.625
+META         95847   0.925   1.525   2.275   3.825
+AVGO         89941   1.675   2.475   3.525   5.175
+MU          190724   1.725   2.625   3.725   5.525
+AMD         136954   2.725   3.725   4.925   6.975
+```
+
+Median across symbols is **1.025 bps per side against an assumed 2.0**. The
+assumption was conservative for the liquid names, not optimistic. It is
+*optimistic* for AMD (3.7), MU (2.6) and AVGO (2.5), so a single global constant was
+wrong in both directions at once — which is the argument for a per-symbol lookup
+rather than a better constant.
+
+## What this does to the finding
+
+Re-running the two surviving configurations with the measured per-symbol spread:
+
+```
+set         cost         n     avg%  lift_pp  beats   base_avg
+original    assumed 2bp  159   0.0471  0.1005  True    -0.0534
+original    measured     159   0.0667  0.1017  True    -0.0350
+disjoint    assumed 2bp  153   0.0164  0.0626  True    -0.0462
+disjoint    measured     153   0.0156  0.0630  True    -0.0474
+```
+
+On the original ten — all ten measured — the effect is **42% larger** at real
+spreads than at the assumed one, and the base strategy loses substantially less.
+The lift barely moves (0.1005 → 0.1017), which is the expected behaviour: cost
+applies equally to the partition, the base and the control, so it cancels in the
+relative comparison and only ever moved the absolute number.
+
+**This does not rescue the strategy.** It removes one objection. The earlier
+statement that the edge dies at 3bps per side stands as arithmetic; what the
+measurement shows is that 3bps is not the spread these particular names trade at.
+
+## The limit, which is now the binding one
+
+The disjoint set is **1 of 10 measured**. Only AVGO appears in the capture universe,
+at 2.475 bps — *above* the assumption. The other nine fall back to the 2.0 constant,
+so the out-of-sample row above is still mostly an assumption wearing a measured
+label, and it is labelled as such by `equity_half_spread_bps`, which returns its
+provenance rather than blending measured and assumed values silently.
+
+The out-of-sample result therefore cannot be settled by this corpus. Settling it
+needs the Tradier capture universe widened to cover the disjoint names — which is a
+configuration change on a service that is already running, not new research.
+
+Two further limits, stated in the artifact itself: this is one vendor's consolidated
+quote feed over a handful of days, and it excludes commissions and market impact. It
+bounds the modelled assumption against currently observable spreads. It is not a
+cost model for a backtest spanning years, and nothing here should be read as one.
