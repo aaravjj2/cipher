@@ -40,6 +40,11 @@ import price_backtest
 import edge_backtest
 import intraday_backtest
 import session_levels
+from zoneinfo import ZoneInfo
+
+# Exchange local time. Session boundaries and trading dates are ET facts, not UTC
+# ones — see the prior_close note in quote().
+ET_ZONE = ZoneInfo("America/New_York")
 from exposure import (
     number, parse_contract, gex, vex, model_gamma, model_vanna, oi_is_proxy,
     iv_is_ill_conditioned,
@@ -436,9 +441,24 @@ def quote(ticker):
         daily = bars(ticker, "1d", limit=6).get("bars") or []
         closes = [bar for bar in daily if number(bar.get("close")) is not None]
         if closes and result["price_context"] is not None:
-            today_utc = datetime.now(timezone.utc).date().isoformat()
-            latest_time = str(closes[-1].get("time") or "")
-            if len(closes) >= 2 and latest_time.startswith(today_utc):
+            # Trading date in EXCHANGE time, not UTC. A daily bar is stamped
+            # 04:00Z (midnight ET), so between 20:00 ET and midnight ET the UTC
+            # date has already rolled forward while the session has not: the
+            # "is the newest bar today?" test failed and prior_close fell back to
+            # TODAY's own close. NVDA then read -0.08% after the bell against the
+            # real product's +2.20%, because it was comparing today's price to
+            # today's close instead of yesterday's.
+            today_et = datetime.now(ET_ZONE).date()
+
+            def bar_date(bar):
+                try:
+                    stamp = datetime.fromisoformat(str(bar.get("time")).replace("Z", "+00:00"))
+                except (ValueError, TypeError):
+                    return None
+                return stamp.astimezone(ET_ZONE).date()
+
+            latest_date = bar_date(closes[-1])
+            if len(closes) >= 2 and latest_date == today_et:
                 prev = number(closes[-2].get("close"))
             else:
                 prev = number(closes[-1].get("close"))

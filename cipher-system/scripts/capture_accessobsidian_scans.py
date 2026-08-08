@@ -314,13 +314,30 @@ def parse_flash(text: str) -> list[dict[str, Any]]:
         if status_start:
             row_lines.append(lines[idx])
             j = idx + 1
+        seen_ticker = False
         while j < len(lines):
             if j != idx and re.fullmatch(r"#\d+", lines[j]):
                 break
             if j != idx and lines[j].upper() in {"ACTIVE", "ARMING", "TRIGGERED", "COMPLETED"} and j + 3 < len(lines) and re.fullmatch(r"\$[A-Z][A-Z0-9.]{0,6}", lines[j + 1]):
                 break
+            # A second "$TICKER" means the next card has started. The status-word
+            # check above misses it whenever the following card opens on a state
+            # this parser did not know about — "DONE · 282s" being the one that bit:
+            # 26 of 432 captured rows swallowed the next card, and the field scrape
+            # below then took SPOT/PIVOT/TARGET from the wrong ticker while keeping
+            # the first one's name. Every card carries exactly one $TICKER, so that
+            # is the reliable boundary.
+            if re.fullmatch(r"\$[A-Z][A-Z0-9.]{0,6}", lines[j]):
+                if seen_ticker:
+                    break
+                seen_ticker = True
             row_lines.append(lines[j])
             j += 1
+        # Drop a trailing status marker belonging to the next card ("DONE · 282s").
+        while row_lines and re.fullmatch(
+            r"(DONE|ACTIVE|ARMING|TRIGGERED|COMPLETED)(\s*·\s*\d+s)?", row_lines[-1], re.I
+        ):
+            row_lines.pop()
         raw = " | ".join(row_lines)
         ticker = ""
         for line in row_lines:
