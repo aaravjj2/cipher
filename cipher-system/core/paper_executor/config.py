@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
+import os
 from pathlib import Path
 from typing import Any
 
@@ -14,7 +15,14 @@ from .models import Mode
 
 
 ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_RUNTIME = Path(r"C:\Aarav\cipher-system\CipherCapture")
+
+# The runtime root was a hardcoded Windows path, which made this whole subsystem
+# unstartable anywhere else — it is why 24 modules and 14 test files sat unused on
+# a Linux box and a Linux VM. The env var keeps the Windows deployment working
+# unchanged; the default is now somewhere that exists on the machine running it.
+DEFAULT_RUNTIME = Path(
+    os.environ.get("CIPHER_PAPER_RUNTIME") or (ROOT / "data" / "paper_runtime")
+)
 
 
 @dataclass(frozen=True)

@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from pathlib import Path
+
+import os
+
 import json
 import urllib.parse
 import urllib.request
@@ -32,14 +36,49 @@ def assert_allowed_path(path: str) -> None:
 
 
 def load_token(cfg: MarketDataConfig) -> str:
+    """Resolve the market-data token from whichever store this machine has.
+
+    Windows Credential Manager first, so an existing Windows deployment keeps
+    working untouched. Then an environment variable, which is how the GCP VM
+    receives its secrets (cipher-secrets.service materialises /etc/cipher/cipher.env
+    from Google Secret Manager). Then a 0600 file, checked for permissions rather
+    than trusted: a market-data token in a world-readable file is still a leaked
+    credential even though it can only read quotes.
+    """
     try:
         import keyring  # type: ignore
-    except Exception as exc:
-        raise RuntimeError("Install keyring and store the Tradier market-data token in Windows Credential Manager.") from exc
-    token = keyring.get_password(cfg.credential_service, cfg.credential_username)
-    if not token:
-        raise RuntimeError("Tradier market-data token was not found in the configured credential store.")
-    return str(token)
+
+        token = keyring.get_password(cfg.credential_service, cfg.credential_username)
+        if token:
+            return str(token)
+    except Exception:
+        pass  # no keyring backend on this platform; fall through
+
+    for name in ("TRADIER_MARKET_TOKEN", "TRADIER_ACCESS_TOKEN", "TRADIER_TOKEN"):
+        value = os.environ.get(name)
+        if value:
+            return value.strip()
+
+    token_file = Path(
+        os.environ.get("CIPHER_TRADIER_TOKEN_FILE")
+        or (Path.home() / ".config" / "cipher" / "tradier_token")
+    )
+    if token_file.exists():
+        mode = token_file.stat().st_mode & 0o077
+        if mode:
+            raise RuntimeError(
+                f"{token_file} is group/world readable ({oct(mode)}); chmod 600 it "
+                f"before it will be used."
+            )
+        text = token_file.read_text(encoding="utf-8").strip()
+        if text:
+            return text
+
+    raise RuntimeError(
+        "No Tradier market-data token found. Set TRADIER_MARKET_TOKEN, store it in "
+        "the platform credential manager, or write it to "
+        f"{token_file} with mode 600."
+    )
 
 
 class TradierMarketData:

@@ -110,3 +110,37 @@ for out-of-sample replication on a disjoint symbol set, exactly as was done for 
 filter finding in `docs/backtest-findings.md` — not a result. The honest summary is
 that the catalog now produces verdicts that can be wrong in a checkable way, which
 the previous 24 leaderboards could not.
+
+---
+
+## The one pass did not replicate
+
+`edge.rsi2_reversion` was the single PASS out of 40. It was selected from that
+catalog on one universe, which is the setup for a selection artifact, so it was
+put through the same out-of-sample test as the filter finding in
+`docs/backtest-findings.md`: the identical configuration on ten symbols drawn from
+other sectors that it was never measured on.
+
+```
+set        verdict     n     avg%      PF    beats_control  walk_forward
+original   PASS      749   0.4977   1.354        True           True
+disjoint   FAIL      754   0.1947   1.150        False          False
+```
+
+Same strategy, same timeframe, same five years, same measured cost, comparable
+sample size — and it fails on both counts out of sample. The average return falls
+by 61% and it no longer clears a random-entry control.
+
+**The catalog therefore contains zero strategies with an out-of-sample result.**
+That is the honest standing: 40 strategies, one standard, and nothing that
+survives being looked for somewhere it was not found.
+
+This is worth stating plainly because the intermediate state was misleading in a
+specific way. After the first sweep the tool could have reported "1 of 40 passed",
+which reads as a discovery. One in forty clearing a control is roughly what chance
+allows, and the replication confirms that reading rather than the flattering one.
+
+It also settles what the paper executor should be pointed at, which is nothing.
+Forward-testing a strategy with no established edge produces a prospective record
+of noise, and a prospective record is harder to discard than a backtest precisely
+because it was collected forward.
