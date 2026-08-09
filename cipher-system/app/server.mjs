@@ -95,6 +95,7 @@ const routes = {
   "/api/research-status": "/api/research-status",
   "/api/evidence-status": "/api/evidence-status",
   "/api/signal-backtest": "/api/signal-backtest",
+  "/api/strategies": "/api/strategies",
   "/api/matrix": "/api/matrix",
   "/api/heatmap": "/api/heatmap",
   "/api/night-vision": "/api/night-vision",

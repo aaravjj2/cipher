@@ -182,3 +182,109 @@ def start_backtest_job(
 
     threading.Thread(target=_worker, daemon=True).start()
     return job_id
+
+
+def start_catalog_job(
+    *,
+    strategy_ids: list[str] | None = None,
+    family: str | None = None,
+    symbols: list[str] | None = None,
+    timeframe: str = "1Day",
+    years: float = 5.0,
+    control_repeats: int = 20,
+    use_measured_cost: bool = True,
+) -> str:
+    """Evaluate catalogued strategies against the one standard.
+
+    Shares the registry, status vocabulary and polling contract of
+    `start_backtest_job` above, and the same `_RUN_LOCK`, so a catalog sweep and a
+    signal backtest cannot fight over the bar cache or double the memory.
+
+    `timeframe` is a filter as well as a fetch parameter: a strategy declares the
+    bar size it was written against, and one written for intraday bars is reported
+    WRONG_TIMEFRAME rather than being fed daily bars and blamed for finding
+    nothing.
+    """
+    job_id = uuid.uuid4().hex[:12]
+    symbols = [s.strip().upper() for s in (symbols or DEFAULT_UNIVERSE) if s.strip()]
+    with _LOCK:
+        _JOBS[job_id] = {
+            "id": job_id,
+            "status": "queued",
+            "mode": "catalog",
+            "symbols": symbols,
+            "timeframe": timeframe,
+            "years": years,
+            "family": family,
+            "pct": 0,
+            "message": "Queued…",
+            "result": None,
+            "error": None,
+            "started_at": _utcnow(),
+            "updated_at": _utcnow(),
+        }
+    _prune()
+
+    def _worker() -> None:
+        if not _RUN_LOCK.acquire(blocking=False):
+            _update(job_id, status="running",
+                    message="Waiting for the running backtest to finish…")
+            _RUN_LOCK.acquire()
+        try:
+            started = time.time()
+            import sys
+            from pathlib import Path
+
+            root = Path(__file__).resolve().parents[1]
+            for path in (str(root), str(root / "core")):
+                if path not in sys.path:
+                    sys.path.insert(0, path)
+
+            import strategy_catalog as catalog
+            import strategy_evaluation as evaluation
+            from scripts.run_obsidian_backtest import load_bars
+
+            ids = strategy_ids
+            if not ids:
+                ids = [
+                    spec.strategy_id for spec in catalog.CATALOG.values()
+                    if (family is None or spec.family == family)
+                    and (not spec.evaluable or spec.bar_timeframe == timeframe)
+                ]
+
+            _update(job_id, status="running", pct=5,
+                    message=f"Loading {len(symbols)} symbols of {timeframe} bars…")
+            bars = load_bars(symbols, timeframe, years)
+            if not bars:
+                _update(job_id, status="error", message="No data",
+                        error="no bars returned for those symbols")
+                return
+
+            profile = None
+            if use_measured_cost:
+                try:
+                    import execution_cost
+                    profile = execution_cost.load_profile()
+                except Exception:  # noqa: BLE001 - fall back to the assumed cost
+                    profile = None
+
+            def progress(index, total, strategy_id):
+                _update(job_id, pct=10 + int(85 * index / max(total, 1)),
+                        message=f"{index + 1}/{total}  {strategy_id}")
+
+            payload = evaluation.evaluate_all(
+                bars, strategy_ids=ids, control_repeats=control_repeats,
+                cost_profile=profile, timeframe=timeframe, progress=progress,
+            )
+            payload["cost_source"] = "measured" if profile else "assumed 2.0bps/side"
+            payload["elapsed_ms"] = int((time.time() - started) * 1000)
+            _update(job_id, status="done", pct=100, result=payload,
+                    message=f"Evaluated {len(payload.get('results') or [])} strategies")
+        except Exception as exc:  # noqa: BLE001 - surface the failure to the UI
+            _update(job_id, status="error", error=f"{type(exc).__name__}: {exc}",
+                    message=str(exc)[:200])
+        finally:
+            _RUN_LOCK.release()
+
+    threading.Thread(target=_worker, daemon=True).start()
+    return job_id

@@ -34,11 +34,6 @@ from scanner import SCAN_UNIVERSE, UNIVERSE_META, get_scan_job, run_scan, start_
 import weight_lab
 import cluster_backtest
 import ranking_lab
-import strategy_backtest
-import historical_backtest
-import price_backtest
-import edge_backtest
-import intraday_backtest
 import session_levels
 import evidence_status
 import backtest_jobs
@@ -1959,236 +1954,69 @@ class Handler(BaseHTTPRequestHandler):
                 else:
                     self.send_json(400, {"error": f"Unknown backtest action: {action}"})
                     return
-            elif parsed.path == "/api/strategy":
-                action = (pget("action") or "run").lower()
+            elif parsed.path == "/api/strategies":
+                # One route replaces five. /api/strategy, /api/historical-backtest,
+                # /api/price-backtest, /api/edge-backtest and /api/intraday-backtest
+                # each ranked strategies with their own scoring half, and those
+                # halves charged no transaction cost, truncated chronologically, or
+                # (for the GEX family) read today's open interest while trading past
+                # bars. Their entry logic now lives in core/strategy_catalog.py and
+                # every one of them is measured by core/strategy_evaluation.py
+                # against a matched random-entry control.
+                action = (pget("action") or "list").lower()
                 if action == "list":
+                    import strategy_catalog as _catalog
                     data = {
-                        "strategies": list(strategy_backtest.STRATEGIES.keys()),
-                        "descriptions": {
-                            "wall_bounce": "Buy at put wall support, target call wall resistance",
-                            "gamma_squeeze": "Long calls when squeeze probability is high",
-                            "vacuum_breakout": "Enter when price enters GEX vacuum zone",
-                            "divergence_reversal": "Fade when VEX-GEX divergence is extreme",
-                            "gex_momentum": "Follow delta-GEX momentum direction",
-                            "cluster_magnet": "Trade toward cluster center levels",
-                            "term_aligned": "Only trade when term structure is aligned",
-                            "flow_confluence": "Trade when flow and GEX agree",
-                        },
+                        "summary": _catalog.summary(),
+                        "standard": (
+                            "A strategy passes only by beating a random-entry control "
+                            "matched trade-for-trade by symbol and direction. Costs are "
+                            "charged both sides. Strategies whose data cannot support an "
+                            "honest measurement are reported blocked, never scored."
+                        ),
+                        "strategies": [
+                            {
+                                "strategy_id": spec.strategy_id,
+                                "name": spec.name,
+                                "family": spec.family,
+                                "source": spec.source,
+                                "data_requirement": spec.data_requirement,
+                                "bar_timeframe": spec.bar_timeframe,
+                                "evaluable": spec.evaluable,
+                                "blocked_reason": spec.blocked_reason,
+                            }
+                            for spec in _catalog.CATALOG.values()
+                        ],
                     }
-                elif action == "run":
-                    custom = pget("tickers")
-                    if custom:
-                        tickers = [
-                            part.strip().upper()
-                            for part in custom.replace(";", ",").split(",")
-                            if part.strip()
-                        ]
-                    else:
-                        tickers = [
-                            "SPY", "QQQ", "IWM", "DIA",
-                            "NVDA", "AAPL", "AMD", "TSLA", "META", "AMZN", "MSFT", "GOOGL",
-                            "NFLX", "CRM", "PLTR", "SOFI", "COIN", "MARA", "RIOT",
-                            "XOM", "JPM", "GS", "BA", "CAT",
-                        ]
-                    strats = pget("strategies")
-                    strat_list = (
-                        [s.strip().lower() for s in strats.replace(";", ",").split(",") if s.strip()]
-                        if strats
-                        else None
+                elif action == "evaluate":
+                    tickers = [
+                        part.strip().upper()
+                        for part in (pget("symbols") or "").replace(";", ",").split(",")
+                        if part.strip()
+                    ]
+                    ids = [
+                        part.strip()
+                        for part in (pget("strategy_ids") or "").split(",")
+                        if part.strip()
+                    ]
+                    job_id = backtest_jobs.start_catalog_job(
+                        strategy_ids=ids or None,
+                        family=pget("family") or None,
+                        symbols=tickers or None,
+                        timeframe=pget("timeframe", "1Day"),
+                        years=float(pget("years", "5") or 5),
+                        control_repeats=int(pget("repeats", "20") or 20),
                     )
-                    data = strategy_backtest.run_strategy_backtest(
-                        matrix,
-                        bars,
-                        tickers[:20],
-                        feed=feed or local_settings()[2],
-                        strategies=strat_list,
-                        iv=float(pget("iv") or 0.25),
-                        dte=float(pget("dte") or 30),
-                    )
+                    data = {"job_id": job_id, "status": "queued"}
+                elif action == "jobs":
+                    data = {"jobs": backtest_jobs.list_jobs()}
                 else:
-                    self.send_json(400, {"error": f"Unknown strategy action: {action}"})
-                    return
-            elif parsed.path == "/api/historical-backtest":
-                action = (pget("action") or "run").lower()
-                if action == "run":
-                    custom = pget("tickers")
-                    if custom:
-                        tickers = [
-                            part.strip().upper()
-                            for part in custom.replace(";", ",").split(",")
-                            if part.strip()
-                        ]
-                    else:
-                        tickers = None  # Use all available tickers
-                    strats = pget("strategies")
-                    strat_list = (
-                        [s.strip().lower() for s in strats.replace(";", ",").split(",") if s.strip()]
-                        if strats
-                        else None
-                    )
-                    data = historical_backtest.run_historical_backtest(
-                        bars,
-                        tickers=tickers,
-                        strategies=strat_list,
-                        iv=float(pget("iv") or 0.25),
-                        dte=float(pget("dte") or 30),
-                    )
-                else:
-                    self.send_json(400, {"error": f"Unknown historical-backtest action: {action}"})
-                    return
-            elif parsed.path == "/api/price-backtest":
-                action = (pget("action") or "run").lower()
-                if action == "list":
-                    data = {
-                        "strategies": list(price_backtest.PRICE_STRATEGIES.keys()),
-                        "descriptions": {
-                            "long_straddle": "Buy ATM straddle — profits from large moves either direction",
-                            "long_strangle": "Buy OTM strangle — cheaper, needs bigger move",
-                            "iron_condor": "Sell OTM strangle + wings — profits from range-bound price",
-                            "covered_call": "Hold stock + sell OTM call — income strategy",
-                            "bull_call_spread": "Buy ATM + sell OTM call — bullish defined risk",
-                            "bear_put_spread": "Buy ATM + sell OTM put — bearish defined risk",
-                            "momentum_long": "Go long on N-day high breakout",
-                            "mean_reversion": "Buy RSI < 30, sell RSI > 70",
-                            "bollinger_squeeze": "Trade Bollinger Band breakouts",
-                            "gap_fill": "Fade overnight gaps",
-                            "trend_follow": "Follow 20/50 day MA crossover",
-                        },
-                    }
-                elif action == "run":
-                    custom = pget("tickers")
-                    if custom:
-                        tickers = [
-                            part.strip().upper()
-                            for part in custom.replace(";", ",").split(",")
-                            if part.strip()
-                        ]
-                    else:
-                        tickers = [
-                            "SPY", "QQQ", "IWM", "DIA",
-                            "NVDA", "AAPL", "AMD", "TSLA", "META", "AMZN", "MSFT", "GOOGL",
-                            "NFLX", "CRM", "PLTR", "SOFI", "COIN",
-                            "XOM", "JPM", "GS", "BA", "CAT",
-                        ]
-                    strats = pget("strategies")
-                    strat_list = (
-                        [s.strip().lower() for s in strats.replace(";", ",").split(",") if s.strip()]
-                        if strats
-                        else None
-                    )
-                    data = price_backtest.run_price_backtest(
-                        bars,
-                        tickers[:25],
-                        strategies=strat_list,
-                        iv=float(pget("iv") or 0.25),
-                        dte=float(pget("dte") or 30),
-                        bars_limit=int(pget("bars_limit") or 200),
-                    )
-                else:
-                    self.send_json(400, {"error": f"Unknown price-backtest action: {action}"})
-                    return
-            elif parsed.path == "/api/edge-backtest":
-                action = (pget("action") or "run").lower()
-                if action == "list":
-                    data = {
-                        "strategies": list(edge_backtest.EDGE_STRATEGIES.keys()),
-                        "descriptions": {
-                            "vol_risk_premium": "Sell when IV/RV > 1.3 — IV overstates realized vol",
-                            "overnight_harvest": "Buy close, sell open — 70% of returns happen overnight",
-                            "vol_mean_reversion": "Fade extreme vol spikes — vol mean reverts",
-                            "skew_harvest": "Sell OTM put spreads when skew extreme — puts overpriced",
-                            "pead_drift": "Post-earnings drift — stocks drift in earnings direction 60+ days",
-                            "weekend_theta": "Sell Friday, buy Monday — capture weekend decay",
-                            "vol_regime_switch": "Switch strategies by vol regime — buy low vol, sell high vol",
-                            "momentum_vol_filter": "Only trade momentum in low vol — cleaner trends",
-                            "iv_rv_spread": "Sell when IV-RV > 2σ — spread mean reverts",
-                            "gap_and_go": "Gap up + volume = continuation — momentum after gap",
-                        },
-                    }
-                elif action == "run":
-                    custom = pget("tickers")
-                    if custom:
-                        tickers = [
-                            part.strip().upper()
-                            for part in custom.replace(";", ",").split(",")
-                            if part.strip()
-                        ]
-                    else:
-                        tickers = [
-                            "SPY", "QQQ", "IWM", "DIA",
-                            "NVDA", "AAPL", "AMD", "TSLA", "META", "AMZN", "MSFT", "GOOGL",
-                            "NFLX", "CRM", "PLTR", "SOFI", "COIN",
-                            "XOM", "JPM", "GS", "BA", "CAT",
-                        ]
-                    strats = pget("strategies")
-                    strat_list = (
-                        [s.strip().lower() for s in strats.replace(";", ",").split(",") if s.strip()]
-                        if strats
-                        else None
-                    )
-                    # Use local historical data if available, otherwise fall back to live
-                    use_local = pget("source") != "live"
-                    bars_fn = _local_bars if use_local else bars
-                    
-                    # Filter by date range if provided
-                    start_date = pget("start_date")  # YYYY-MM-DD
-                    
-                    data = edge_backtest.run_edge_backtest(
-                        bars_fn,
-                        tickers[:25],
-                        strategies=strat_list,
-                        bars_limit=int(pget("bars_limit") or 250),
-                        start_date=start_date,
-                    )
-                else:
-                    self.send_json(400, {"error": f"Unknown edge-backtest action: {action}"})
-                    return
-            elif parsed.path == "/api/intraday-backtest":
-                action = (pget("action") or "run").lower()
-                if action == "list":
-                    data = {
-                        "strategies": list(intraday_backtest.INTRADAY_STRATEGIES.keys()),
-                        "descriptions": {
-                            "orb_15min": "Opening Range Breakout — 15 min range breakout",
-                            "vwap_momentum": "VWAP cross with volume surge",
-                            "intraday_rsi_momentum": "RSI(14) > 70 continuation on 5-min",
-                            "momentum_ignition": "Volume spike + price breakout",
-                            "pullback_to_vwap": "Buy pullbacks to VWAP in uptrend",
-                        },
-                    }
-                elif action == "run":
-                    custom = pget("tickers")
-                    if custom:
-                        tickers = [
-                            part.strip().upper()
-                            for part in custom.replace(";", ",").split(",")
-                            if part.strip()
-                        ]
-                    else:
-                        tickers = ["SPY", "QQQ", "IWM", "TSLA", "NVDA", "AAPL"]
-                    
-                    strat_param = pget("strategies")
-                    strat_list = (
-                        [s.strip() for s in strat_param.split(",") if s.strip()]
-                        if strat_param
-                        else None
-                    )
-                    start_date = pget("start_date")
-                    
-                    # Use local 5-min bars
-                    def _intraday_bars(ticker, timeframe="5Min", limit=5000):
-                        return _local_bars(ticker, timeframe, limit)
-                    
-                    data = intraday_backtest.run_intraday_backtest(
-                        _intraday_bars,
-                        tickers[:25],
-                        strategies=strat_list,
-                        bars_limit=int(pget("bars_limit") or 5000),
-                        start_date=start_date,
-                    )
-                else:
-                    self.send_json(400, {"error": f"Unknown intraday-backtest action: {action}"})
-                    return
+                    job_id = pget("id")
+                    job = backtest_jobs.get_job(job_id) if job_id else None
+                    if job is None:
+                        self.send_json(404, {"error": "Unknown strategy job"})
+                        return
+                    data = job
             else:
                 self.send_json(
                     404,
@@ -2215,10 +2043,7 @@ class Handler(BaseHTTPRequestHandler):
                             "/api/ranking-lab",
                             "/api/weight-lab",
                             "/api/backtest",
-                            "/api/strategy",
-                            "/api/historical-backtest",
-                            "/api/price-backtest",
-                            "/api/edge-backtest",
+                            "/api/strategies",
                             "/debug/caches",
                         ],
                     },
