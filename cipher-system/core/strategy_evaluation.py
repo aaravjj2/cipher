@@ -66,6 +66,7 @@ def evaluate(
     control_repeats: int = DEFAULT_CONTROL_REPEATS,
     cost_profile: dict | None = None,
     timeframe: str | None = None,
+    walk_forward: bool = True,
     **engine_kw,
 ) -> dict:
     """Measure one strategy. Returns a verdict dict, never raises on a bad strategy."""
@@ -134,14 +135,37 @@ def evaluate(
                              cost_profile=cost_profile, **engine_kw)
     beats = bool(control.get("detector_beats_control_range"))
 
+    # A locked holdout, carved off before any fold is looked at. Beating a control
+    # in-sample and holding up on data that had no influence on the result are
+    # different claims, and a strategy chosen from a catalog of forty needs both.
+    walk = None
+    holdout_ok = False
+    if walk_forward:
+        try:
+            walk = be.walk_forward(
+                bars_by_symbol, signal_fn=spec.signal_fn,
+                cost_profile=cost_profile, **engine_kw,
+            )
+            holdout = (walk or {}).get("holdout") or {}
+            holdout_ok = bool(holdout.get("trades")) and (
+                (holdout.get("avg_return_pct") or 0) > 0)
+        except Exception as exc:  # noqa: BLE001 - a failed split is not a verdict
+            walk = {"error": f"{type(exc).__name__}: {exc}"}
+
     if trades < MIN_TRADES_FOR_VERDICT:
         verdict = "INSUFFICIENT"
         reason = (f"{trades} trades is below the {MIN_TRADES_FOR_VERDICT} needed to "
                   f"tell a result from noise; this is not a failure, it is an "
                   f"absence of evidence")
-    elif beats:
+    elif beats and holdout_ok:
         verdict = "PASS"
-        reason = "beat a matched random-entry control, clearing the best random draw"
+        reason = ("beat a matched random-entry control, clearing the best random "
+                  "draw, and stayed positive on a locked holdout")
+    elif beats:
+        verdict = "IN_SAMPLE_ONLY"
+        reason = ("beat its control but did not hold up on a holdout carved off "
+                  "before any fold was examined; picked from a catalog of forty, "
+                  "that is what an in-sample winner looks like")
     else:
         verdict = "FAIL"
         reason = "did not beat a random-entry control matched by symbol and direction"
@@ -153,6 +177,8 @@ def evaluate(
         "metrics": stats,
         "control": control.get("control"),
         "beats_control_range": beats,
+        "walk_forward_passed": holdout_ok,
+        "walk_forward": walk,
         "vs_control": control.get("detector_minus_control"),
         "params": result.params,
         "caveat": result.caveat,
@@ -186,6 +212,7 @@ def to_standard_output(verdict: dict, result: be.BacktestResult | None = None):
         "passed": passed,
         "control_matched": verdict.get("control") is not None,
         "beats_control_range": bool(verdict.get("beats_control_range")),
+        "walk_forward_passed": bool(verdict.get("walk_forward_passed")),
         "cost_charged_both_sides": True,
         "sufficient_sample": metrics.get("trades", 0) >= MIN_TRADES_FOR_VERDICT,
     }

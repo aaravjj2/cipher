@@ -61,7 +61,8 @@ def test_small_samples_are_insufficient_not_failures():
     verdicts = {se.evaluate(s.strategy_id, bars, control_repeats=3)["verdict"]
                 for s in sc.evaluable() if s.bar_timeframe == "1Day"}
     # Whatever else happens, a numeric verdict may only be PASS or FAIL.
-    assert verdicts <= {"PASS", "FAIL", "INSUFFICIENT", "NO_TRADES", "ERROR"}
+    assert verdicts <= {"PASS", "IN_SAMPLE_ONLY", "FAIL", "INSUFFICIENT",
+                        "NO_TRADES", "ERROR"}
 
 
 def test_a_passing_verdict_requires_beating_the_control():
@@ -72,7 +73,13 @@ def test_a_passing_verdict_requires_beating_the_control():
             continue
         verdict = se.evaluate(spec.strategy_id, bars, control_repeats=3)
         if verdict["verdict"] == "PASS":
+            # PASS requires BOTH: clearing the control, and holding up on a
+            # holdout carved off before any fold was examined.
             assert verdict["beats_control_range"] is True, spec.strategy_id
+            assert verdict["walk_forward_passed"] is True, spec.strategy_id
+        if verdict["verdict"] == "IN_SAMPLE_ONLY":
+            assert verdict["beats_control_range"] is True, spec.strategy_id
+            assert verdict["walk_forward_passed"] is False, spec.strategy_id
         if verdict["verdict"] == "FAIL":
             assert verdict["beats_control_range"] is False, spec.strategy_id
 
@@ -84,6 +91,7 @@ def test_standard_output_declares_the_control_as_a_quality_check():
     output = se.to_standard_output(verdict)
     quality = dict(output.quality_checks)
     assert "beats_control_range" in quality
+    assert "walk_forward_passed" in quality
     assert "control_matched" in quality
     assert quality["cost_charged_both_sides"] is True
     assert quality["passed"] == (verdict["verdict"] == "PASS")

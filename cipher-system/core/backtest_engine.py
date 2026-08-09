@@ -644,14 +644,23 @@ def run_filter(
     return report
 
 
-def walk_forward(bars_by_symbol, *, folds=3, holdout_frac=0.25, **kw):
+def walk_forward(bars_by_symbol, *, folds=3, holdout_frac=0.25, signal_fn=None, **kw):
     """Split chronologically: a locked holdout, then folds over the remainder.
 
     The holdout is carved off FIRST and never touched by fold evaluation, so a
     parameter chosen by looking at fold results can still be checked against data
     that had no influence on it. With six setup families in play, an unsplit
     backtest will always find a flattering configuration.
+
+    `signal_fn` selects the strategy. Without it this runs the Obsidian detector,
+    as it always has; with it, any catalogued strategy gets the same locked-holdout
+    treatment rather than only the one the engine was originally written for.
     """
+    def _run(sub):
+        if signal_fn is not None:
+            return run_signals(sub, signal_fn, **kw)
+        return run_backtest(sub, **kw)
+
     MIN_BARS = 120  # detector needs a 100-bar stdev window before it emits anything
 
     def slice_bars(frac_lo, frac_hi):
@@ -687,7 +696,7 @@ def walk_forward(bars_by_symbol, *, folds=3, holdout_frac=0.25, **kw):
         if not sub:
             report["warnings"].append(f"fold {f + 1} skipped: every symbol below {MIN_BARS} bars")
             continue
-        r = run_backtest(sub, **kw)
+        r = _run(sub)
         report["folds"].append({
             "fold": f + 1, "range": [round(lo, 3), round(hi, 3)],
             "symbols": len(sub), "symbols_dropped": dropped, "stats": r.stats,
@@ -695,7 +704,7 @@ def walk_forward(bars_by_symbol, *, folds=3, holdout_frac=0.25, **kw):
 
     hold, dropped = slice_bars(train_end, 1.0)
     if hold:
-        report["holdout"] = run_backtest(hold, **kw).stats
+        report["holdout"] = _run(hold).stats
         report["holdout_symbols"] = len(hold)
     else:
         report["warnings"].append(
