@@ -59,3 +59,28 @@ An inventory reported it as having zero importers. It does not — `scripts/run_
 and `scripts/backtest_structural_fib.py` both use it, and `load_bars` from the
 former is the loader behind every sweep in `docs/backtest-findings.md` and
 `docs/strategy-catalog-findings.md`. It is load-bearing.
+
+---
+
+## Not deleted: the 19 PowerShell launchers
+
+The improvement plan listed all 19 `scripts/*.ps1` for deletion on the grounds that
+"this is Linux — every one is a broken path". That premise is wrong. Only **2 of 19**
+contain a Windows path (`Start-CipherFrontTestSupervisor.ps1` and
+`Start-ClusterForwardTest.ps1`); the rest are parameterised and take their Python
+executable as an argument.
+
+They are also the only documented way to launch roughly a dozen CLI-only modules —
+`gex_capture`, `company_research_engine`, `setup_research_engine`,
+`option_contract_planner`, `index_daytrade_context`, `scan_option_mark_capture`,
+`tradier_stream_capture` among them. Deleting them would remove the entry point
+without removing the code.
+
+It would also contradict a decision made an hour earlier: the paper-executor port
+deliberately kept Windows working (credential manager tried first,
+`CIPHER_PAPER_RUNTIME` still honoured) because the browser capture that feeds it
+runs on Windows. Removing the Windows launchers while preserving Windows
+compatibility in the code they launch is incoherent.
+
+Kept. If they are ever retired it should be because the Windows capture path has
+been replaced, not because a Linux shell cannot run them.
