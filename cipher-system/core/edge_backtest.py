@@ -290,7 +290,12 @@ def strategy_vol_mean_reversion(
         trade.simulate(bars[i+1:])  # Simulate FORWARD
         trades.append(trade)
 
-        if len(trades) >= 5:
+        # Was a literal 5, which ignored max_trades and silently capped this
+        # strategy's whole history at the five EARLIEST signals. That is
+        # chronological truncation, not sampling: it discards every later signal
+        # regardless of what it would have done. Honouring max_trades lets a caller
+        # ask for the full series.
+        if max_trades and len(trades) >= max_trades:
             break
 
     return trades
@@ -648,7 +653,8 @@ def strategy_iv_rv_spread(
 
 
 def strategy_gap_and_go(
-    ticker: str, bars: list[dict], *, gap_threshold: float = 0.02, vol_threshold: float = 1.5
+    ticker: str, bars: list[dict], *, gap_threshold: float = 0.02,
+    vol_threshold: float = 1.5, max_trades: int | None = 5
 ) -> list[PriceTrade]:
     """Stocks that gap up on volume continue in that direction.
 
@@ -689,8 +695,13 @@ def strategy_gap_and_go(
             )
             trade.simulate(bars[i + 1:])
             trades.append(trade)
-            
-            if len(trades) >= 5:
+
+            # Was a literal 5 with no way to raise it — the function took no
+            # max_trades at all, so its sample was permanently the five earliest
+            # gaps in the history. The default preserves the old behaviour for
+            # existing callers; the catalog passes a large value to get the full
+            # series.
+            if max_trades and len(trades) >= max_trades:
                 break
 
     return trades

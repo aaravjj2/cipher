@@ -214,6 +214,76 @@ def _simulate(bars, atr, i, symbol, setup, direction, *,
     return trade, exit_idx
 
 
+def run_signals(
+    bars_by_symbol: dict[str, list[dict]],
+    signal_fn,
+    *,
+    strategy: str = "signals",
+    stop_atr: float = DEFAULT_STOP_ATR,
+    target_atr: float = DEFAULT_TARGET_ATR,
+    max_hold_bars: int = DEFAULT_MAX_HOLD_BARS,
+    cost_bps: float = DEFAULT_COST_BPS,
+    cost_profile: dict | None = None,
+    params: dict | None = None,
+    min_bars: int = 120,
+) -> BacktestResult:
+    """Simulate any strategy that can name its entry bars.
+
+    `signal_fn(symbol, bars)` returns an iterable of `(index, direction, tag)`:
+    the bar the signal was evaluated on, "LONG" or "SHORT", and a label carried
+    through to `Trade.setup` for per-setup breakdowns.
+
+    This exists so that every strategy in the repository can be measured by the
+    same code. The five older engines each carry their own simulate-and-score
+    half, and those halves disagree with this one on the things that decide a
+    verdict: they charge no transaction cost, several stop after a fixed number of
+    trades, and one reads today's open interest while trading past bars. Their
+    entry logic is worth keeping and their measurement is not, so an adapter
+    reduces each to a `signal_fn` and the answer comes from here.
+
+    Entries fill on the next bar's open, stops resolve before targets intrabar,
+    and cost is charged both sides — identical to `run_backtest`, because it is
+    now the same code path.
+
+    Signals landing inside an open position are skipped rather than stacked, so a
+    strategy that fires continuously cannot accumulate correlated copies of one
+    idea and report them as independent evidence.
+    """
+    result = BacktestResult(
+        strategy=strategy, symbols=sorted(bars_by_symbol), params=params or {},
+    )
+
+    for symbol, bars in bars_by_symbol.items():
+        if len(bars) < min_bars:
+            continue
+        signals = signal_fn(symbol, bars)
+        if not signals:
+            continue
+        atr = _atr(bars)
+        n = len(bars)
+        blocked_until = -1
+
+        for index, direction, tag in sorted(signals, key=lambda s: s[0]):
+            if index <= blocked_until or index >= n - 1 or index < 0:
+                continue
+            if direction not in ("LONG", "SHORT"):
+                continue
+            if atr[index] is None or atr[index] <= 0:
+                continue
+            trade, exit_idx = _simulate(
+                bars, atr, index, symbol, tag, direction,
+                stop_atr=stop_atr, target_atr=target_atr,
+                max_hold_bars=max_hold_bars,
+                cost_bps=_cost_for(symbol, cost_bps, cost_profile),
+            )
+            trade.entry_index = index
+            result.trades.append(trade)
+            blocked_until = exit_idx
+
+    result.stats = summarize(result.trades)
+    return result
+
+
 def run_backtest(
     bars_by_symbol: dict[str, list[dict]],
     *,
@@ -248,48 +318,31 @@ def run_backtest(
         "detector": detector_params or {"mode": "Full Session"},
         "invert": invert,
     }
-    result = BacktestResult(strategy=strategy, symbols=sorted(bars_by_symbol), params=params)
-
-    for symbol, bars in bars_by_symbol.items():
-        if len(bars) < 120:      # detector needs 100 bars for its stdev window
-            continue
+    def _signals(symbol, bars):
         # Detector output depends only on the bars and detector params, never on
         # the exit rule, so an exit sweep can compute it once and reuse it.
         if states_by_symbol is not None and symbol in states_by_symbol:
             states = states_by_symbol[symbol]
         else:
             states, _ = obsidian_eod.compute(bars, detector_params or {"mode": "Full Session"})
-        if not states:
-            continue
-        atr = _atr(bars)
-
-        i = 0
-        n = len(bars)
-        while i < n - 1:
-            st = states[i]
-            setup = (st.setup or "").strip()
+        out = []
+        for index, state in enumerate(states or []):
+            setup = (state.setup or "").strip()
             if not setup or (setups and setup not in setups):
-                i += 1
                 continue
-            direction = _direction_of(st, setup)
+            direction = _direction_of(state, setup)
             if invert and direction is not None:
                 direction = "SHORT" if direction == "LONG" else "LONG"
-            if direction is None or atr[i] is None or atr[i] <= 0:
-                i += 1
+            if direction is None:
                 continue
+            out.append((index, direction, setup))
+        return out
 
-            # Fill on the NEXT bar's open — the signal bar's close was not tradable
-            # at the moment the signal formed.
-            trade, exit_idx = _simulate(
-                bars, atr, i, symbol, setup, direction,
-                stop_atr=stop_atr, target_atr=target_atr,
-                max_hold_bars=max_hold_bars,
-                cost_bps=_cost_for(symbol, cost_bps, cost_profile),
-            )
-            result.trades.append(trade)
-
-            # No overlapping positions in the same symbol.
-            i = exit_idx + 1
+    return run_signals(
+        bars_by_symbol, _signals, strategy=strategy,
+        stop_atr=stop_atr, target_atr=target_atr, max_hold_bars=max_hold_bars,
+        cost_bps=cost_bps, cost_profile=cost_profile, params=params,
+    )
 
     result.stats = summarize(result.trades)
     return result
