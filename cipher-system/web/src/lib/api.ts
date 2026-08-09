@@ -695,6 +695,93 @@ export function fetchBacktestJob(jobId: string, signal?: AbortSignal): Promise<B
   return getJson<BacktestJob>(`/api/signal-backtest?action=status&id=${encodeURIComponent(jobId)}`, signal);
 }
 
+/**
+ * The strategy catalog. One route replaced five that each ranked strategies with
+ * their own scoring half — those halves charged no transaction cost, truncated
+ * chronologically, or read today's open interest while trading past bars, and none
+ * of them was proxied to the browser. What reaches the UI now is a verdict against
+ * a matched random-entry control, or an explicit statement that a strategy cannot
+ * be measured and why.
+ */
+export type CatalogStrategy = {
+  strategy_id: string;
+  name: string;
+  family: string;
+  source: string;
+  data_requirement: string;
+  bar_timeframe: string;
+  evaluable: boolean;
+  blocked_reason: string | null;
+};
+
+export type StrategyCatalog = {
+  summary: {
+    total: number;
+    evaluable: number;
+    blocked: number;
+    families: Record<string, { total: number; evaluable: number }>;
+  };
+  standard: string;
+  strategies: CatalogStrategy[];
+};
+
+export type StrategyVerdict = {
+  strategy_id: string;
+  name: string;
+  family: string;
+  source: string;
+  data_requirement: string;
+  verdict: string;
+  reason: string;
+  metrics: Record<string, number> | null;
+  beats_control_range?: boolean;
+  walk_forward_passed?: boolean;
+  accrual?: string;
+  bar_timeframe?: string;
+};
+
+export type StrategyJob = {
+  id: string;
+  status: "queued" | "running" | "done" | "error";
+  pct: number;
+  message: string;
+  error: string | null;
+  result: {
+    verdicts: Record<string, number>;
+    results: StrategyVerdict[];
+    standard: string;
+    cost_source?: string;
+    timeframe?: string | null;
+    elapsed_ms?: number;
+  } | null;
+};
+
+export function fetchStrategyCatalog(signal?: AbortSignal): Promise<StrategyCatalog> {
+  return getJson<StrategyCatalog>("/api/strategies?action=list", signal);
+}
+
+export function startStrategyEvaluation(params: {
+  family?: string;
+  strategyIds?: string;
+  symbols?: string;
+  timeframe?: string;
+  years?: number;
+  repeats?: number;
+}, signal?: AbortSignal): Promise<{ job_id: string; status: string }> {
+  const q = new URLSearchParams({ action: "evaluate" });
+  if (params.family) q.set("family", params.family);
+  if (params.strategyIds) q.set("strategy_ids", params.strategyIds);
+  if (params.symbols) q.set("symbols", params.symbols);
+  if (params.timeframe) q.set("timeframe", params.timeframe);
+  if (params.years != null) q.set("years", String(params.years));
+  if (params.repeats != null) q.set("repeats", String(params.repeats));
+  return getJson(`/api/strategies?${q.toString()}`, signal);
+}
+
+export function fetchStrategyJob(jobId: string, signal?: AbortSignal): Promise<StrategyJob> {
+  return getJson<StrategyJob>(`/api/strategies?action=status&id=${encodeURIComponent(jobId)}`, signal);
+}
+
 export type EvidenceClock = {
   name: string;
   unlocks: string;

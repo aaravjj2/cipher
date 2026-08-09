@@ -12,6 +12,7 @@ import { Trident as TridentBase } from "@/components/panels/Trident";
 import { ChartSaves as ChartSavesBase } from "@/components/panels/ChartSaves";
 import { SetupScanner as SetupScannerBase } from "@/components/panels/SetupScanner";
 import { Backtest as BacktestBase } from "@/components/panels/Backtest";
+import { StrategyCatalogPanel as StrategyCatalogBase } from "@/components/panels/StrategyCatalog";
 import { Settings as SettingsBase } from "@/components/panels/Settings";
 import { fetchQuote, type RealQuote } from "@/lib/api";
 
@@ -28,6 +29,7 @@ const Spyglass = memo(SpyglassBase);
 const Watchlists = memo(WatchlistsBase);
 const Journal = memo(JournalBase);
 const Backtest = memo(BacktestBase);
+const StrategyCatalog = memo(StrategyCatalogBase);
 const Trident = memo(TridentBase);
 const ChartSaves = memo(ChartSavesBase);
 const SetupScanner = memo(SetupScannerBase);
@@ -45,6 +47,7 @@ const PANEL_TITLES: Record<string, string> = {
   "Chart Saves": "CHART SAVES",
   "Setup Scanner": "SETUP SCANNER",
   Backtest: "SIGNAL BACKTEST",
+  Strategies: "STRATEGY CATALOG",
   Settings: "SETTINGS",
 };
 
@@ -151,6 +154,7 @@ export default function Home() {
           {activePanel === "My Watchlists" && <Watchlists />}
           {activePanel === "Journal" && <Journal />}
           {activePanel === "Backtest" && <Backtest ticker={ticker} />}
+          {activePanel === "Strategies" && <StrategyCatalog />}
           {activePanel === "Trident" && <Trident toolbarSlot={toolbarSlot} />}
           {activePanel === "Chart Saves" && <ChartSaves />}
           {activePanel === "Setup Scanner" && <SetupScanner />}

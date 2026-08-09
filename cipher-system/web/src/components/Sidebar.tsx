@@ -47,6 +47,7 @@ const NAV_SECTIONS: NavSection[] = [
       { label: "Chart Saves", icon: BookmarkIcon, cipherX: true },
       { label: "Setup Scanner", icon: ScannerIcon, cipherX: true },
       { label: "Backtest", icon: ScannerIcon, cipherX: true },
+      { label: "Strategies", icon: ScannerIcon, cipherX: true },
     ],
   },
   {
