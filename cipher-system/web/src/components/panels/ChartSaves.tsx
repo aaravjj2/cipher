@@ -1,63 +1,23 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { buildLadder, CHART_H, CHART_W, LABEL_W } from "@/lib/chartLadder";
 import { loadChartSaves, removeChartSave } from "@/lib/chartSaves";
 import type { ChartSaveCard } from "@/types/cipher";
 
 /**
  * Chart Saves panel — grid gallery of snapshots saved from Night Vision's "Save chart"
  * button (see NightVision.tsx), persisted to localStorage via lib/chartSaves.ts (no
- * server-side backend for this feature — same as the legacy vanilla-JS frontend). The
- * ticker/price/levels metadata on each card is real; the candlestick thumbnail is a
- * deterministic mock pattern seeded from the card id, since no real chart-image capture
- * exists yet — a reasonable placeholder rather than a fabricated data point.
+ * server-side backend for this feature — same as the legacy vanilla-JS frontend).
+ *
+ * Every number on a card is real: ticker, saved spot price, and the scored levels. The
+ * thumbnail draws only those, to scale. It used to draw a seeded random-walk
+ * candlestick series instead, which was a fabricated price chart in all but name — and
+ * because the candles were plotted in raw 0..100 space while the level lines were
+ * plotted in price space, the picture implied price had reacted to a level when nothing
+ * had been measured at all. There is no chart-image capture behind this feature, so the
+ * honest thumbnail is the level ladder, not invented candles.
  */
-
-// ---------------------------------------------------------------------------
-// Mock candlestick thumbnail
-// ---------------------------------------------------------------------------
-
-/** Deterministic PRNG (mulberry32) so mock data is stable across server/client renders. */
-function mulberry32(seed: number) {
-  let state = seed;
-  return function next() {
-    state |= 0;
-    state = (state + 0x6d2b79f5) | 0;
-    let t = Math.imul(state ^ (state >>> 15), 1 | state);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-/** Simple string hash (djb2) so each card gets a stable-but-distinct PRNG seed. */
-function hashSeed(input: string): number {
-  let hash = 5381;
-  for (let i = 0; i < input.length; i++) {
-    hash = (hash * 33) ^ input.charCodeAt(i);
-  }
-  return hash >>> 0;
-}
-
-type Candle = { open: number; close: number; high: number; low: number };
-
-/** Builds a random-walk candlestick series in 0..100 (y-space, 0 = top). */
-function buildCandles(seed: number, count: number): Candle[] {
-  const rng = mulberry32(seed);
-  const candles: Candle[] = [];
-  let cursor = 35 + rng() * 30; // start roughly mid-band
-  for (let i = 0; i < count; i++) {
-    const open = cursor;
-    const drift = (rng() - 0.5) * 26;
-    const close = Math.min(92, Math.max(8, open + drift));
-    const wickUp = rng() * 8;
-    const wickDown = rng() * 8;
-    const high = Math.max(open, close) - wickUp;
-    const low = Math.min(open, close) + wickDown;
-    candles.push({ open, close, high: Math.max(high, 2), low: Math.min(low, 98) });
-    cursor = close;
-  }
-  return candles;
-}
 
 /** Rank color per the app's purple/positive · red/negative convention (never green). */
 function rankColor(index: number): string {
@@ -66,24 +26,9 @@ function rankColor(index: number): string {
   return "var(--neg)";
 }
 
-const CHART_W = 320;
-const CHART_H = 200;
-
 function ChartThumbnail({ card }: { card: ChartSaveCard }) {
-  const candles = useMemo(() => buildCandles(hashSeed(card.id), 13), [card.id]);
-  const candleSlot = CHART_W / candles.length;
-  const bodyWidth = candleSlot * 0.55;
-
-  // Mirror the top two levels as faint dashed reference lines, colored by rank.
-  const levelLines = card.topLevels.slice(0, 2);
-  const prices = card.topLevels.map((l) => l.level);
-  const maxPrice = Math.max(...prices, card.price);
-  const minPrice = Math.min(...prices, card.price);
-  const priceSpan = Math.max(maxPrice - minPrice, 1);
-  const yForLevel = (level: number) => {
-    const ratio = (level - minPrice) / priceSpan;
-    return CHART_H * 0.85 - ratio * CHART_H * 0.7;
-  };
+  const { yFor, barFor, spotY } = useMemo(() => buildLadder(card), [card]);
+  const label = `${card.ticker} at $${card.price.toFixed(2)} with ${card.topLevels.length} scored levels`;
 
   return (
     <svg
@@ -91,46 +36,51 @@ function ChartThumbnail({ card }: { card: ChartSaveCard }) {
       width="100%"
       height="100%"
       preserveAspectRatio="none"
-      aria-hidden="true"
+      role="img"
+      aria-label={label}
       className="block"
     >
-      {levelLines.map((lvl, i) => (
-        <line
-          key={lvl.level}
-          x1={0}
-          x2={CHART_W}
-          y1={yForLevel(lvl.level)}
-          y2={yForLevel(lvl.level)}
-          style={{ stroke: rankColor(i) }}
-          strokeWidth={1}
-          strokeDasharray="3 3"
-          opacity={0.55}
-        />
-      ))}
-      {candles.map((c, i) => {
-        const cx = candleSlot * i + candleSlot / 2;
-        const isUp = c.close <= c.open; // svg y grows downward: lower y (close) above open = "up"
-        const color = isUp ? "var(--accent)" : "var(--neg)";
-        const bodyTop = Math.min(c.open, c.close);
-        const bodyHeight = Math.max(Math.abs(c.close - c.open), 2);
+      {/* Saved spot price: solid, neutral, spanning the full width. */}
+      <line
+        x1={0}
+        x2={CHART_W}
+        y1={spotY}
+        y2={spotY}
+        style={{ stroke: "var(--text-dim)" }}
+        strokeWidth={1}
+        opacity={0.5}
+      />
+      <text
+        x={CHART_W - 6}
+        y={spotY - 5}
+        textAnchor="end"
+        style={{ fill: "var(--text-mute)", fontSize: 9, fontFamily: "var(--font-mono)" }}
+      >
+        spot {card.price.toFixed(2)}
+      </text>
+
+      {card.topLevels.map((lvl, i) => {
+        const y = yFor(lvl.level);
+        const color = rankColor(i);
         return (
-          <g key={i}>
-            <line
-              x1={cx}
-              x2={cx}
-              y1={c.high}
-              y2={c.low}
-              style={{ stroke: color }}
-              strokeWidth={1}
-            />
+          <g key={`${lvl.level}-${i}`}>
             <rect
-              x={cx - bodyWidth / 2}
-              y={bodyTop}
-              width={bodyWidth}
-              height={bodyHeight}
+              x={LABEL_W}
+              y={y - 3}
+              width={barFor(lvl.score)}
+              height={6}
               style={{ fill: color }}
+              opacity={0.75}
               rx={1}
             />
+            <text
+              x={LABEL_W - 6}
+              y={y + 3.5}
+              textAnchor="end"
+              style={{ fill: color, fontSize: 10, fontFamily: "var(--font-mono)" }}
+            >
+              {lvl.level}
+            </text>
           </g>
         );
       })}
