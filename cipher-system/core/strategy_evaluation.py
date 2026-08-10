@@ -265,11 +265,14 @@ def evaluate_all(
     results = []
     for index, strategy_id in enumerate(ids):
         if progress:
-            progress(index, len(ids), strategy_id)
-        results.append(evaluate(
+            progress(index, len(ids), strategy_id, phase="started")
+        result = evaluate(
             strategy_id, bars_by_symbol, control_repeats=control_repeats,
             cost_profile=cost_profile, timeframe=timeframe, **engine_kw,
-        ))
+        )
+        results.append(result)
+        if progress:
+            progress(index, len(ids), strategy_id, phase="done", verdict=result["verdict"])
 
     tally: dict[str, int] = {}
     for row in results:

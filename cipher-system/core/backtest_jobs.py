@@ -46,6 +46,13 @@ def _update(job_id: str, **fields) -> None:
             job["updated_at"] = _utcnow()
 
 
+def _append_event(job_id: str, event: dict) -> None:
+    with _LOCK:
+        job = _JOBS.get(job_id)
+        if job:
+            job.setdefault("events", []).append(event)
+
+
 def get_job(job_id: str) -> dict | None:
     with _LOCK:
         job = _JOBS.get(job_id)
@@ -220,6 +227,7 @@ def start_catalog_job(
             "message": "Queued…",
             "result": None,
             "error": None,
+            "events": [],
             "started_at": _utcnow(),
             "updated_at": _utcnow(),
         }
@@ -268,9 +276,17 @@ def start_catalog_job(
                 except Exception:  # noqa: BLE001 - fall back to the assumed cost
                     profile = None
 
-            def progress(index, total, strategy_id):
-                _update(job_id, pct=10 + int(85 * index / max(total, 1)),
-                        message=f"{index + 1}/{total}  {strategy_id}")
+            def progress(index, total, strategy_id, phase="started", verdict=None):
+                if phase == "started":
+                    _update(job_id, pct=10 + int(85 * index / max(total, 1)),
+                            message=f"{index + 1}/{total}  {strategy_id}")
+                _append_event(job_id, {
+                    "type": "strategy_done" if phase == "done" else "strategy_started",
+                    "strategy_id": strategy_id,
+                    "index": index,
+                    "total": total,
+                    "verdict": verdict,
+                })
 
             payload = evaluation.evaluate_all(
                 bars, strategy_ids=ids, control_repeats=control_repeats,

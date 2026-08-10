@@ -1450,70 +1450,50 @@ class Handler(BaseHTTPRequestHandler):
             return False
 
     def stream_live(self, params):
+        """Stream a backtest_jobs job's progress. Not ticker data — every panel
+        already polls quote/night_vision directly, so re-serving them here on a
+        timer held a thread per connection for nothing. A 24+ strategy catalog
+        sweep takes minutes; this makes it watchable.
+        """
         def pget(name, default=None):
             values = params.get(name)
             if not values:
                 return default
             return values[-1]
 
-        ticker = (pget("ticker") or "SPY").upper()
-        feed = resolve_options_feed(pget("feed"))
-        depth = pget("depth", "0.06")
-        expirations = int(pget("expirations", str(DEFAULT_MATRIX_EXPIRATIONS)))
-        min_premium = float(pget("min", "5000"))
-        interval = max(5, int(pget("interval", "15")))
+        job_id = pget("job") or pget("id")
         self.send_sse_headers()
-        if not self.write_event("hello", {"ticker": ticker, "interval": interval, "read_only": True}):
+        if not job_id:
+            self.write_event("error", {"error": "missing job id (?job=<id>)"})
             return
-        cycles = 0
+        if not self.write_event("hello", {"job_id": job_id}):
+            return
+        sent = 0
         try:
             while True:
-                cycles += 1
-                force = cycles == 1
-                try:
-                    q = quote(ticker)
-                    if not self.write_event("quote", q):
-                        return
-                except Exception as exc:
-                    if not self.write_event("error", {"scope": "quote", "error": str(exc)}):
-                        return
-                if cycles == 1 or cycles % max(1, interval // 5) == 0:
-                    try:
-                        nv = night_vision(ticker, feed, depth, expirations, force=force)
-                        if not self.write_event(
-                            "matrix",
-                            {
-                                "ticker": nv["ticker"],
-                                "as_of": nv["as_of"],
-                                "feed": nv["feed"],
-                                "quote": nv["quote"],
-                                "expirations": nv["expirations"],
-                                "rows": nv["rows"],
-                                "summary": nv["summary"],
-                                "coverage": nv["coverage"],
-                                "levels": nv.get("levels"),
-                                "peak": nv.get("peak"),
-                                "xray": nv.get("xray"),
-                                "ghost": nv.get("ghost"),
-                                "ghost_note": nv.get("ghost_note"),
-                                "formula": nv["formula"],
-                                "caveat": nv["caveat"],
-                            },
-                        ):
-                            return
-                    except Exception as exc:
-                        if not self.write_event("error", {"scope": "matrix", "error": str(exc)}):
-                            return
-                    try:
-                        tape = flow(ticker, feed, min_premium=min_premium, force=force)
-                        if not self.write_event("flow", {"as_of": tape["as_of"], "count": tape["count"], "prints": tape["prints"][:40]}):
-                            return
-                    except Exception as exc:
-                        if not self.write_event("error", {"scope": "flow", "error": str(exc)}):
-                            return
-                if not self.write_event("heartbeat", {"ts": utcnow(), "cycle": cycles}):
+                job = backtest_jobs.get_job(job_id)
+                if job is None:
+                    self.write_event("error", {"error": "unknown job", "job_id": job_id})
                     return
-                time.sleep(5)
+                events = job.get("events") or []
+                for event in events[sent:]:
+                    event_name = "blocked" if event.get("verdict") == "BLOCKED" else event["type"]
+                    if not self.write_event(event_name, event):
+                        return
+                sent = len(events)
+                status = job.get("status")
+                if status in ("done", "error"):
+                    if not self.write_event("complete", {
+                        "job_id": job_id,
+                        "status": status,
+                        "verdicts": (job.get("result") or {}).get("verdicts"),
+                        "error": job.get("error"),
+                    }):
+                        return
+                    return
+                if not self.write_event("heartbeat", {"ts": utcnow(), "pct": job.get("pct")}):
+                    return
+                time.sleep(1)
         except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError):
             return
 
