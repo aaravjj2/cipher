@@ -33,63 +33,84 @@ Nothing about this transcript changes that finding. It restates the same
 system with a cleaner-sounding probability table than the reality Cipher
 already measured against it.
 
-## Capital Flywheel (CSP wheel + Ripster clouds) on NVDL — tested fresh today
+## Capital Flywheel (CSP wheel + Ripster clouds) on NVDL — tested fresh today, first attempt was misconfigured
 
 This one has real, extensive, previously-unpublished infrastructure behind it:
 `core/leveraged_etf_csp_wheel.py` already implements exactly the system taught
-— a weekly 5/12, 34/50, 72/89 EMA cloud filter (`weekly_trend_state()`), a
-down-day-plus-bullish-clouds entry trigger, an IV band, and a "standard" mode
-whose own numbers (25–35 DTE, target 5% return on collateral) match the
-transcript's "Monthly Churn" description almost exactly. `tests/
-test_leveraged_etf_csp_wheel.py` exercises real assignment/roll mechanics, not
-just utilities. NVDL is already in the module's default universe, tagged
-`quality_approved=False` by design — the tool refuses to assume fundamentals
-it hasn't verified, rather than silently pretending it checked.
+— a weekly 5/12, 34/50, 72/89 EMA cloud filter (`weekly_trend_state()`), an IV
+band, and a "standard" mode whose own numbers (25–35 DTE, target 5% return on
+collateral) match the transcript's "Monthly Churn" description almost
+exactly. `tests/test_leveraged_etf_csp_wheel.py` exercises real
+assignment/roll mechanics, not just utilities. NVDL is already in the
+module's default universe, tagged `quality_approved=False` by design — the
+tool refuses to assume fundamentals it hasn't verified, rather than silently
+pretending it checked.
 
-**What was run today.** NVDA's >$200B market cap is a true, checkable fact
-(not fabricated data), so this run overrode the quality gate honestly for that
-one reason and used the transcript's own stated numbers: `--mode standard`,
-`--minimum-iv 0.50`, `--required-bullish-clouds 2`, NVDL only, 2026-01-02
-through 2026-07-24 (the fullest window covered by the local option archive).
+**The first run of this test was wrong, and it's worth stating plainly why.**
+It used `--mode standard` unmodified, which silently applies two constraints
+the transcript never describes: `core/leveraged_etf_csp_wheel.py`'s
+`_entry_signal()` (line 1667) hard-gates every day on `down_day_threshold`
+*before* it ever checks the cloud state — the module's internal name for the
+resulting strategy is literally `"cash_secured_put_down_day"` — and
+`--mode standard` also enforces a `target_pop=0.75` floor. The transcript's
+own stated rule is "if the clouds are bullish, we sell puts" — no down-day
+requirement, no probability-of-profit floor. Testing with both left in
+produced zero trades, which was a real result, but not a result about the
+strategy the masterclass actually teaches — it was a result about a stricter,
+uninvited hybrid of that strategy plus two of Cipher's own unrelated
+defaults. Worse, `_open_new_puts()` (line 1701) doesn't even log a skip when
+a day fails the down-day gate, so the original run's "16 signals, a normal
+cadence" read was built on an undercount — most bullish-cloud days on NVDL
+never reached the point where anything gets recorded at all.
+
+**Corrected run.** `--relax-pop` (the module's own diagnostic override, since
+the transcript states no POP requirement) plus `--down-day` set to the
+smallest magnitude the code accepts (`-0.0001` — the constructor rejects
+non-negative values outright, so a true "ignore price direction entirely"
+setting doesn't exist as a CLI flag; this is the closest available
+approximation, and it is *not* fully faithful to "no down-day requirement at
+all" — flagged here rather than glossed over). Same window, same IV>50%, same
+2-bullish-cloud requirement, same NVDL, same honest market-cap-based quality
+override.
 
 ```
-events: 0   skips: 16   realized_pnl: $0   total_return: 0.0%
+events: 1   skips: 65   open_options: 1   realized_pnl: $0   total_return: 0.20%
 ```
 
-**Zero trades.** All 16 candidate days failed with
-`no_put_contract_passed_iv_return_liquidity_filters` (one `missing_put_chain`).
-Re-run with the IV floor lowered below the transcript's own 50% threshold, to
-the module's more permissive built-in default (0.40) — still zero, which rules
-out the IV filter itself as the bottleneck. The entry *trigger* is not the
-problem either: 16 down-day-plus-bullish-cloud signals fired over seven
-months, a normal cadence. The blocker is the mode's own `target_pop=0.75` (a
-75% modeled probability-of-profit floor) combined with the 5% return target —
-no real NVDL put, on any of those 16 real signal days, offered both at once.
+**One real trade, not zero.** 2026-07-13: sold to open 4 contracts of the
+NVDL $27 put, 34-day expiry, at **IV 77.0%, POP 67.9%** (below the standard
+mode's own 75% floor, which is why relaxing it mattered), **4.12% return on
+collateral**, 2 bullish clouds, weekly RSI 54.1 — a signal that matches the
+transcript's stated filters closely. It is still open 11 days into a ~34-day
+contract as of the test's end date, so **it has no closed outcome** — one
+open position is not a win or a loss.
 
-**Isolating it further**: removing only the POP floor (`--relax-pop`, the
-module's own diagnostic override — a materially looser rule than anything the
-transcript describes) let exactly **one** trade through, out of sixteen
-signals. That position was still open at the test's end date, so it has no
-closed outcome — one open, un-scored position is not a result in either
-direction.
+**What's actually blocking a real answer now is data coverage, not the
+strategy.** Of the 65 recorded candidates, 51 failed with
+`missing_put_chain` — the local historical-options archive
+(`data/historical_options/leveraged_etf_wheel/`) appears to have been
+downloaded around a monthly decision cadence (matching how someone would
+normally run this backtest, where signals are rare under the down-day gate),
+not a daily one, so most days simply have no option chain downloaded to
+evaluate against once that gate is loosened. Only 14 candidates had a real
+chain to check, and 1 of those 14 produced a contract meeting every filter.
 
-**Honest standing**: the system as taught — mega-cap, two bullish clouds,
-IV>50%, standard monthly-churn selection — produced zero trades on NVDL over
-this window on Cipher's real option-chain data. The entry signal is real and
-fires on schedule; the option-selection constraints as specified together are
-close to unsatisfiable on this name in this period. This is not evidence the
-underlying idea is wrong — a wider universe (SOXL/TQQQ/TSLL are already in the
-module), a longer window, or a materially different POP/return combination
-than what was taught could tell a different story, and are natural next runs
-if this is picked up again. It is evidence that the specific numbers taught —
-on this ticker, in this window — do not clear their own stated bar.
+**Honest standing: INSUFFICIENT, not falsified.** The original "zero trades"
+finding is withdrawn — it measured a stricter strategy than the one taught.
+The corrected version finds real activity consistent with the transcript's
+stated filters, but one trade with no closed outcome is nowhere near enough
+to say the idea works or doesn't. Settling this needs the option archive
+widened to daily coverage for NVDL (and ideally SOXL/TQQQ/TSLL, already in
+the module's universe) over a longer window — a data-collection task, not a
+research question the current local archive can answer either way.
 
-One more thing worth flagging plainly: this module has already been run
-dozens of times before today (`data/leveraged_etf_wheel/*` holds ~30 prior
-result sets — `standard_2026_iv150_relaxpop`, `advanced_assignment_2026_iv150_
-iter2`, and others, several showing modest positive returns in the 1–4% range
-over the same seven months) but **none of them were ever checked against a
-matched random-entry control**, the discipline every strategy in
+One more thing worth flagging plainly, unaffected by the correction above:
+this module has already been run dozens of times before today
+(`data/leveraged_etf_wheel/*` holds ~30 prior result sets —
+`standard_2026_iv150_relaxpop`, `advanced_assignment_2026_iv150_iter2`, and
+others, several showing modest positive returns in the 1–4% range over the
+same seven months) but **none of them were ever checked against a matched
+random-entry control**, the discipline every strategy in
 `core/strategy_catalog.py` is required to clear. A percentage return with no
 baseline is not a verdict — it's the exact gap `beats_control_range` exists to
 close, and it hasn't been applied to this module yet.
@@ -150,6 +171,6 @@ be a result, and no matched-control test exists to check it properly.
 | Strategy | Status | What would change it |
 |---|---|---|
 | Structural Fib (NVDA/AAPL) | **Falsified** | Nothing pending — tested, high win rate coincides with negative average return |
-| Capital Flywheel / CSP wheel (NVDL) | **Zero trades at stated parameters** | A wider universe, longer window, or different POP/return combination than taught — not yet a negative result on the underlying idea, but the taught numbers don't clear on this name/window |
+| Capital Flywheel / CSP wheel (NVDL) | **INSUFFICIENT** (first test was misconfigured — corrected to 1 real signal, still open, no scored outcome) | Daily-cadence option-chain coverage in the local archive (51 of 65 candidate days had none downloaded) |
 | Golden Vex bounce (SPY) | **Blocked + name mismatch** | Point-in-time OI reaching 60 days (currently 13); also needs the actual described quantity identified, since "golden" ≠ vanna in this codebase |
 | Flash Agentic floor bounce ($MU) | **INSUFFICIENT** | A real backtest harness for Flash Agentic against a matched control, and ≥30 observed instances |
