@@ -102,3 +102,21 @@ whole-word search over `.py`, `.sh`, `.json`, `.mjs`, `.ts`, `.tsx` and `.ps1`.
 imported either. Both declared a `DEFAULT_OUTPUT` under
 `data/historical_equities/` and neither path exists on disk — they were never
 run. **Nothing is lost, because nothing was produced.**
+
+---
+
+## The watchlist-backtest set — 4 modules, 1,829 lines
+
+Deleted 2026-08-10. Zero importers from outside the set, and no importer of the
+set's entry point (`watchlist_final_strategy_backtest.py`) or of
+`watchlist_history_analysis.py` from anywhere. Verified the same way as above.
+
+| module | lines | what it was |
+|---|---|---|
+| `watchlist_exit_backtest.py` | 665 | scale-out/stop-move exit rules backtested against timestamped Discord watchlist alerts |
+| `watchlist_indicator_exit_backtest.py` | 475 | indicator-turn (EMA/MACD) exit variant on the same alert data |
+| `watchlist_final_strategy_backtest.py` | 339 | the combined final exit plan (both of the above plus posted-update scaling), the set's only entry point |
+| `watchlist_history_analysis.py` | 350 | standalone Tradier option-history download/report for the watchlist, no relation to the other three beyond the shared theme |
+
+None of the four has a test file, and none has ever produced an output artifact
+on disk. **Nothing is lost, because nothing was produced.**
