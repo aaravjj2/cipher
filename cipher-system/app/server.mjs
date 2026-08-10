@@ -56,38 +56,6 @@ const sendJson = (res, status, body) => {
   res.end(JSON.stringify(body));
 };
 
-const readLocalJson = async (path, fallback) => {
-  try {
-    return JSON.parse(await readFile(path, "utf8"));
-  } catch {
-    return fallback;
-  }
-};
-
-async function sendResearchBrief(res) {
-  const governance = join(root, "..", "data", "governance");
-  const marketQuality = join(root, "..", "data", "market_quality");
-  const [registry, scheduler, holdout] = await Promise.all([
-    readLocalJson(join(governance, "research_status_registry.json"), { components: [] }),
-    readLocalJson(join(governance, "local_research_scheduler.json"), { last_run: [] }),
-    readLocalJson(join(marketQuality, "alpaca_holdout_c_recovery_closeout_20260802T213858Z.json"), {}),
-  ]);
-  return sendJson(res, 200, {
-    generated_at: new Date().toISOString(),
-    mode: "local_research_only",
-    execution_enabled: false,
-    registry,
-    scheduler: scheduler.last_run || [],
-    holdout: holdout.observed_result || {},
-    agent_panel: {
-      status: "no_recorded_daily_synthesis",
-      reason: "No strategy has cleared the independent Holdout C gate.",
-      calibration_status: "unavailable_without_outcome-grounded_decisions",
-    },
-    blocked_trade_log: [],
-  });
-}
-
 const routes = {
   "/api/health": "/health",
   "/api/quote": "/api/quote",
@@ -200,12 +168,6 @@ createServer(async (req, res) => {
   const url = new URL(req.url || "/", `http://${req.headers.host || "127.0.0.1"}`);
   if (url.pathname === "/api/scanner-ingest" || url.pathname === "/api/scanner-ingest/") {
     return scannerIngest(req, res);
-  }
-  if (url.pathname === "/api/research-brief") {
-    if ((req.method || "GET").toUpperCase() !== "GET") {
-      return sendJson(res, 405, { error: "method not allowed" });
-    }
-    return sendResearchBrief(res);
   }
   if (url.pathname === "/accessobsidian-browser-logger.js") {
     if ((req.method || "GET").toUpperCase() !== "GET") {
