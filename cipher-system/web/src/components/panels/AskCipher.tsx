@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { MarkdownText } from "@/components/MarkdownText";
 import { startAskJob, type AskChatMessage } from "@/lib/api";
 
 /**
@@ -28,14 +29,22 @@ function MessageBubble({ role, content }: ChatMessage) {
   return (
     <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
       <div
-        className="max-w-[75%] rounded-[10px] px-4 py-2.5 text-[13.5px] leading-relaxed whitespace-pre-wrap"
+        className="max-w-[75%] rounded-[10px] px-4 py-2.5 text-[13.5px] leading-relaxed"
         style={{
           background: isUser ? "var(--accent)" : "var(--panel-2)",
           color: isUser ? "#fff" : "var(--text)",
           border: isUser ? "none" : "1px solid var(--line)",
         }}
       >
-        {content}
+        {/* The model answers in Markdown, so its `**bold**` and `- ` markers were being
+            shown as literal asterisks. Only assistant text is parsed: the user's own
+            message is rendered exactly as typed, since re-interpreting their input would
+            change what they see themselves having said. */}
+        {isUser ? (
+          <span className="whitespace-pre-wrap">{content}</span>
+        ) : (
+          <MarkdownText>{content}</MarkdownText>
+        )}
       </div>
     </div>
   );
