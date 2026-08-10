@@ -1131,8 +1131,35 @@ def bars(ticker, timeframe, limit=200, start=None):
         "1d": "1Day",
         "1w": "1Week",
     }
-    normalized = timeframe.lower()
-    tf = allowed.get(normalized, "5Min")
+    # Spellings that are not the canonical short form but arrive in practice, mapped to it
+    # so both the Alpaca timeframe and the calendar-span lookup below stay correct:
+    #   - "eod" is what the Night Vision timeframe strip sends for its EOD button
+    #     (`NightVision.tsx` lowercases the label), and it means a daily bar.
+    #   - the Alpaca-style long forms are what internal callers already pass —
+    #     `core/intraday_backtest.py:514` calls `bars_fn(ticker, "5Min", ...)`. Those used
+    #     to land on the silent default, which happened to be 5Min, so they worked by
+    #     luck; "1Day" would not have. They are aliased explicitly instead.
+    aliases = {
+        "eod": "1d",
+        "daily": "1d",
+        "weekly": "1w",
+        "1min": "1m",
+        "5min": "5m",
+        "15min": "15m",
+        "1hour": "1h",
+        "4hour": "4h",
+        "1day": "1d",
+        "1week": "1w",
+    }
+    normalized = aliases.get(timeframe.lower(), timeframe.lower())
+    # No silent fallback: an unrecognized timeframe used to be served as 5-minute bars
+    # under the caller's label, which is a wrong chart that looks right. The route turns
+    # this ValueError into a 422 so the mistake is visible instead of plausible.
+    if normalized not in allowed:
+        raise ValueError(
+            f"unsupported timeframe: {timeframe!r} (expected one of {', '.join(sorted(allowed))})"
+        )
+    tf = allowed[normalized]
     want = min(int(limit), 1000)
     start_override = None
     if start:
