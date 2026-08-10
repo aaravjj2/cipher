@@ -9,6 +9,7 @@ import {
   SearchIcon,
   StarIcon,
   JournalIcon,
+  PortfolioIcon,
   TridentIcon,
   BookmarkIcon,
   ScannerIcon,
@@ -38,6 +39,7 @@ const NAV_SECTIONS: NavSection[] = [
       { label: "Spyglass", icon: SearchIcon },
       { label: "My Watchlists", icon: StarIcon },
       { label: "Standing", icon: JournalIcon },
+      { label: "Holdings", icon: PortfolioIcon },
     ],
   },
   {

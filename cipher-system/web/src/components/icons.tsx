@@ -82,6 +82,17 @@ export function JournalIcon(props: SVGProps<SVGSVGElement>) {
   );
 }
 
+export function PortfolioIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" width="16" height="16" {...props}>
+      <path
+        fill="currentColor"
+        d="M9 3h6a2 2 0 0 1 2 2v1h2a2 2 0 0 1 2 2v3H3V8a2 2 0 0 1 2-2h2V5a2 2 0 0 1 2-2m0 2v1h6V5zm-6 8h18v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zm8 1v3h2v-3z"
+      />
+    </svg>
+  );
+}
+
 export function TridentIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" width="16" height="16" {...props}>

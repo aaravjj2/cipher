@@ -8,6 +8,7 @@ import { NightVision as NightVisionBase } from "@/components/panels/NightVision"
 import { Spyglass as SpyglassBase, SpyglassHeaderTabs, type SpyglassTab } from "@/components/panels/Spyglass";
 import { Watchlists as WatchlistsBase } from "@/components/panels/Watchlists";
 import { Standing as StandingBase } from "@/components/panels/Standing";
+import { Holdings as HoldingsBase } from "@/components/panels/Holdings";
 import { Trident as TridentBase } from "@/components/panels/Trident";
 import { ChartSaves as ChartSavesBase } from "@/components/panels/ChartSaves";
 import { SetupScanner as SetupScannerBase } from "@/components/panels/SetupScanner";
@@ -28,6 +29,7 @@ const NightVision = memo(NightVisionBase);
 const Spyglass = memo(SpyglassBase);
 const Watchlists = memo(WatchlistsBase);
 const Standing = memo(StandingBase);
+const Holdings = memo(HoldingsBase);
 const Backtest = memo(BacktestBase);
 const StrategyCatalog = memo(StrategyCatalogBase);
 const Trident = memo(TridentBase);
@@ -43,6 +45,7 @@ const PANEL_TITLES: Record<string, string> = {
   Spyglass: "SPYGLASS",
   "My Watchlists": "MY WATCHLISTS",
   Standing: "STANDING",
+  Holdings: "HOLDINGS",
   Trident: "TRIDENT",
   "Chart Saves": "CHART SAVES",
   "Setup Scanner": "SETUP SCANNER",
@@ -153,6 +156,7 @@ export default function Home() {
           )}
           {activePanel === "My Watchlists" && <Watchlists />}
           {activePanel === "Standing" && <Standing />}
+          {activePanel === "Holdings" && <Holdings />}
           {activePanel === "Backtest" && <Backtest ticker={ticker} />}
           {activePanel === "Strategies" && <StrategyCatalog />}
           {activePanel === "Trident" && <Trident toolbarSlot={toolbarSlot} />}

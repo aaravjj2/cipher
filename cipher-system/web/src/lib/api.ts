@@ -100,6 +100,29 @@ async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+async function postJson<T>(path: string, body: unknown, signal?: AbortSignal): Promise<T> {
+  const res = await fetch(path, {
+    method: "POST",
+    cache: "no-store",
+    signal,
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    let detail = "";
+    let readOnly = false;
+    try {
+      const errBody = await res.json();
+      detail = errBody?.error || "";
+      readOnly = Boolean(errBody?.read_only);
+    } catch {
+      /* body wasn't JSON — fall back to status text below */
+    }
+    throw new ApiError(detail || `Request failed (${res.status})`, res.status, readOnly);
+  }
+  return res.json() as Promise<T>;
+}
+
 export function fetchQuote(ticker: string, signal?: AbortSignal): Promise<RealQuote> {
   return getJson<RealQuote>(`/api/quote?symbol=${encodeURIComponent(ticker)}`, signal);
 }
@@ -138,12 +161,13 @@ export type RealBarsResponse = {
 export function fetchBars(
   ticker: string,
   timeframe: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  opts?: { start?: string; limit?: number }
 ): Promise<RealBarsResponse> {
-  return getJson<RealBarsResponse>(
-    `/api/bars?symbol=${encodeURIComponent(ticker)}&timeframe=${encodeURIComponent(timeframe)}`,
-    signal
-  );
+  const params = new URLSearchParams({ symbol: ticker, timeframe });
+  if (opts?.start) params.set("start", opts.start);
+  if (opts?.limit != null) params.set("limit", String(opts.limit));
+  return getJson<RealBarsResponse>(`/api/bars?${params.toString()}`, signal);
 }
 
 export type RealLevelKind = "above_spot" | "below_spot" | "global";
@@ -851,6 +875,110 @@ export type StandingStatus = {
 /** Open commitments (prospective registrations, shadow positions) and accrual clocks. */
 export function fetchStanding(signal?: AbortSignal): Promise<StandingStatus> {
   return getJson<StandingStatus>("/api/standing", signal);
+}
+
+// Holdings — manually-entered positions (core/holdings.py), never connected to a real
+// brokerage or exchange account. Marked to market with the same quote()/bars() every
+// other panel already uses; the position facts (shares, entry price/date) are the
+// user's own ground truth, not fabricated.
+
+export type HoldingPosition = {
+  id: string;
+  ticker: string;
+  shares: number;
+  entry_price: number;
+  entry_date: string;
+  status: "OPEN";
+  notes: string | null;
+  exit_price: null;
+  exit_date: null;
+  closed_from_id: string | null;
+  created_at: string;
+  updated_at: string;
+  cost_basis: number;
+  current_price: number | null;
+  price_as_of: string | null;
+  market_value: number | null;
+  unrealized_pnl_dollars: number | null;
+  unrealized_pnl_pct: number | null;
+  day_change_dollars: number | null;
+  quote_error: string | null;
+};
+
+export type ClosedHoldingPosition = {
+  id: string;
+  ticker: string;
+  shares: number;
+  entry_price: number;
+  entry_date: string;
+  status: "CLOSED";
+  notes: string | null;
+  exit_price: number;
+  exit_date: string;
+  closed_from_id: string | null;
+  created_at: string;
+  updated_at: string;
+  cost_basis: number;
+  proceeds: number;
+  realized_pnl_dollars: number;
+  realized_pnl_pct: number | null;
+};
+
+export type HoldingsAllocationRow = { ticker: string; market_value: number; weight_pct: number };
+
+export type HoldingsBenchmarkComparison = {
+  ticker: string;
+  hypothetical_value: number;
+  hypothetical_pnl_dollars: number;
+  hypothetical_pnl_pct: number | null;
+};
+
+export type HoldingsStatus = {
+  as_of: string;
+  read_only: boolean;
+  caveat: string;
+  open_positions: HoldingPosition[];
+  closed_positions: ClosedHoldingPosition[];
+  summary: {
+    open_position_count: number;
+    closed_position_count: number;
+    total_cost_basis_open: number;
+    total_market_value_open: number;
+    unresolved_tickers: string[];
+    total_unrealized_pnl_dollars: number;
+    total_unrealized_pnl_pct: number | null;
+    total_day_change_dollars: number;
+    total_realized_pnl_dollars: number;
+  };
+  allocation: HoldingsAllocationRow[];
+  benchmark: {
+    since: string;
+    actual_market_value: number;
+    comparisons: HoldingsBenchmarkComparison[];
+  } | null;
+};
+
+export function fetchHoldings(opts?: { benchmark?: boolean }, signal?: AbortSignal): Promise<HoldingsStatus> {
+  const q = opts?.benchmark ? "?benchmark=1" : "";
+  return getJson<HoldingsStatus>(`/api/holdings${q}`, signal);
+}
+
+export function addHolding(
+  input: { ticker: string; shares: number; entry_price: number; entry_date: string; notes?: string },
+  signal?: AbortSignal
+): Promise<HoldingPosition> {
+  return postJson<HoldingPosition>("/api/holdings?action=add", input, signal);
+}
+
+export function closeHolding(
+  input: { id: string; exit_price: number; exit_date: string; shares?: number },
+  signal?: AbortSignal
+): Promise<HoldingPosition | ClosedHoldingPosition> {
+  return postJson<HoldingPosition | ClosedHoldingPosition>("/api/holdings?action=close", input, signal);
+}
+
+export function deleteHolding(id: string, signal?: AbortSignal): Promise<{ deleted: true; id: string }> {
+  return postJson(`/api/holdings?action=delete`, { id }, signal);
 }
 
 export type RealScanUniverse = {

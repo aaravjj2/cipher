@@ -37,6 +37,7 @@ import ranking_lab
 import session_levels
 import evidence_status
 import backtest_jobs
+import holdings
 from zoneinfo import ZoneInfo
 
 # Exchange local time. Session boundaries and trading dates are ET facts, not UTC
@@ -1062,7 +1063,7 @@ def _local_bars(ticker, timeframe="1Day", limit=250):
         return bars(ticker, timeframe, limit)
 
 
-def bars(ticker, timeframe, limit=200):
+def bars(ticker, timeframe, limit=200, start=None):
     allowed = {
         "1m": "1Min",
         "5m": "5Min",
@@ -1075,7 +1076,13 @@ def bars(ticker, timeframe, limit=200):
     normalized = timeframe.lower()
     tf = allowed.get(normalized, "5Min")
     want = min(int(limit), 1000)
-    cache_key = (ticker.upper(), normalized, want)
+    start_override = None
+    if start:
+        try:
+            start_override = datetime.fromisoformat(str(start)).replace(tzinfo=timezone.utc)
+        except ValueError:
+            raise ValueError(f"invalid start date: {start!r}") from None
+    cache_key = (ticker.upper(), normalized, want, start_override.date().isoformat() if start_override else None)
     with _CACHE_LOCK:
         cached = BARS_CACHE.get(cache_key)
         if cached and time.time() - cached[0] < 20:
@@ -1093,7 +1100,11 @@ def bars(ticker, timeframe, limit=200):
         "1w": max(want * 10, 120),
     }.get(normalized, 7)
     end = datetime.now(timezone.utc)
-    start = end - timedelta(days=calendar_days)
+    # An explicit `start` (e.g. "give me bars since this position's entry date") means
+    # the caller wants the OLDEST bars in that window, not the newest — skip the
+    # newest-`want`-only slice below for this case, since holdings-style benchmark
+    # charts need the bars nearest the start date, not nearest now.
+    start = start_override or (end - timedelta(days=calendar_days))
     _, _, _, preferred_stock = local_settings()
     feeds = []
     for feed in (preferred_stock, "sip", "iex"):
@@ -1139,7 +1150,12 @@ def bars(ticker, timeframe, limit=200):
                     "page_token": token,
                 }
             used_feed = feed
-            output = collected[-want:]
+            # With an explicit start override, keep every bar from that date forward
+            # (bounded by Alpaca's own pagination above) rather than truncating to the
+            # newest `want` — the earliest bars are exactly what a since-a-past-date
+            # comparison needs, and daily bars for even a decade-old date are a few
+            # thousand rows at most.
+            output = collected if start_override else collected[-want:]
             if output:
                 break
         except ValueError as exc:
@@ -1689,7 +1705,15 @@ class Handler(BaseHTTPRequestHandler):
                     force=str(pget("fresh", "0")).lower() in {"1", "true", "yes"},
                 )
             elif parsed.path == "/api/bars":
-                data = bars(ticker, pget("timeframe", "5m"), limit=int(pget("limit", "200")))
+                data = bars(
+                    ticker, pget("timeframe", "5m"), limit=int(pget("limit", "200")),
+                    start=pget("start"),
+                )
+            elif parsed.path == "/api/holdings":
+                data = holdings.holdings_status(
+                    quote_fn=quote, bars_fn=bars,
+                    include_benchmark=(pget("benchmark") or "").lower() in {"1", "true", "yes"},
+                )
             elif parsed.path == "/api/contract-search":
                 data = contract_search(
                     ticker,
@@ -2087,6 +2111,8 @@ class Handler(BaseHTTPRequestHandler):
                             "/api/health",
                             "/api/quote",
                             "/api/governance",
+                            "/api/standing",
+                            "/api/holdings",
                             "/api/research-status",
                             "/api/evidence-status",
                             "/api/signal-backtest",
@@ -2178,7 +2204,46 @@ class Handler(BaseHTTPRequestHandler):
                     return
                 self.send_json(400, {"error": f"Unknown backtest POST action: {action or '(none)'}"})
                 return
-            self.send_json(404, {"error": "Not found", "routes": ["/api/backtest?action=ingest-scan"]})
+            if parsed.path == "/api/holdings":
+                action = (pget("action") or "").lower()
+                body = self._read_json_body()
+                if not isinstance(body, dict):
+                    raise ValueError("request body must be a JSON object")
+                if action == "add":
+                    data = holdings.add_position(
+                        ticker=body.get("ticker", ""),
+                        shares=body.get("shares"),
+                        entry_price=body.get("entry_price"),
+                        entry_date=body.get("entry_date", ""),
+                        notes=body.get("notes"),
+                    )
+                    self.send_json(201, data)
+                    return
+                if action == "close":
+                    data = holdings.close_position(
+                        position_id=body.get("id", ""),
+                        exit_price=body.get("exit_price"),
+                        exit_date=body.get("exit_date", ""),
+                        shares=body.get("shares"),
+                    )
+                    self.send_json(200, data)
+                    return
+                if action == "delete":
+                    data = holdings.delete_position(body.get("id", ""))
+                    self.send_json(200, data)
+                    return
+                self.send_json(400, {"error": f"Unknown holdings POST action: {action or '(none)'}"})
+                return
+            self.send_json(
+                404,
+                {
+                    "error": "Not found",
+                    "routes": [
+                        "/api/backtest?action=ingest-scan",
+                        "/api/holdings?action=add|close|delete",
+                    ],
+                },
+            )
         except ValueError as exc:
             self.send_json(422, {"error": str(exc), "read_only": True})
         except Exception as exc:
