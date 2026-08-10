@@ -13,6 +13,7 @@ __pycache__/
 .pytest_cache/
 htmlcov/
 .coverage*
+*Zone.Identifier*
 
 # The local raw lake and generated evidence are retained on disk but are too
 # large and sensitive for the source-control baseline.

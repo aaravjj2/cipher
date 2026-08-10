@@ -1,6 +1,6 @@
 # Original Architecture Self-Audit
 
-**Baseline:** `CIPHER_CURRENT_STATE_AND_HYBRID_ARCHITECTURE_THESIS.md`  
+**Baseline:** `../../docs/architecture/CIPHER_CURRENT_STATE_AND_HYBRID_ARCHITECTURE_THESIS.md`
 **Machine-readable audit:** `data/governance/original_architecture_self_audit.json`  
 **Verdict:** `INCOMPLETE`  
 **Live execution authority:** none

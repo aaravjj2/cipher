@@ -24,7 +24,12 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 GOVERNANCE_ROOT = ROOT / "data" / "governance"
 REGISTRY_PATH = GOVERNANCE_ROOT / "research_registry.sqlite"
-THESIS_PATH = REPOSITORY_ROOT / "CIPHER_CURRENT_STATE_AND_HYBRID_ARCHITECTURE_THESIS.md"
+THESIS_PATH = (
+    REPOSITORY_ROOT
+    / "docs"
+    / "architecture"
+    / "CIPHER_CURRENT_STATE_AND_HYBRID_ARCHITECTURE_THESIS.md"
+)
 
 CODE_IDENTITY_KEYS = {
     "code_hash",

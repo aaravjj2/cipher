@@ -50,7 +50,7 @@ The core API exposes governance status read-only at `/api/governance`.
 The maximum promotion state is `LIVE_REVIEW_REQUIRED`. The platform contains no
 broker adapter or live-order path. See
 `cipher-system/core/research_platform/README.md` and
-`CIPHER_CURRENT_STATE_AND_HYBRID_ARCHITECTURE_THESIS.md` for the complete design.
+`docs/architecture/CIPHER_CURRENT_STATE_AND_HYBRID_ARCHITECTURE_THESIS.md` for the complete design.
 
 ## Current Data Model
 
