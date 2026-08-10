@@ -54,10 +54,10 @@ SYSTEM_PROMPT = (
 )
 
 
-def _anthropic_api_key() -> str | None:
-    """Reads ANTHROPIC_API_KEY from .env (same manual parse local_settings()
-    uses in core/app.py), falling back to the process environment. Returns
-    None rather than raising -- this feature must degrade to a clear "not
+def _env_key(name: str) -> str | None:
+    """Reads one key from .env (same manual parse local_settings() uses in
+    core/app.py), falling back to the process environment. Returns None
+    rather than raising -- this feature must degrade to a clear "not
     configured" error, not take down the whole core service."""
     import os
 
@@ -65,11 +65,26 @@ def _anthropic_api_key() -> str | None:
         for line in ENV.read_text(encoding="utf-8").splitlines():
             if "=" in line and not line.lstrip().startswith("#"):
                 key, value = line.split("=", 1)
-                if key.strip() == "ANTHROPIC_API_KEY":
+                if key.strip() == name:
                     value = value.strip().strip('"').strip("'")
                     if value:
                         return value
-    return os.environ.get("ANTHROPIC_API_KEY") or None
+    return os.environ.get(name) or None
+
+
+def _anthropic_api_key() -> str | None:
+    return _env_key("ANTHROPIC_API_KEY")
+
+
+def _openrouter_api_key() -> str | None:
+    return _env_key("OPENROUTER_API_KEY")
+
+
+OPENROUTER_MODEL = "anthropic/claude-opus-5"
+# Lower than MAX_TOKENS: this path exists specifically for accounts running on
+# a small OpenRouter balance, where a 4096-token ceiling can exceed what's
+# affordable per-request even though the account has credit for many requests.
+OPENROUTER_MAX_TOKENS = 1024
 
 
 class AskCipherError(ValueError):
@@ -150,42 +165,197 @@ def _make_tools(tool_impls: dict[str, Callable]) -> list:
     ]
 
 
+def _run_chat_job_anthropic(
+    message: str, history: list[dict], tool_impls: dict[str, Callable], append_event: Callable, api_key: str
+) -> None:
+    import anthropic
+
+    client = anthropic.Anthropic(api_key=api_key)
+    tools = _make_tools(tool_impls)
+    messages = list(history) + [{"role": "user", "content": message}]
+
+    runner = client.beta.messages.tool_runner(
+        model=MODEL,
+        max_tokens=MAX_TOKENS,
+        system=SYSTEM_PROMPT,
+        tools=tools,
+        messages=messages,
+        stream=True,
+    )
+
+    final_text = ""
+    for stream in runner:
+        for event in stream:
+            if event.type == "content_block_start" and event.content_block.type == "tool_use":
+                append_event({"type": "tool_call", "name": event.content_block.name})
+            elif event.type == "content_block_delta" and event.delta.type == "text_delta":
+                final_text += event.delta.text
+                append_event({"type": "text_delta", "text": event.delta.text})
+
+    append_event({"type": "done", "text": final_text})
+
+
+# OpenAI function-calling shape for the same five tools -- OpenRouter (and any
+# OpenAI-compatible gateway) speaks this format, not Anthropic's block-based
+# tool_use. Hand-authored rather than derived from decorators since the
+# `anthropic` SDK's docstring-based schema inference is Anthropic-specific;
+# these describe exactly the same five injected callables.
+_OPENAI_TOOL_SPECS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "get_evidence_status",
+            "description": (
+                "Accrual status for the questions currently gated on data rather than code: "
+                "point-in-time open interest (unlocks cluster/GEX backtesting) and the paired "
+                "flash-label corpus (unlocks the fitted flash score)."
+            ),
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_standing",
+            "description": (
+                "Open prospective strategy registrations, open shadow positions (the paper "
+                "executor's simulated, never-live positions), and the same accrual clocks as "
+                "get_evidence_status."
+            ),
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_holdings",
+            "description": (
+                "The user's manually-entered holdings (never connected to a real brokerage), "
+                "marked to market right now: open positions with unrealized P&L, closed "
+                "positions with realized P&L, and allocation by ticker."
+            ),
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_quote",
+            "description": "A live delayed market quote for one ticker: bid, ask, mid, last price, day change percent.",
+            "parameters": {
+                "type": "object",
+                "properties": {"ticker": {"type": "string"}},
+                "required": ["ticker"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_strategies",
+            "description": (
+                "The strategy catalog's metadata: which strategies are evaluable vs. blocked "
+                "(and why), optionally filtered to one family. Does NOT include a fresh "
+                "backtest verdict."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {"family": {"type": ["string", "null"]}},
+                "required": [],
+            },
+        },
+    },
+]
+
+
+def _dispatch_openai_tool(name: str, args: dict, tool_impls: dict[str, Callable]) -> str:
+    if name == "get_quote":
+        return json.dumps(tool_impls["get_quote"](args.get("ticker", "")), default=str)
+    if name == "list_strategies":
+        return json.dumps(tool_impls["list_strategies"](args.get("family")), default=str)
+    return json.dumps(tool_impls[name](), default=str)
+
+
+def _chunk_text(text: str, size: int = 40) -> list[str]:
+    """Splits already-complete text into small pieces so the UI still gets a
+    stream of text_delta events -- OpenRouter's chat-completions response
+    arrives whole, not token-by-token, in this (deliberately simpler) provider
+    path, but the event vocabulary the frontend consumes stays identical."""
+    words = text.split(" ")
+    chunks, current = [], ""
+    for word in words:
+        current = f"{current} {word}".strip() if current else word
+        if len(current) >= size:
+            chunks.append(current + " ")
+            current = ""
+    if current:
+        chunks.append(current)
+    return chunks or [text]
+
+
+def _run_chat_job_openrouter(
+    message: str, history: list[dict], tool_impls: dict[str, Callable], append_event: Callable, api_key: str
+) -> None:
+    import openai
+
+    client = openai.OpenAI(api_key=api_key, base_url="https://openrouter.ai/api/v1")
+    messages = [{"role": "system", "content": SYSTEM_PROMPT}] + list(history) + [{"role": "user", "content": message}]
+
+    final_text = ""
+    for _ in range(6):  # a tool-calling turn cannot loop forever on a bad tool result
+        response = client.chat.completions.create(
+            model=OPENROUTER_MODEL, max_tokens=OPENROUTER_MAX_TOKENS, messages=messages, tools=_OPENAI_TOOL_SPECS,
+        )
+        msg = response.choices[0].message
+        if msg.content:
+            final_text += msg.content
+            for chunk in _chunk_text(msg.content):
+                append_event({"type": "text_delta", "text": chunk})
+        if not msg.tool_calls:
+            break
+        messages.append(
+            {
+                "role": "assistant",
+                "content": msg.content,
+                "tool_calls": [
+                    {"id": tc.id, "type": "function", "function": {"name": tc.function.name, "arguments": tc.function.arguments}}
+                    for tc in msg.tool_calls
+                ],
+            }
+        )
+        for tool_call in msg.tool_calls:
+            append_event({"type": "tool_call", "name": tool_call.function.name})
+            try:
+                args = json.loads(tool_call.function.arguments or "{}")
+                result = _dispatch_openai_tool(tool_call.function.name, args, tool_impls)
+            except Exception as exc:  # noqa: BLE001 - a bad tool call must not kill the turn
+                result = json.dumps({"error": f"{type(exc).__name__}: {exc}"})
+            messages.append({"role": "tool", "tool_call_id": tool_call.id, "content": result})
+
+    append_event({"type": "done", "text": final_text})
+
+
 def run_chat_job(message: str, history: list[dict], tool_impls: dict[str, Callable], append_event: Callable) -> None:
-    """Runs one chat turn against Claude, streaming events back via
-    `append_event`. Never raises to the caller -- every failure path (missing
-    key, API error, a refused request) is reported as an `error` event so the
-    job registry always reaches a terminal state.
+    """Runs one chat turn, streaming events back via `append_event`. Never
+    raises to the caller -- every failure path (no provider configured, an
+    API error, a refused request) is reported as an `error` event so the job
+    registry always reaches a terminal state. Prefers a direct ANTHROPIC_API_KEY;
+    falls back to OpenRouter (OpenAI-compatible gateway, routes to the same
+    claude-opus-5) when only that is configured.
     """
-    api_key = _anthropic_api_key()
-    if not api_key:
-        append_event({"type": "error", "error": "ANTHROPIC_API_KEY is not configured in .env"})
+    anthropic_key = _anthropic_api_key()
+    openrouter_key = None if anthropic_key else _openrouter_api_key()
+    if not anthropic_key and not openrouter_key:
+        append_event({
+            "type": "error",
+            "error": "No LLM provider configured: set ANTHROPIC_API_KEY or OPENROUTER_API_KEY in .env",
+        })
         return
 
     try:
-        import anthropic
-
-        client = anthropic.Anthropic(api_key=api_key)
-        tools = _make_tools(tool_impls)
-        messages = list(history) + [{"role": "user", "content": message}]
-
-        runner = client.beta.messages.tool_runner(
-            model=MODEL,
-            max_tokens=MAX_TOKENS,
-            system=SYSTEM_PROMPT,
-            tools=tools,
-            messages=messages,
-            stream=True,
-        )
-
-        final_text = ""
-        for stream in runner:
-            for event in stream:
-                if event.type == "content_block_start" and event.content_block.type == "tool_use":
-                    append_event({"type": "tool_call", "name": event.content_block.name})
-                elif event.type == "content_block_delta" and event.delta.type == "text_delta":
-                    final_text += event.delta.text
-                    append_event({"type": "text_delta", "text": event.delta.text})
-
-        append_event({"type": "done", "text": final_text})
+        if anthropic_key:
+            _run_chat_job_anthropic(message, history, tool_impls, append_event, anthropic_key)
+        else:
+            _run_chat_job_openrouter(message, history, tool_impls, append_event, openrouter_key)
     except Exception as exc:  # noqa: BLE001 - surface every failure as a terminal chat event
         append_event({"type": "error", "error": f"{type(exc).__name__}: {exc}"})
