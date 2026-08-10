@@ -120,3 +120,51 @@ set's entry point (`watchlist_final_strategy_backtest.py`) or of
 
 None of the four has a test file, and none has ever produced an output artifact
 on disk. **Nothing is lost, because nothing was produced.**
+
+---
+
+## Two dead options labs — 2 modules, 936 lines
+
+Deleted 2026-08-10. Both zero-importer (confirmed against `core/`, `scripts/`,
+`tests/`, `app/`, `web/src`, and every `.ps1`/`.sh`/systemd unit). Unlike the
+sets above, both actually ran and left findings under `data/`, which is why
+those findings are recorded here rather than only in the deleted code.
+
+**`eod_best_strategy_options_lab.py`** (645 lines) translated the two locked EOD
+ETF reversal strategies (`eod_best_strategy_lab`'s QQQ/IWM rules, unchanged)
+into historical option outcomes across 0DTE/front/weekly/swing expirations and
+ATM/OTM/vertical structures. Its run on 16 QQQ and 12 IWM signals
+(`data/eod_best_strategy_options_lab/report.md`, generated 2026-07-27) found:
+**no option translation cleared the preliminary robustness gate** (average,
+median, exclusion-of-best-trade, and recent-performance checks) — the
+underlying ETF strategies stayed materially stronger than every long-option
+translation tried. The output files remain on disk; the module that produced
+them does not.
+
+**`option_outcome_factor_lab.py`** (291 lines) mined pre-entry and
+delayed-confirmation factors that might separate winning from losing estimated
+option outcomes, plus a small ridge fit. Its runs
+(`data/factor_lab/option_outcome_factor_lab_*`, last 2026-07-22, n=16) found no
+reliable rule: candidate filters split winners and losers inconsistently across
+the small sample (e.g. `oi_under_1500` selected an 11-trade group with a
+positive average P/L while the 5 rejected trades went the other way — not a
+pattern that survives more data), and the module's own caveat notes true
+scan-time option ticks were never captured, only estimated outcomes.
+Inconclusive on a tiny sample, not a negative result — the difference matters
+because the module cannot be re-run to get a bigger one; the option tick data
+behind it was never point-in-time captured.
+
+---
+
+## Not deleted: the leveraged-ETF wheel set
+
+Also proposed for deletion. The premise was wrong. All four modules are load-
+bearing: `leveraged_etf_wheel_parameter_lab.py` imports directly from
+`leveraged_etf_csp_wheel.py`; `leveraged_etf_wheel_iterate.py` shells out to
+both `leveraged_etf_csp_wheel.py` and `leveraged_etf_wheel_download.py` by
+path; `tests/test_leveraged_etf_csp_wheel.py` exercises `leveraged_etf_csp_wheel`
+directly (467+ lines); and `scripts/prepare_leveraged_etf_wheel_data.py` plus
+`config/leveraged_etf_wheel_universe.json` both exist specifically to feed it.
+
+Kept, unexamined further — a set with its own test file and a dedicated data-
+prep script is not a deletion candidate on this pass.
