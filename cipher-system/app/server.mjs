@@ -5,6 +5,7 @@ import { promisify } from "node:util";
 import { chmod, readFile } from "node:fs/promises";
 import { dirname, extname, join, normalize, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { createAuthGate } from "./auth.mjs";
 import { createScannerIngestHandler } from "./scanner_ingest.mjs";
 
 const root = dirname(fileURLToPath(import.meta.url));
@@ -26,6 +27,14 @@ const scannerIngest = createScannerIngestHandler({
   ),
   ingestToken: scannerIngestToken,
 });
+const authGate = createAuthGate();
+if (authGate.enabled && !authGate.configured) {
+  throw new Error(
+    "Cipher authentication is enabled but CIPHER_APP_PASSWORD_HASH is not configured. "
+    + "Set a hash or explicitly set CIPHER_APP_AUTH=off for local development.",
+  );
+}
+const loginPagePath = join(root, "login.html");
 const accessObsidianLoggerPath = resolve(
   join(root, "..", "scripts", "accessobsidian_browser_logger.js"),
 );
@@ -47,14 +56,39 @@ const gzip = promisify(gzipCb);
 // Below this, framing and CPU cost more than the bytes saved.
 const GZIP_MIN_BYTES = 1400;
 
-const sendJson = (res, status, body) => {
+const sendJson = (res, status, body, headers = {}) => {
   res.writeHead(status, {
     "content-type": "application/json; charset=utf-8",
     "cache-control": "no-store",
     "x-content-type-options": "nosniff",
+    ...headers,
   });
   res.end(JSON.stringify(body));
 };
+
+const readBoundedBody = async (req, limit = 8192) => {
+  const chunks = [];
+  let size = 0;
+  for await (const chunk of req) {
+    size += chunk.length;
+    if (size > limit) throw new RangeError("request body too large");
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks).toString("utf8");
+};
+
+const clientKey = (req) => String(req.socket?.remoteAddress || "shared-client");
+
+async function sendLoginPage(res, status = 200) {
+  const page = await readFile(loginPagePath);
+  res.writeHead(status, {
+    "content-type": "text/html; charset=utf-8",
+    "cache-control": "no-store",
+    "x-content-type-options": "nosniff",
+    "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
+  });
+  res.end(page);
+}
 
 const routes = {
   "/api/health": "/health",
@@ -66,6 +100,7 @@ const routes = {
   "/api/workspace-layouts": "/api/workspace-layouts",
   "/api/ask": "/api/ask",
   "/api/research-status": "/api/research-status",
+  "/api/options-backtest": "/api/options-backtest",
   "/api/evidence-status": "/api/evidence-status",
   "/api/signal-backtest": "/api/signal-backtest",
   "/api/strategies": "/api/strategies",
@@ -189,6 +224,66 @@ createServer(async (req, res) => {
       return res.end(file);
     } catch {
       return sendJson(res, 404, { error: "logger not found" });
+    }
+  }
+  if (url.pathname === "/api/health") {
+    try {
+      return await proxyCore(res, "/health", new URLSearchParams(), {
+        acceptEncoding: req.headers["accept-encoding"] || "",
+      });
+    } catch {
+      return sendJson(res, 503, { status: "unavailable", read_only: true });
+    }
+  }
+  if (url.pathname === "/api/login") {
+    if ((req.method || "GET").toUpperCase() !== "POST") {
+      return sendJson(res, 405, { error: "method not allowed" }, { allow: "POST" });
+    }
+    let raw;
+    try {
+      raw = await readBoundedBody(req);
+    } catch (error) {
+      return sendJson(res, error instanceof RangeError ? 413 : 400, { error: "invalid request" });
+    }
+    let password = "";
+    try {
+      if (String(req.headers["content-type"] || "").includes("application/json")) {
+        password = String(JSON.parse(raw).password || "");
+      } else {
+        password = String(new URLSearchParams(raw).get("password") || "");
+      }
+    } catch {
+      return sendJson(res, 400, { error: "invalid request" });
+    }
+    const result = await authGate.login(password, clientKey(req));
+    if (!result.ok) {
+      const retrySeconds = Math.max(1, Math.ceil((result.retryAfterMs || 0) / 1000));
+      return sendJson(
+        res,
+        result.retryAfterMs > 0 ? 429 : 401,
+        { error: "invalid credentials", retry_after_seconds: retrySeconds },
+        result.retryAfterMs > 0 ? { "retry-after": String(retrySeconds) } : {},
+      );
+    }
+    return sendJson(res, 200, { ok: true }, result.cookie ? { "set-cookie": result.cookie } : {});
+  }
+  if (url.pathname === "/api/logout") {
+    if ((req.method || "GET").toUpperCase() !== "POST") {
+      return sendJson(res, 405, { error: "method not allowed" }, { allow: "POST" });
+    }
+    return sendJson(res, 200, { ok: true }, { "set-cookie": authGate.logoutCookie() });
+  }
+  if (!authGate.isAuthenticated(req)) {
+    if (url.pathname.startsWith("/api/") || url.pathname === "/api/stream" || url.pathname === "/api/live") {
+      return sendJson(res, 401, { error: "authentication required" });
+    }
+    if ((req.method || "GET").toUpperCase() !== "GET") {
+      return sendJson(res, 401, { error: "authentication required" });
+    }
+    try {
+      return await sendLoginPage(res);
+    } catch {
+      return sendJson(res, 503, { error: "login page unavailable" });
     }
   }
   if (url.pathname === "/api/stream" || url.pathname === "/api/live") {

@@ -261,3 +261,15 @@ export function NewsIcon(props: SVGProps<SVGSVGElement>) {
     </svg>
   );
 }
+
+/** Historical options datasets and stored backtest reports. */
+export function OptionsBacktestIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" width="16" height="16" {...props}>
+      <path
+        fill="currentColor"
+        d="M4 3h12l4 4v14H4zm2 2v14h12V8h-3V5zm2 10h2v2H8zm3-4h2v6h-2zm3-2h2v8h-2z"
+      />
+    </svg>
+  );
+}

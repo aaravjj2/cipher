@@ -20,9 +20,7 @@ DEFAULT_DB = Path(__file__).resolve().parents[1] / "data" / "gex_history.sqlite"
 
 
 def _connect(db_path: Path) -> sqlite3.Connection:
-    conn = sqlite3.connect(db_path)
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA synchronous=NORMAL")
+    conn = sqlite3.connect(f"file:{db_path.resolve()}?mode=ro", uri=True)
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -61,18 +59,21 @@ def list_snapshots(
 def get_snapshot_cells(
     db_path: Path,
     snapshot_id: int,
+    *,
+    include_unavailable: bool = False,
 ) -> list[dict]:
-    """Return all strike cells for a given snapshot."""
+    """Return observed strike cells; visual placeholders are opt-in."""
     if not db_path.is_file():
         return []
     with _connect(db_path) as db:
+        availability = "" if include_unavailable else " AND available = 1"
         rows = db.execute(
-            """
+            f"""
             SELECT expiration, strike, call_gex, put_gex, net_gex,
                    call_vex, put_vex, net_vex,
                    call_oi, put_oi, volume, listed, available
             FROM gex_strike_cells
-            WHERE snapshot_id = ?
+            WHERE snapshot_id = ?{availability}
             ORDER BY expiration, strike
             """,
             (snapshot_id,),

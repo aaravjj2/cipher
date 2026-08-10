@@ -64,7 +64,10 @@ def latest_tradier(db_path: Path) -> dict[str, Any]:
         rows = db.execute(
             "select symbol, updated_at from tradier_latest_quotes order by updated_at desc limit 5"
         ).fetchall()
-        count = db.execute("select count(*) from tradier_stream_events").fetchone()[0]
+        # IDs are assigned by the table's INTEGER PRIMARY KEY and collector run
+        # reconciliation verifies the sequence. COUNT(*) scanned the entire 47 GB
+        # event index every 15 minutes, delaying the post-market archive by minutes.
+        count = db.execute("select coalesce(max(id), 0) from tradier_stream_events").fetchone()[0]
     latest = max((parse_dt(row[1]) for row in rows), default=None)
     return {"ok": bool(latest), "latest": latest, "rows": rows, "events": count, "path": str(db_path)}
 
@@ -166,6 +169,7 @@ def run_post_market_maintenance(
         ],
     ]
     results: list[dict[str, Any]] = []
+    failed = False
     for command in commands:
         completed = subprocess.run(
             command,
@@ -183,26 +187,22 @@ def run_post_market_maintenance(
         }
         results.append(result)
         if completed.returncode != 0:
-            maintenance.update(
-                {
-                    "last_attempted_day": day_key,
-                    "last_attempted_at": utcnow(),
-                    "status": "failed",
-                    "results": results,
-                }
-            )
-            return {"status": "failed", "day": day_key, "results": results}
+            # Governance cataloguing and cold-data archival are independent safety
+            # boundaries. A registry conflict must alert, but it must not prevent
+            # verified archival and allow the capture disk to fill.
+            failed = True
 
     maintenance.update(
         {
             "last_attempted_day": day_key,
-            "last_successful_day": day_key,
             "last_attempted_at": utcnow(),
-            "status": "ok",
+            "status": "failed" if failed else "ok",
             "results": results,
         }
     )
-    return {"status": "ok", "day": day_key, "results": results}
+    if not failed:
+        maintenance["last_successful_day"] = day_key
+    return {"status": "failed" if failed else "ok", "day": day_key, "results": results}
 
 
 def parse_args() -> argparse.Namespace:

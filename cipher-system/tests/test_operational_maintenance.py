@@ -3,9 +3,11 @@ from __future__ import annotations
 import importlib.util
 import os
 import shutil
+import sqlite3
 import sys
 from datetime import datetime
 from pathlib import Path
+from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -140,3 +142,58 @@ def test_post_market_maintenance_due_logic_is_idempotent():
         now_et=datetime(2026, 7, 31, 16, 45, tzinfo=ny),
     )
     assert repeated["status"] == "already_completed"
+
+
+def test_tradier_health_row_watermark_does_not_scan_event_corpus(tmp_path):
+    module = _load_data_health_module()
+    database = tmp_path / "tradier.sqlite"
+    with sqlite3.connect(database) as db:
+        db.executescript(
+            """
+            create table tradier_latest_quotes(
+                symbol text primary key,
+                updated_at text not null
+            );
+            create table tradier_stream_events(
+                id integer primary key autoincrement,
+                captured_at text not null
+            );
+            insert into tradier_latest_quotes values
+                ('SPY', '2026-08-10T20:00:00+00:00');
+            insert into tradier_stream_events(captured_at) values
+                ('2026-08-10T20:00:00+00:00'),
+                ('2026-08-10T20:00:01+00:00');
+            """
+        )
+        plan = db.execute(
+            "explain query plan select coalesce(max(id), 0) from tradier_stream_events"
+        ).fetchall()
+
+    health = module.latest_tradier(database)
+
+    assert health["events"] == 2
+    assert not any("SCAN tradier_stream_events" in str(row) for row in plan)
+
+
+def test_post_market_archive_runs_even_when_governance_fails(monkeypatch):
+    module = _load_data_health_module()
+    calls = []
+
+    def fake_run(command, **_kwargs):
+        calls.append(command)
+        return SimpleNamespace(
+            returncode=1 if len(calls) == 1 else 0,
+            stdout="governance conflict" if len(calls) == 1 else '{"archived": 4}',
+        )
+
+    monkeypatch.setattr(module.subprocess, "run", fake_run)
+    state = {}
+    result = module.run_post_market_maintenance(
+        state,
+        now_et=datetime(2026, 8, 10, 16, 45, tzinfo=ZoneInfo("America/New_York")),
+    )
+
+    assert result["status"] == "failed"
+    assert len(calls) == 2
+    assert calls[1][1] == str(module.ARCHIVE_RUNNER)
+    assert "last_successful_day" not in state["maintenance"]

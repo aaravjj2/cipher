@@ -8,6 +8,7 @@ substituting the fallback for a measured value without saying so.
 from __future__ import annotations
 
 import sys
+import sqlite3
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -57,6 +58,57 @@ def test_lookup_reports_provenance_rather_than_blending():
     assert value == 2.0 and provenance == "assumed:symbol-not-captured"
 
     assert ec.equity_half_spread_bps("AAA", profile=None, fallback=2.0) == (2.0, "assumed:no-profile")
+
+
+def test_combined_corpus_aggregation_uses_one_sequential_scan():
+    conn = sqlite3.connect(":memory:")
+    conn.executescript(
+        """
+        CREATE TABLE tradier_stream_events (
+            captured_at TEXT, event_type TEXT, symbol TEXT, bid REAL, ask REAL,
+            asset_class TEXT, underlying TEXT, option_expiration TEXT
+        );
+        CREATE INDEX idx_events_type ON tradier_stream_events(event_type, captured_at);
+        INSERT INTO tradier_stream_events VALUES
+            ('2026-08-01T14:00:00Z', 'quote', 'SPY', 100, 100.02,
+             'underlying', NULL, NULL),
+            ('2026-08-01T14:00:00Z', 'quote', 'SPY260821C00100000', 2, 2.20,
+             'option', 'SPY', '2026-08-21');
+        """
+    )
+    statements = []
+    conn.set_trace_callback(statements.append)
+
+    equity, option = ec.build_profiles(conn)
+
+    assert equity["SPY"]["samples"] == 1
+    assert option["SPY|8-30"]["samples"] == 1
+    scans = [sql for sql in statements if "tradier_stream_events not indexed" in sql.lower()]
+    assert len(scans) == 1
+    conn.set_trace_callback(None)
+    assert equity == ec.build_equity_profile(conn)
+    assert option == ec.build_option_profile(conn)
+
+
+def test_capture_window_labels_sparse_days_and_missing_weekdays():
+    conn = sqlite3.connect(":memory:")
+    conn.execute("CREATE TABLE tradier_stream_events(captured_at TEXT)")
+    conn.executemany(
+        "INSERT INTO tradier_stream_events VALUES (?)",
+        [
+            ("2026-08-03T13:30:00Z",),
+            ("2026-08-05T13:30:00Z",),
+        ],
+    )
+
+    window = ec._capture_window(conn)
+
+    assert window["daily_event_counts"] == {
+        "2026-08-03": 1,
+        "2026-08-05": 1,
+    }
+    assert window["sparse_days"] == window["daily_event_counts"]
+    assert window["missing_weekdays"] == ["2026-08-04"]
 
 
 def test_engine_without_a_profile_is_unchanged():

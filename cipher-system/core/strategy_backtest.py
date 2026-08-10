@@ -24,16 +24,28 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Callable
 
-from signals import (
-    delta_gex_momentum,
-    vex_gex_divergence,
-    gex_vacuum,
-    gamma_squeeze_probability,
-    term_structure,
-    cluster_collision,
-    flow_gex_confluence,
-)
-from walk_forward import option_pnl_estimate, statistical_significance
+try:
+    from .signals import (
+        delta_gex_momentum,
+        vex_gex_divergence,
+        gex_vacuum,
+        gamma_squeeze_probability,
+        term_structure,
+        cluster_collision,
+        flow_gex_confluence,
+    )
+    from .walk_forward import option_pnl_estimate, statistical_significance
+except ImportError:  # Direct core/app.py execution keeps core/ on sys.path.
+    from signals import (
+        delta_gex_momentum,
+        vex_gex_divergence,
+        gex_vacuum,
+        gamma_squeeze_probability,
+        term_structure,
+        cluster_collision,
+        flow_gex_confluence,
+    )
+    from walk_forward import option_pnl_estimate, statistical_significance
 
 
 def _utcnow():

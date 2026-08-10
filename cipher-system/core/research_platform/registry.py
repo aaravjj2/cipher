@@ -735,6 +735,26 @@ class ResearchRegistry:
         payload = self._payload(reference)
         artifact_id = str(reference["artifact_id"])
         with self.connect() as db:
+            existing = db.execute(
+                "select sha256, size_bytes, content_type from artifacts where artifact_id = ?",
+                (artifact_id,),
+            ).fetchone()
+            if existing:
+                # Artifact identity is the content digest, not the spelling of its
+                # local path. Runtime unification moved data behind a symlink, so a
+                # reference to the same immutable bytes may legitimately acquire a
+                # different data_path/metadata_path. Reject content collisions while
+                # treating locator drift as idempotent registration.
+                same_content = (
+                    str(existing["sha256"]) == str(reference["sha256"])
+                    and int(existing["size_bytes"]) == int(reference["size_bytes"])
+                    and str(existing["content_type"]) == str(reference["content_type"])
+                )
+                if same_content:
+                    return False
+                raise RegistryConflictError(
+                    f"artifacts identifier {artifact_id} was reused with different content"
+                )
             return self._immutable_insert(
                 db,
                 table="artifacts",

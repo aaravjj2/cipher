@@ -101,6 +101,8 @@ def ensure_schema(db_path: Path) -> None:
                 on gex_snapshots(ticker, captured_at);
             create index if not exists idx_gex_cells_ticker_time_exp_strike
                 on gex_strike_cells(ticker, captured_at, expiration, strike);
+            create index if not exists idx_gex_cells_snapshot_exp_strike
+                on gex_strike_cells(snapshot_id, expiration, strike);
             """
         )
 

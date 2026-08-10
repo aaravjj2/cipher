@@ -14,6 +14,7 @@ import { ChartSaves as ChartSavesBase } from "@/components/panels/ChartSaves";
 import { SetupScanner as SetupScannerBase } from "@/components/panels/SetupScanner";
 import { Backtest as BacktestBase } from "@/components/panels/Backtest";
 import { StrategyCatalogPanel as StrategyCatalogBase } from "@/components/panels/StrategyCatalog";
+import { OptionsBacktest as OptionsBacktestBase } from "@/components/panels/OptionsBacktest";
 import { Settings as SettingsBase } from "@/components/panels/Settings";
 
 /**
@@ -42,6 +43,7 @@ const Holdings = memo(HoldingsBase);
 const AskCipher = memo(AskCipherBase);
 const Backtest = memo(BacktestBase);
 const StrategyCatalog = memo(StrategyCatalogBase);
+const OptionsBacktest = memo(OptionsBacktestBase);
 const Trident = memo(TridentBase);
 const ChartSaves = memo(ChartSavesBase);
 const SetupScanner = memo(SetupScannerBase);
@@ -61,6 +63,7 @@ export const PANEL_TITLES: Record<string, string> = {
   "Chart Saves": "CHART SAVES",
   "Setup Scanner": "SETUP SCANNER",
   Backtest: "SIGNAL BACKTEST",
+  "Options Backtest": "OPTIONS BACKTEST",
   Strategies: "STRATEGY CATALOG",
   Settings: "SETTINGS",
 };
@@ -119,6 +122,8 @@ export function PanelHost({
       return <Backtest ticker={ticker} />;
     case "Strategies":
       return <StrategyCatalog />;
+    case "Options Backtest":
+      return <OptionsBacktest />;
     case "Trident":
       return <Trident toolbarSlot={toolbarSlot} />;
     case "Chart Saves":

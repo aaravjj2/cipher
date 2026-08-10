@@ -88,6 +88,14 @@ class ResearchPlatformConfig:
         return config
 
     def validate(self) -> None:
+        # Production keeps mutable state outside the checkout and exposes it at
+        # ``cipher-system/data`` through a symlink.  Validate against both the
+        # repository and that one deliberate runtime mount: resolving a configured
+        # path and then requiring it to remain under only ``repository_root`` makes
+        # every production governance hook fail merely because the data directory
+        # is mounted safely outside Git.
+        data_root = (self.repository_root / "cipher-system" / "data").resolve()
+        allowed_roots = (self.repository_root.resolve(), data_root)
         for path in (
             self.registry_path,
             self.artifact_root,
@@ -96,10 +104,12 @@ class ResearchPlatformConfig:
             self.warehouse_export_root,
             self.inventory_output_path,
         ):
-            try:
-                path.relative_to(self.repository_root)
-            except ValueError as exc:
-                raise ValueError(f"governance path must remain under repository root: {path}") from exc
+            resolved = path.resolve()
+            if not any(resolved == root or resolved.is_relative_to(root) for root in allowed_roots):
+                raise ValueError(
+                    "governance path must remain under the repository or its "
+                    f"configured data mount: {resolved}"
+                )
         if self.cloud_writes_enabled and not self.gcs_bucket:
             raise ValueError("cloud writes require a configured gcs_bucket")
 

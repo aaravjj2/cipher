@@ -362,3 +362,33 @@ Two further limits, stated in the artifact itself: this is one vendor's consolid
 quote feed over a handful of days, and it excludes commissions and market impact. It
 bounds the modelled assumption against currently observable spreads. It is not a
 cost model for a backtest spanning years, and nothing here should be read as one.
+
+## 2026-08-10 refresh: the disjoint verdict no longer replicates
+
+The profile was rebuilt from the full current corpus before any pruning. It now
+contains 23 usable equity symbols, including all ten original and all ten disjoint
+names. The median across symbols is 1.375 bps per side versus the 2.0 bps fallback,
+but the single constant is still wrong in both directions (AMD 2.975, MU 2.775,
+SPY 0.125, QQQ 0.225). The capture spans 12 observed dates; July 22 and 23 are
+sparse ramp-up captures, while July 24 and 28 are missing collector weekdays, not
+market closures.
+
+The exact documented 15-minute / EOD-Focus configurations were rerun on the
+refreshed fixed window, 2025-08-11 through 2026-08-10. Assumed and measured costs
+used identical bars and signals:
+
+```
+set         cost         n     avg%  lift_pp  beats   control_best  base_avg
+original    assumed 2bp  157   0.0460  0.0997  True       -0.0035    -0.0537
+original    measured     157   0.0669  0.1003  True        0.0173    -0.0334
+disjoint    assumed 2bp  153   0.0106  0.0567  False       0.0131    -0.0461
+disjoint    measured     153   0.0140  0.0551  False       0.0165    -0.0411
+```
+
+The original set still clears the best matched random draw under both cost modes.
+The disjoint set clears neither. That is a changed verdict from the August 8 table,
+but it is **not caused by measured spreads**: the fresh assumed-2bp run also fails.
+The rolling data window changed, and the claimed disjoint replication did not
+survive that update. Measured cost improves absolute returns but does not change a
+verdict in this controlled rerun. Until the disjoint result replicates on a locked
+window, this remains an original-universe finding rather than out-of-sample evidence.

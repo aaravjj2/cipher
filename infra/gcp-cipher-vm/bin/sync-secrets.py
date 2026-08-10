@@ -24,6 +24,7 @@ SECRETS = {
     "ALPACA_ALGO_PLUS_SECRET": "cipher-alpaca-algo-plus-secret",
     "LSE_API_KEY": "cipher-lse-api-key",
     "TRADIER_ACCESS_TOKEN": "tradier-access-token",
+    "CIPHER_APP_PASSWORD_HASH": "cipher-app-password-hash",
 }
 
 

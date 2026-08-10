@@ -17,6 +17,7 @@ import {
   SettingsIcon,
   MenuIcon,
   NewsIcon,
+  OptionsBacktestIcon,
 } from "@/components/icons";
 
 type IconComponent = ComponentType<SVGProps<SVGSVGElement>>;
@@ -55,6 +56,7 @@ export const NAV_SECTIONS: NavSection[] = [
       { label: "Chart Saves", icon: BookmarkIcon, cipherX: true },
       { label: "Setup Scanner", icon: ScannerIcon, cipherX: true },
       { label: "Backtest", icon: ScannerIcon, cipherX: true },
+      { label: "Options Backtest", icon: OptionsBacktestIcon, cipherX: true },
       { label: "Strategies", icon: ScannerIcon, cipherX: true },
     ],
   },

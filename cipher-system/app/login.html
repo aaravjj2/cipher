@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Cipher — Sign in</title>
+  <style>
+    :root { color-scheme: dark; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #09090d; color: #ececf3; }
+    main { width: min(92vw, 380px); padding: 28px; border: 1px solid #292935; border-radius: 12px; background: #111117; }
+    h1 { margin: 0 0 8px; font: 700 20px/1.2 system-ui, sans-serif; letter-spacing: .08em; }
+    p { margin: 0 0 22px; color: #9999a8; font: 13px/1.5 system-ui, sans-serif; }
+    label { display: block; margin-bottom: 7px; color: #b7b7c5; font-size: 11px; text-transform: uppercase; letter-spacing: .12em; }
+    input, button { width: 100%; border-radius: 8px; font: inherit; }
+    input { padding: 11px; color: inherit; background: #09090d; border: 1px solid #343442; outline: none; }
+    input:focus { border-color: #9276ff; }
+    button { margin-top: 12px; padding: 11px; color: #c8baff; background: transparent; border: 1px solid #9276ff; cursor: pointer; }
+    button:disabled { opacity: .55; cursor: wait; }
+    #status { min-height: 18px; margin: 12px 0 0; color: #ff6b78; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>CIPHER</h1>
+    <p>Private, read-only options research terminal.</p>
+    <form id="login">
+      <label for="password">Password</label>
+      <input id="password" name="password" type="password" autocomplete="current-password" required autofocus>
+      <button type="submit">Sign in</button>
+      <div id="status" role="alert" aria-live="polite"></div>
+    </form>
+  </main>
+  <script>
+    const form = document.querySelector('#login');
+    const button = form.querySelector('button');
+    const status = document.querySelector('#status');
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      button.disabled = true;
+      status.textContent = '';
+      try {
+        const response = await fetch('/api/login', {
+          method: 'POST',
+          headers: { 'content-type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams(new FormData(form)),
+        });
+        if (!response.ok) throw new Error(response.status === 429 ? 'Too many attempts. Wait and try again.' : 'Incorrect password.');
+        location.replace('/');
+      } catch (error) {
+        status.textContent = error.message || 'Sign-in failed.';
+        button.disabled = false;
+        document.querySelector('#password').select();
+      }
+    });
+  </script>
+</body>
+</html>

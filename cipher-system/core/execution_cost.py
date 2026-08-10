@@ -32,7 +32,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -57,11 +57,24 @@ RTH_END_UTC_HOUR = 20     # 16:00 ET
 # this are still written, but carry `sufficient: false` so a consumer cannot use
 # one by accident.
 MIN_SAMPLES_FOR_USE = 1000
+# Below this corpus-wide event count, a capture date is a ramp-up/partial day,
+# not evidence for a full regular session.
+MIN_EVENTS_FOR_FULL_CAPTURE_DAY = 1_000_000
 
 
 def _connect(db_path: Path) -> sqlite3.Connection:
     """Open strictly read-only. The corpus cannot be re-created if damaged."""
-    return sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+    conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+    conn.execute("pragma query_only=on")
+    # This is a corpus scan, not a point lookup. SQLite's default tiny cache was
+    # observed issuing one 4 KiB read syscall per page against the 47 GB file.
+    # mmap lets the kernel perform readahead; the larger private cache and
+    # in-memory temp store keep the small grouped histogram off the data disk.
+    # These pragmas are connection-local and do not modify the source database.
+    conn.execute("pragma mmap_size=8589934592")
+    conn.execute("pragma cache_size=-262144")
+    conn.execute("pragma temp_store=memory")
+    return conn
 
 
 def _percentile_from_histogram(buckets: dict[int, int], width: float, pct: float) -> float:
@@ -95,11 +108,43 @@ def _summarise(buckets: dict[int, int], width: float) -> dict:
 
 
 def _capture_window(conn: sqlite3.Connection) -> dict:
-    row = conn.execute(
-        "select min(captured_at), max(captured_at), "
-        "count(distinct substr(captured_at,1,10)) from tradier_stream_events"
-    ).fetchone()
-    return {"first_event": row[0], "last_event": row[1], "distinct_days": row[2]}
+    rows = conn.execute(
+        "select substr(captured_at,1,10), min(captured_at), max(captured_at), count(*) "
+        "from tradier_stream_events group by 1 order by 1"
+    ).fetchall()
+    if not rows:
+        return {
+            "first_event": None,
+            "last_event": None,
+            "distinct_days": 0,
+            "daily_event_counts": {},
+            "sparse_days": {},
+            "missing_weekdays": [],
+        }
+
+    counts = {str(row[0]): int(row[3]) for row in rows}
+    first_day = date.fromisoformat(str(rows[0][0]))
+    last_day = date.fromisoformat(str(rows[-1][0]))
+    observed = set(counts)
+    missing_weekdays = []
+    cursor = first_day
+    while cursor <= last_day:
+        if cursor.weekday() < 5 and cursor.isoformat() not in observed:
+            missing_weekdays.append(cursor.isoformat())
+        cursor += timedelta(days=1)
+
+    return {
+        "first_event": rows[0][1],
+        "last_event": rows[-1][2],
+        "distinct_days": len(rows),
+        "daily_event_counts": counts,
+        "sparse_days": {
+            day: count
+            for day, count in counts.items()
+            if count < MIN_EVENTS_FOR_FULL_CAPTURE_DAY
+        },
+        "missing_weekdays": missing_weekdays,
+    }
 
 
 def build_equity_profile(conn: sqlite3.Connection, *, rth_only: bool = True) -> dict:
@@ -120,7 +165,10 @@ def build_equity_profile(conn: sqlite3.Connection, *, rth_only: bool = True) -> 
         select symbol,
                cast((ask-bid)/2.0/((ask+bid)/2.0)*10000.0/{EQUITY_BUCKET_BPS} as integer) bucket,
                count(*) n
-        from tradier_stream_events
+        -- Most rows are quotes. Following the event_type index back to the table
+        -- turns this corpus-wide aggregation into tens of millions of random
+        -- lookups. A sequential scan is exact, read-only, and materially faster.
+        from tradier_stream_events not indexed
         where {' and '.join(where)}
         group by 1, 2
     """
@@ -162,7 +210,9 @@ def build_option_profile(conn: sqlite3.Connection, *, rth_only: bool = True) -> 
                cast(julianday(option_expiration) - julianday(substr(captured_at,1,10)) as integer) dte,
                cast((ask-bid)/2.0/((ask+bid)/2.0)*100.0/{OPTION_BUCKET_PCT} as integer) bucket,
                count(*) n
-        from tradier_stream_events
+        -- See build_equity_profile: quote selectivity is too low for the
+        -- event_type index, so force bounded sequential I/O.
+        from tradier_stream_events not indexed
         where {' and '.join(where)}
         group by 1, 2, 3
     """
@@ -181,11 +231,80 @@ def build_option_profile(conn: sqlite3.Connection, *, rth_only: bool = True) -> 
     return cells
 
 
+def build_profiles(conn: sqlite3.Connection, *, rth_only: bool = True) -> tuple[dict, dict]:
+    """Build equity and option profiles in one corpus traversal.
+
+    The source table is dominated by a large raw JSON column. Scanning it once
+    and grouping both asset classes with their own formulas is exactly
+    equivalent to the two specialized queries above, but avoids reading the
+    47 GB table twice.
+    """
+    hour = "cast(substr(captured_at,12,2) as integer)"
+    where = [
+        "event_type='quote'",
+        "bid>0",
+        "ask>0",
+        "ask>=bid",
+        "(asset_class='underlying' or "
+        "(asset_class='option' and underlying is not null "
+        "and option_expiration is not null))",
+    ]
+    if rth_only:
+        where.append(f"{hour} >= {RTH_START_UTC_HOUR}")
+        where.append(f"{hour} < {RTH_END_UTC_HOUR}")
+
+    sql = f"""
+        select asset_class,
+               case when asset_class='underlying' then symbol else underlying end profile_key,
+               case when asset_class='option'
+                    then cast(julianday(option_expiration) -
+                              julianday(substr(captured_at,1,10)) as integer)
+                    else null end dte,
+               case when asset_class='underlying'
+                    then cast((ask-bid)/2.0/((ask+bid)/2.0)*10000.0/
+                              {EQUITY_BUCKET_BPS} as integer)
+                    else cast((ask-bid)/2.0/((ask+bid)/2.0)*100.0/
+                              {OPTION_BUCKET_PCT} as integer)
+                    end bucket,
+               count(*) n
+        from tradier_stream_events not indexed
+        where {' and '.join(where)}
+        group by 1, 2, 3, 4
+    """
+    equity_buckets: dict[str, dict[int, int]] = {}
+    option_buckets: dict[tuple[str, str], dict[int, int]] = {}
+    for asset_class, key, dte, bucket, n in conn.execute(sql):
+        if not key:
+            continue
+        if asset_class == "underlying":
+            equity_buckets.setdefault(key, {})[bucket] = n
+            continue
+        if dte is None or dte < 0:
+            continue
+        band = "0dte" if dte == 0 else "1-7" if dte <= 7 else "8-30" if dte <= 30 else "31+"
+        grouped = option_buckets.setdefault((key, band), {})
+        grouped[bucket] = grouped.get(bucket, 0) + n
+
+    equity = {}
+    for symbol, buckets in equity_buckets.items():
+        summary = _summarise(buckets, EQUITY_BUCKET_BPS)
+        summary["zero_spread_share"] = round(
+            buckets.get(0, 0) / max(summary["samples"], 1),
+            4,
+        )
+        equity[symbol] = summary
+
+    option = {
+        f"{underlying}|{band}": _summarise(buckets, OPTION_BUCKET_PCT)
+        for (underlying, band), buckets in option_buckets.items()
+    }
+    return equity, option
+
+
 def build_profile(db_path: Path = DEFAULT_DB, *, rth_only: bool = True) -> dict:
     with _connect(db_path) as conn:
         window = _capture_window(conn)
-        equity = build_equity_profile(conn, rth_only=rth_only)
-        option = build_option_profile(conn, rth_only=rth_only)
+        equity, option = build_profiles(conn, rth_only=rth_only)
 
     return {
         "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
@@ -202,7 +321,9 @@ def build_profile(db_path: Path = DEFAULT_DB, *, rth_only: bool = True) -> dict:
             "it is not a cost model for historical periods outside this window, and "
             "it excludes commissions and market impact. A backtest spanning years "
             "cannot be costed from it — it can only be told whether its assumption "
-            "is optimistic against currently observable spreads."
+            "is optimistic against currently observable spreads. Sparse capture "
+            "days and missing weekdays are reported explicitly; they are collector "
+            "coverage gaps, not market closures."
         ),
     }
 

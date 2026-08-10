@@ -115,6 +115,20 @@ def test_artifact_store_is_content_addressed_and_verified(tmp_path: Path):
     assert store.verify(first.sha256)
 
 
+def test_artifact_registration_tolerates_locator_drift_for_identical_content(tmp_path: Path):
+    registry = ResearchRegistry(tmp_path / "registry.sqlite")
+    reference = ArtifactStore(tmp_path / "first" / "artifacts").put_json({"same": "bytes"})
+    assert registry.register_artifact(reference.to_dict())
+
+    relocated = {
+        **reference.to_dict(),
+        "data_path": str(tmp_path / "mounted-runtime" / reference.sha256),
+        "metadata_path": str(tmp_path / "mounted-runtime" / f"{reference.sha256}.metadata.json"),
+    }
+
+    assert not registry.register_artifact(relocated)
+
+
 def test_registry_is_immutable_and_point_in_time(tmp_path: Path):
     registry = ResearchRegistry(tmp_path / "registry.sqlite")
     raw = raw_manifest()

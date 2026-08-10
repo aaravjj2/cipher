@@ -9,24 +9,27 @@ Uses gex_history.sqlite for historical GEX profiles.
 """
 from __future__ import annotations
 
-import sqlite3
 from collections import defaultdict
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
 
-from strategy_backtest import (
-    Trade,
-    compute_metrics,
-    rank_strategies,
-    STRATEGIES,
-)
-from gex_replay import (
-    list_tickers,
-    list_snapshots,
-    get_snapshot_cells,
-    _aggregate_by_strike,
-)
+try:
+    from .strategy_backtest import Trade, compute_metrics, rank_strategies, STRATEGIES
+    from .gex_replay import (
+        list_tickers,
+        list_snapshots,
+        get_snapshot_cells,
+        _aggregate_by_strike,
+    )
+except ImportError:  # Direct core/app.py execution keeps core/ on sys.path.
+    from strategy_backtest import Trade, compute_metrics, rank_strategies, STRATEGIES
+    from gex_replay import (
+        list_tickers,
+        list_snapshots,
+        get_snapshot_cells,
+        _aggregate_by_strike,
+    )
 
 
 DATA_DIR = Path(__file__).resolve().parents[1] / "data"
@@ -37,11 +40,14 @@ def _utcnow():
     return datetime.now(timezone.utc).isoformat()
 
 
-def _load_snapshot_profile(snapshot_id: int) -> tuple[list[dict], float | None]:
+def _load_snapshot_profile(
+    snapshot_id: int,
+    captured_spot: float | None,
+) -> tuple[list[dict], float | None]:
     """Load GEX profile from a historical snapshot.
 
-    Returns (profile, spot_estimate) where spot is estimated from the
-    strike with highest absolute GEX.
+    Returns the observed profile and the spot stored with that snapshot. Missing
+    spot remains unknown; it is never inferred from a GEX strike.
     """
     cells = get_snapshot_cells(GEX_HISTORY_DB, snapshot_id)
     if not cells:
@@ -52,16 +58,11 @@ def _load_snapshot_profile(snapshot_id: int) -> tuple[list[dict], float | None]:
     if not profile:
         return [], None
 
-    # Estimate spot from the strike with highest absolute GEX
-    # (dealers tend to pin price near max gamma)
     profile.sort(key=lambda p: p["strike"])
-    max_abs_strike = max(profile, key=lambda p: p.get("abs", 0))
-    spot_estimate = max_abs_strike["strike"]
-
-    return profile, spot_estimate
+    return profile, float(captured_spot) if captured_spot is not None else None
 
 
-def _load_snapshot_summary(profile: list[dict]) -> dict:
+def _load_snapshot_summary(profile: list[dict], snapshot: dict | None = None) -> dict:
     """Build a summary dict from profile (put_wall, call_wall, etc.)."""
     if not profile:
         return {}
@@ -73,8 +74,8 @@ def _load_snapshot_summary(profile: list[dict]) -> dict:
     min_put_gex = 0
 
     for p in profile:
-        call_gex = p.get("call", 0)
-        put_gex = p.get("put", 0)
+        call_gex = p.get("call_gex", 0)
+        put_gex = p.get("put_gex", 0)
         if call_gex > max_call_gex:
             max_call_gex = call_gex
             call_wall = p["strike"]
@@ -82,13 +83,21 @@ def _load_snapshot_summary(profile: list[dict]) -> dict:
             min_put_gex = put_gex
             put_wall = p["strike"]
 
+    captured = snapshot or {}
     return {
-        "put_wall_strike": put_wall,
-        "call_wall_strike": call_wall,
+        "put_wall_strike": captured.get("put_wall_strike") or put_wall,
+        "call_wall_strike": captured.get("call_wall_strike") or call_wall,
+        "gamma_flip_level": captured.get("gamma_flip_level"),
+        "global_max_strike": captured.get("global_max_strike"),
     }
 
 
-def _bars_from_date(bars_fn: Callable, ticker: str, start_date: str, limit: int = 60) -> list[dict]:
+def _bars_from_date(
+    bars_fn: Callable,
+    ticker: str,
+    start_date: str,
+    limit: int = 60,
+) -> list[dict]:
     """Fetch bars starting from a specific date.
 
     This is a wrapper that modifies the bars_fn call to start from
@@ -103,20 +112,20 @@ def _bars_from_date(bars_fn: Callable, ticker: str, start_date: str, limit: int 
     Returns:
         List of bar dicts from the start date forward
     """
-    # Parse the start date
+    # Reject malformed capture timestamps instead of silently substituting recent
+    # bars, which would attach future market outcomes to an unrelated snapshot.
     try:
         if "T" in start_date:
-            start_dt = datetime.fromisoformat(start_date.replace("Z", "+00:00"))
+            datetime.fromisoformat(start_date.replace("Z", "+00:00"))
         else:
-            start_dt = datetime.strptime(start_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
-    except (ValueError, AttributeError):
-        # Fallback: use recent bars
-        start_dt = datetime.now(timezone.utc) - timedelta(days=60)
+            datetime.strptime(start_date, "%Y-%m-%d")
+    except (ValueError, AttributeError) as exc:
+        raise ValueError(f"invalid snapshot capture timestamp: {start_date!r}") from exc
 
-    # Fetch bars - we need to call the underlying Alpaca API directly
-    # since bars_fn doesn't support start_date parameter
-    # For now, we'll fetch all bars and filter by date
-    result = bars_fn(ticker, "1d", limit + 30)  # Fetch extra to ensure we have enough
+    # The active bars function accepts an explicit start and returns the oldest
+    # bars in that window. Omitting it would fetch only the newest bars and make
+    # older snapshots silently ineligible for replay.
+    result = bars_fn(ticker, "1Day", limit + 30, start=start_date)
     bars = result.get("bars") or []
 
     # Filter bars to only those on or after start_date
@@ -171,7 +180,8 @@ def run_historical_backtest(
     for ticker in available_tickers:
         try:
             # Get all snapshots for this ticker
-            snapshots = list_snapshots(GEX_HISTORY_DB, ticker)
+            # This is a research replay, not the bounded recent-snapshots API.
+            snapshots = list_snapshots(GEX_HISTORY_DB, ticker, limit=100_000)
             if not snapshots:
                 continue
 
@@ -184,11 +194,11 @@ def run_historical_backtest(
 
                 try:
                     # Load profile from this snapshot
-                    profile, spot = _load_snapshot_profile(snapshot_id)
+                    profile, spot = _load_snapshot_profile(snapshot_id, snap.get("spot"))
                     if not profile or not spot:
                         continue
 
-                    summary = _load_snapshot_summary(profile)
+                    summary = _load_snapshot_summary(profile, snap)
 
                     # Fetch bars from this snapshot's date forward (no look-ahead!)
                     forward_bars = _bars_from_date(bars_fn, ticker, captured_at, bars_limit)
@@ -228,7 +238,10 @@ def run_historical_backtest(
                     # Get setups from scanner if available
                     setups = None
                     try:
-                        from scanner import _local_peaks, classify_setup
+                        try:
+                            from .scanner import _local_peaks, classify_setup
+                        except ImportError:
+                            from scanner import _local_peaks, classify_setup
                         peaks = _local_peaks(profile)
                         setups, _ = classify_setup(profile, peaks, summary, spot)
                     except Exception:
@@ -249,17 +262,9 @@ def run_historical_backtest(
                                 # Skip term_aligned for historical backtest
                                 continue
                             elif strat_name == "flow_confluence":
-                                # Infer flow from recent bar direction (using forward bars)
-                                if len(next_day_bars) >= 3:
-                                    recent = next_day_bars[:3]
-                                    up = sum(1 for b in recent if (b.get("close") or 0) > (b.get("open") or 0))
-                                    flow_dir = "bullish" if up >= 2 else "bearish"
-                                else:
-                                    flow_dir = None
-                                trades = strat_fn(
-                                    ticker, profile, spot, summary, next_day_bars,
-                                    flow_direction=flow_dir, **kwargs
-                                )
+                                # No point-in-time flow was captured with these snapshots.
+                                # Deriving it from forward outcome bars is look-ahead bias.
+                                continue
                             else:
                                 trades = strat_fn(ticker, profile, spot, summary, next_day_bars, **kwargs)
 
@@ -290,7 +295,10 @@ def run_historical_backtest(
     results = {}
     for strat_name, trades in all_trades.items():
         metrics = compute_metrics(trades)
-        from walk_forward import statistical_significance
+        try:
+            from .walk_forward import statistical_significance
+        except ImportError:
+            from walk_forward import statistical_significance
         sig = statistical_significance(
             metrics.get("wins", 0),
             metrics.get("n_trades", 0),

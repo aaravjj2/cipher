@@ -48,7 +48,15 @@ DETECTORS = ["EOD Focus", "Full Session"]
 MIN_TRADES = 25
 
 
-def run_one(symbols, label, timeframe, detector, years=1.0):
+def run_one(
+    symbols,
+    label,
+    timeframe,
+    detector,
+    years=1.0,
+    *,
+    cost_profile=None,
+):
     bars = load_bars(symbols, timeframe, years)
     if not bars:
         return {"error": "no bars", "label": label, "timeframe": timeframe,
@@ -59,6 +67,7 @@ def run_one(symbols, label, timeframe, detector, years=1.0):
         lookback_bars=6,
         entry_every=12,
         control_repeats=20,
+        cost_profile=cost_profile,
     )
     if "error" in payload:
         return {"error": payload["error"], "label": label, "timeframe": timeframe,

@@ -41,6 +41,7 @@ import holdings
 import ask_cipher
 import chat_jobs
 import workspace_layouts
+import options_backtest_catalog
 from company_research_engine import yahoo_rss_headlines
 from zoneinfo import ZoneInfo
 
@@ -1054,73 +1055,6 @@ def night_vision(ticker, feed, depth, expiration_count, force=False):
     return payload
 
 
-def _local_bars(ticker, timeframe="1Day", limit=250):
-    """Load bars from local historical data SQLite if available.
-    
-    Filters by timeframe:
-    - Daily bars: timestamps at 00:00:00 or 04:00:00 UTC
-    - Intraday bars: timestamps with intraday times (5Min, 1Min, etc.)
-    """
-    import sqlite3
-    db_path = ROOT / "data" / "historical_bars.sqlite"
-    if not db_path.exists():
-        return bars(ticker, timeframe, limit)
-    
-    # Determine if intraday or daily
-    tf_lower = timeframe.lower()
-    is_intraday = tf_lower in ("1min", "5min", "15min", "1hour", "4hour", "1m", "5m", "15m", "1h", "4h")
-    
-    try:
-        conn = sqlite3.connect(str(db_path))
-        
-        if is_intraday:
-            # Intraday bars: exclude midnight/4am timestamps (daily bars)
-            query = """
-                SELECT timestamp, open, high, low, close, volume, vwap, trades
-                FROM historical_bars
-                WHERE symbol = ?
-                  AND timestamp NOT LIKE '%T00:00:00%'
-                  AND timestamp NOT LIKE '%T04:00:00%'
-                ORDER BY timestamp DESC
-                LIMIT ?
-            """
-        else:
-            # Daily bars: only midnight/4am timestamps
-            query = """
-                SELECT timestamp, open, high, low, close, volume, vwap, trades
-                FROM historical_bars
-                WHERE symbol = ?
-                  AND (timestamp LIKE '%T00:00:00%' OR timestamp LIKE '%T04:00:00%')
-                ORDER BY timestamp DESC
-                LIMIT ?
-            """
-        
-        rows = conn.execute(query, (ticker.upper(), limit)).fetchall()
-        conn.close()
-        
-        if not rows:
-            return bars(ticker, timeframe, limit)
-        
-        # Reverse to chronological order
-        rows.reverse()
-        
-        bar_list = [
-            {
-                "time": row[0],
-                "open": row[1],
-                "high": row[2],
-                "low": row[3],
-                "close": row[4],
-                "volume": row[5],
-            }
-            for row in rows
-        ]
-        
-        return {"bars": bar_list}
-    except Exception:
-        return bars(ticker, timeframe, limit)
-
-
 def bars(ticker, timeframe, limit=200, start=None):
     allowed = {
         "1m": "1Min",
@@ -1740,6 +1674,20 @@ class Handler(BaseHTTPRequestHandler):
                 data = evidence_status.status()
             elif parsed.path == "/api/research-status":
                 data = research_status()
+            elif parsed.path == "/api/options-backtest":
+                action = (pget("action") or "list").lower()
+                if action == "list":
+                    data = options_backtest_catalog.catalog(
+                        refresh=(pget("refresh") or "").lower() in {"1", "true", "yes"}
+                    )
+                elif action == "report":
+                    data = options_backtest_catalog.report_payload(pget("id") or "")
+                    if data is None:
+                        self.send_json(404, {"error": "Unknown options report"})
+                        return
+                else:
+                    self.send_json(400, {"error": f"Unknown options-backtest action: {action}"})
+                    return
             elif parsed.path == "/api/quote":
                 data = quote(ticker)
             elif parsed.path == "/debug/caches":
@@ -2212,6 +2160,7 @@ class Handler(BaseHTTPRequestHandler):
                             "/api/workspace-layouts",
                             "/api/ask",
                             "/api/research-status",
+                            "/api/options-backtest",
                             "/api/evidence-status",
                             "/api/signal-backtest",
                             "/api/matrix",

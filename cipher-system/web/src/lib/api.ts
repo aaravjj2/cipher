@@ -1027,6 +1027,68 @@ export function fetchNews(
   );
 }
 
+// Historical options research catalog — stored manifests and completed report
+// artifacts only. The API never starts a lab run from a browser request.
+
+export type OptionsBacktestDataset = {
+  id: string;
+  relative_path: string;
+  manifest_type: "download_manifest" | "eod_archive_manifest";
+  provider_dataset_id: string | null;
+  status: string | null;
+  database_present: boolean;
+  database_size_bytes: number | null;
+  database_sha256: string | null;
+  coverage: Record<string, unknown>;
+  capabilities: Record<string, unknown>;
+  caveats: string[];
+  research_grade?: boolean;
+};
+
+export type OptionsBacktestReport = {
+  id: string;
+  relative_path: string;
+  size_bytes: number;
+  modified_at: string;
+  dataset_id: string | null;
+};
+
+export type OptionsBacktestCatalog = {
+  as_of: string;
+  read_only: true;
+  datasets: OptionsBacktestDataset[];
+  reports: OptionsBacktestReport[];
+  errors: Array<{ relative_path: string; error: string }>;
+  counts: { datasets: number; reports: number; manifest_errors: number };
+  caveat: string;
+};
+
+export type OptionsBacktestReportPayload = {
+  report: OptionsBacktestReport;
+  result: Record<string, unknown>;
+  read_only: true;
+};
+
+export function fetchOptionsBacktestCatalog(
+  signal?: AbortSignal,
+  refresh = false
+): Promise<OptionsBacktestCatalog> {
+  return getJson<OptionsBacktestCatalog>(
+    `/api/options-backtest?action=list${refresh ? "&refresh=true" : ""}`,
+    signal
+  );
+}
+
+export function fetchOptionsBacktestReport(
+  reportId: string,
+  signal?: AbortSignal
+): Promise<OptionsBacktestReportPayload> {
+  return getJson<OptionsBacktestReportPayload>(
+    `/api/options-backtest?action=report&id=${encodeURIComponent(reportId)}`,
+    signal
+  );
+}
+
 // Workspace layouts — core/workspace_layouts.py. The grid blob is dockview's own
 // serialized state and is stored opaquely: the backend validates the envelope (name,
 // size) and never interprets the grid, so the shape below stays deliberately loose.
