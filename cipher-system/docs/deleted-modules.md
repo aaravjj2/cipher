@@ -84,3 +84,21 @@ compatibility in the code they launch is incoherent.
 
 Kept. If they are ever retired it should be because the Windows capture path has
 been replaced, not because a Linux shell cannot run them.
+
+---
+
+## The AMZN setup pair — 2 modules, 1,689 lines
+
+Deleted 2026-08-10. Zero importers outside the pair itself, and no importer of
+either from `core/`, `scripts/`, `tests/`, `app/` or `web/src`. Verified by
+whole-word search over `.py`, `.sh`, `.json`, `.mjs`, `.ts`, `.tsx` and `.ps1`.
+
+| module | lines | what it was |
+|---|---|---|
+| `amzn_setup_strategy_lab.py` | 1,010 | first-pass AMZN setup research: daily/intraday signal formation against Alpaca SIP bars, next-bar-open entries, several target/stop and structure variants |
+| `amzn_setup_refinement_lab.py` | 679 | second-pass validation of the first module's suggested refinements (EMA reclaim confirmation, MA pullbacks, tighter opening-range stops, VWAP confirmation, retests, failed-breakout fades) |
+
+`amzn_setup_refinement_lab` imported from `amzn_setup_strategy_lab`; nothing
+imported either. Both declared a `DEFAULT_OUTPUT` under
+`data/historical_equities/` and neither path exists on disk — they were never
+run. **Nothing is lost, because nothing was produced.**
