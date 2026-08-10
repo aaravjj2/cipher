@@ -174,6 +174,84 @@ def governance_status():
     }
 
 
+def _open_prospective_registrations() -> list[dict]:
+    """Prospective tests not yet closed — registered, running, or awaiting locked
+    analysis. PASSED/FAILED/CLOSED are settled, not open commitments."""
+    registry_path = ROOT / "data" / "governance" / "research_registry.sqlite"
+    if not registry_path.exists():
+        return []
+    uri = f"file:{registry_path.as_posix()}?mode=ro"
+    try:
+        with sqlite3.connect(uri, uri=True, timeout=5) as db:
+            db.row_factory = sqlite3.Row
+            rows = db.execute(
+                "select prospective_test_id, strategy_id, minimum_sample, scored_count, "
+                "status, created_at, updated_at from prospective_tests "
+                "where status not in ('PASSED', 'FAILED', 'CLOSED') "
+                "order by created_at desc"
+            ).fetchall()
+            names = {
+                str(r["strategy_id"]): r["name"]
+                for r in db.execute("select strategy_id, name from strategies").fetchall()
+            }
+    except sqlite3.Error:
+        return []
+    return [
+        {
+            "prospective_test_id": row["prospective_test_id"],
+            "strategy_id": row["strategy_id"],
+            "name": names.get(row["strategy_id"], row["strategy_id"]),
+            "status": row["status"],
+            "minimum_sample": row["minimum_sample"],
+            "scored_count": row["scored_count"],
+            "progress_pct": (
+                round(min(100.0, 100.0 * row["scored_count"] / row["minimum_sample"]), 1)
+                if row["minimum_sample"] else None
+            ),
+            "created_at": row["created_at"],
+            "updated_at": row["updated_at"],
+        }
+        for row in rows
+    ]
+
+
+def _open_shadow_positions() -> list[dict]:
+    """Open SHADOW_OPEN rows from the paper executor. No live orders are ever
+    placed; SHADOW is this system's default and only currently-used mode."""
+    try:
+        import paper_executor.config as pe_config
+        db_path = pe_config.ExecutorConfig().database_path
+    except Exception:
+        return []
+    if not Path(db_path).exists():
+        return []
+    uri = f"file:{Path(db_path).as_posix()}?mode=ro"
+    try:
+        with sqlite3.connect(uri, uri=True, timeout=5) as db:
+            db.row_factory = sqlite3.Row
+            rows = db.execute(
+                "select id, ticker, direction, symbol, quantity, entry_price, "
+                "opened_at, status from paper_positions where status = 'SHADOW_OPEN' "
+                "order by opened_at desc"
+            ).fetchall()
+    except sqlite3.Error:
+        return []
+    return [dict(row) for row in rows]
+
+
+def standing_status():
+    """What is currently open and how far each accrual clock has run — no P&L,
+    no headline number. Every row here is read straight from the table the rest
+    of the system already writes; nothing is computed for display."""
+    return {
+        "as_of": utcnow(),
+        "read_only": True,
+        "prospective_registrations": _open_prospective_registrations(),
+        "shadow_positions": _open_shadow_positions(),
+        "clocks": evidence_status.status().get("clocks", []),
+    }
+
+
 def research_status():
     """Return the consolidated, read-only end-state and recent event evidence."""
 
@@ -1530,6 +1608,8 @@ class Handler(BaseHTTPRequestHandler):
                 }
             elif parsed.path == "/api/governance":
                 data = governance_status()
+            elif parsed.path == "/api/standing":
+                data = standing_status()
             elif parsed.path == "/api/signal-backtest":
                 action = (pget("action") or "status").lower()
                 if action == "start":

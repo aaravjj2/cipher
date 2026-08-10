@@ -817,6 +817,42 @@ export function fetchEvidenceStatus(signal?: AbortSignal): Promise<EvidenceStatu
   return getJson<EvidenceStatus>("/api/evidence-status", signal);
 }
 
+export type StandingProspectiveRegistration = {
+  prospective_test_id: string;
+  strategy_id: string;
+  name: string;
+  status: string;
+  minimum_sample: number;
+  scored_count: number;
+  progress_pct: number | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type StandingShadowPosition = {
+  id: string;
+  ticker: string;
+  direction: string;
+  symbol: string;
+  quantity: number;
+  entry_price: number;
+  opened_at: string;
+  status: string;
+};
+
+export type StandingStatus = {
+  as_of: string;
+  read_only: boolean;
+  prospective_registrations: StandingProspectiveRegistration[];
+  shadow_positions: StandingShadowPosition[];
+  clocks: EvidenceClock[];
+};
+
+/** Open commitments (prospective registrations, shadow positions) and accrual clocks. */
+export function fetchStanding(signal?: AbortSignal): Promise<StandingStatus> {
+  return getJson<StandingStatus>("/api/standing", signal);
+}
+
 export type RealScanUniverse = {
   count: number;
   /** Optionable tickers, ordered by the backend's own liquidity/size ranking. */

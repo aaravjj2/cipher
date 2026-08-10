@@ -7,7 +7,7 @@ import { StrikeMatrix as StrikeMatrixBase } from "@/components/panels/StrikeMatr
 import { NightVision as NightVisionBase } from "@/components/panels/NightVision";
 import { Spyglass as SpyglassBase, SpyglassHeaderTabs, type SpyglassTab } from "@/components/panels/Spyglass";
 import { Watchlists as WatchlistsBase } from "@/components/panels/Watchlists";
-import { Journal as JournalBase } from "@/components/panels/Journal";
+import { Standing as StandingBase } from "@/components/panels/Standing";
 import { Trident as TridentBase } from "@/components/panels/Trident";
 import { ChartSaves as ChartSavesBase } from "@/components/panels/ChartSaves";
 import { SetupScanner as SetupScannerBase } from "@/components/panels/SetupScanner";
@@ -27,7 +27,7 @@ const StrikeMatrix = memo(StrikeMatrixBase);
 const NightVision = memo(NightVisionBase);
 const Spyglass = memo(SpyglassBase);
 const Watchlists = memo(WatchlistsBase);
-const Journal = memo(JournalBase);
+const Standing = memo(StandingBase);
 const Backtest = memo(BacktestBase);
 const StrategyCatalog = memo(StrategyCatalogBase);
 const Trident = memo(TridentBase);
@@ -42,7 +42,7 @@ const PANEL_TITLES: Record<string, string> = {
   "Night Vision": "NIGHT VISION",
   Spyglass: "SPYGLASS",
   "My Watchlists": "MY WATCHLISTS",
-  Journal: "TRADING JOURNAL",
+  Standing: "STANDING",
   Trident: "TRIDENT",
   "Chart Saves": "CHART SAVES",
   "Setup Scanner": "SETUP SCANNER",
@@ -152,7 +152,7 @@ export default function Home() {
             <Spyglass ticker={ticker} activeTab={spyglassTab} onActiveTabChange={setSpyglassTab} />
           )}
           {activePanel === "My Watchlists" && <Watchlists />}
-          {activePanel === "Journal" && <Journal />}
+          {activePanel === "Standing" && <Standing />}
           {activePanel === "Backtest" && <Backtest ticker={ticker} />}
           {activePanel === "Strategies" && <StrategyCatalog />}
           {activePanel === "Trident" && <Trident toolbarSlot={toolbarSlot} />}

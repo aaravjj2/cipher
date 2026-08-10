@@ -37,7 +37,7 @@ const NAV_SECTIONS: NavSection[] = [
       { label: "Night Vision", icon: NightVisionIcon },
       { label: "Spyglass", icon: SearchIcon },
       { label: "My Watchlists", icon: StarIcon },
-      { label: "Journal", icon: JournalIcon },
+      { label: "Standing", icon: JournalIcon },
     ],
   },
   {
