@@ -85,7 +85,7 @@ async function sendLoginPage(res, status = 200) {
     "content-type": "text/html; charset=utf-8",
     "cache-control": "no-store",
     "x-content-type-options": "nosniff",
-    "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
+    "content-security-policy": "default-src 'none'; connect-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
   });
   res.end(page);
 }

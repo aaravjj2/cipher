@@ -101,6 +101,10 @@ test("server exposes health but no market data without a session", async (t) => 
   assert.equal(unauthenticated.status, 401);
   assert.equal(quoteRequests, 0);
 
+  const loginPage = await fetch(`http://127.0.0.1:${appPort}/`);
+  assert.equal(loginPage.status, 200);
+  assert.match(loginPage.headers.get("content-security-policy"), /connect-src 'self'/);
+
   const health = await fetch(`http://127.0.0.1:${appPort}/api/health`);
   assert.equal(health.status, 200);
 

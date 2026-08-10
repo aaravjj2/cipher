@@ -19,6 +19,17 @@ fi
 
 echo "▶ Installing Cipher operational scripts..."
 
+if ! command -v cloudflared >/dev/null 2>&1; then
+  echo "▶ Installing Cloudflare Tunnel connector..."
+  curl -fsSL https://pkg.cloudflare.com/cloudflare-main.gpg -o /tmp/cloudflare-main.gpg
+  sudo install -d -m 0755 /usr/share/keyrings
+  sudo install -m 0644 /tmp/cloudflare-main.gpg /usr/share/keyrings/cloudflare-main.gpg
+  echo 'deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared any main' \
+    | sudo tee /etc/apt/sources.list.d/cloudflared.list >/dev/null
+  sudo apt-get update -qq
+  sudo apt-get install -y cloudflared
+fi
+
 # Stop the managed collector and terminate the obsolete detached wrapper that
 # previously competed for the same stream-capture lock. Exact command patterns
 # avoid touching unrelated Python or shell processes.
@@ -135,6 +146,19 @@ sleep 2
 for svc in cipher-core cipher-web cipher-devspace cipher-tradier cipher-gex; do
   sudo systemctl restart "$svc" || echo "WARN: $svc failed to start" >&2
 done
+
+# External routing is last. A tunnel token alone is insufficient: the fallback
+# password gate must be configured and the newly restarted web process must be
+# healthy before cloudflared is allowed to connect.
+if [[ -s /etc/cipher/cloudflare-tunnel.token ]] \
+   && sudo grep -q '^CIPHER_APP_PASSWORD_HASH=' /etc/cipher/cipher.env \
+   && systemctl is-active --quiet cipher-web.service; then
+  sudo systemctl enable --now cipher-cloudflared.service
+else
+  sudo systemctl disable --now cipher-cloudflared.service 2>/dev/null || true
+  echo "Cloudflare connector disabled: tunnel token, password gate, or web service is not ready."
+fi
+
 sudo systemctl start cipher-backup.timer
 sudo systemctl start cipher-governance-catalog.timer
 
@@ -145,5 +169,4 @@ echo "════════════════════════�
 echo ""
 systemctl --no-pager --plain --type=service --state=running | grep -E 'cipher-' || true
 echo ""
-echo "Tailscale still requires a fresh machine authorization."
-echo "Run:  sudo tailscale up --hostname cipher-main --ssh"
+echo "Cloudflare is the preferred external-access path; see infra/gcp-cipher-vm/CLOUDFLARE.md."

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Materialize Cipher runtime secrets into a root-owned environment file.
+"""Materialize Cipher runtime secrets into root-owned runtime files.
 
 Secrets are fetched from Google Secret Manager and written to a 0600
 file that systemd services load via EnvironmentFile=.  Missing secrets
@@ -11,12 +11,14 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
-
-from google.cloud import secretmanager
+from typing import Any
 
 
 PROJECT_ID = os.environ.get("GOOGLE_CLOUD_PROJECT") or os.environ.get("GCP_PROJECT")
 OUTPUT = Path(os.environ.get("CIPHER_ENV_OUTPUT", "/etc/cipher/cipher.env"))
+CLOUDFLARE_TOKEN_OUTPUT = Path(
+    os.environ.get("CIPHER_CLOUDFLARE_TOKEN_OUTPUT", "/etc/cipher/cloudflare-tunnel.token")
+)
 SECRETS = {
     "ALPACA_ALGO_KEY": "cipher-alpaca-algo-key",
     "ALPACA_ALGO_SECRET": "cipher-alpaca-algo-secret",
@@ -28,7 +30,7 @@ SECRETS = {
 }
 
 
-def access(client: secretmanager.SecretManagerServiceClient, secret: str) -> str | None:
+def access(client: Any, secret: str) -> str | None:
     assert PROJECT_ID
     name = f"projects/{PROJECT_ID}/secrets/{secret}/versions/latest"
     try:
@@ -43,7 +45,18 @@ def quote(value: str) -> str:
     return "'" + value.replace("'", "'\"'\"'") + "'"
 
 
+def write_private_file(path: Path, value: str) -> None:
+    """Atomically replace a secret file without opening a permissive mode window."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f".{path.name}.tmp")
+    temporary.write_text(value, encoding="utf-8")
+    os.chmod(temporary, 0o600)
+    temporary.replace(path)
+
+
 def main() -> int:
+    from google.cloud import secretmanager
+
     if not PROJECT_ID:
         raise SystemExit("GOOGLE_CLOUD_PROJECT or GCP_PROJECT is required")
     client = secretmanager.SecretManagerServiceClient()
@@ -63,12 +76,17 @@ def main() -> int:
             "CIPHER_CORE_URL=http://127.0.0.1:8282",
         ]
     )
-    OUTPUT.parent.mkdir(parents=True, exist_ok=True)
-    temporary = OUTPUT.with_suffix(".tmp")
-    temporary.write_text("\n".join(values) + "\n", encoding="utf-8")
-    os.chmod(temporary, 0o600)
-    temporary.replace(OUTPUT)
+    write_private_file(OUTPUT, "\n".join(values) + "\n")
     print(f"  wrote {len(values)} variables to {OUTPUT}")
+
+    tunnel_token = access(client, "cipher-cloudflare-tunnel-token")
+    if tunnel_token:
+        # cloudflared consumes this through systemd LoadCredential; it never appears
+        # in ExecStart, process arguments, the shared Cipher environment, or logs.
+        write_private_file(CLOUDFLARE_TOKEN_OUTPUT, tunnel_token + "\n")
+        print(f"  wrote Cloudflare tunnel credential to {CLOUDFLARE_TOKEN_OUTPUT}")
+    else:
+        print("  Cloudflare tunnel credential unavailable; connector remains disabled")
     return 0
 
 

@@ -1,8 +1,9 @@
 # Cipher Always-On Google Cloud VM
 
 This deployment replaces WSL2 as the machine that runs Cipher continuously.
-The VM is private by default: SSH is permitted only through Google IAP, while
-DevSpace and the Cipher UI are exposed later through a fresh Tailscale device.
+The VM is private by default: SSH is permitted only through Google IAP. Cipher's
+preferred external path is an outbound-only Cloudflare Tunnel protected by
+Cloudflare Access; no inbound web port is opened on the VM.
 
 ## Defaults
 
@@ -25,16 +26,17 @@ gcloud compute ssh aarav@cipher-main \
   --command '/home/aarav/Aarav/cipher/infra/gcp-cipher-vm/configure-vm.sh'
 ```
 
-Then authorize the VM as a new Tailscale device and expose the two services:
+Then configure the Cloudflare account, hostname, Access application, and tunnel
+token as described in [`CLOUDFLARE.md`](CLOUDFLARE.md). Re-run configuration to
+materialize the token and start the connector:
 
 ```bash
-gcloud compute ssh aarav@cipher-main \
-  --zone us-central1-a --tunnel-through-iap \
-  --command '/home/aarav/Aarav/cipher/infra/gcp-cipher-vm/enable-tailscale.sh'
+gcloud compute ssh aarav@cipher-main --zone us-central1-a --tunnel-through-iap \
+  --command '/home/aarav/Aarav/cipher/infra/gcp-cipher-vm/configure-vm.sh'
 ```
 
-The Tailscale authorization step is intentionally not automated by copying the
-WSL node key. Each machine must have its own identity.
+The connector remains disabled when the token secret is absent. Cipher must not
+be published with a Cloudflare Quick Tunnel or without an Access policy.
 
 ## Automatically managed services
 
@@ -45,6 +47,7 @@ WSL node key. Each machine must have its own identity.
 - `cipher-gex.service`
 - `cipher-backup.timer`
 - `cipher-governance-catalog.timer`
+- `cipher-cloudflared.service` (conditional on a tunnel-token secret)
 
 The Tradier and GEX loops sleep outside their configured market-hour windows.
 The governance catalog runs after each weekday market session and registers
@@ -59,6 +62,7 @@ a fresh authenticated browser session and its local WebBridge/extension.
 gcloud compute ssh aarav@cipher-main --zone us-central1-a --tunnel-through-iap
 sudo systemctl status cipher-core cipher-web cipher-devspace cipher-tradier cipher-gex
 sudo systemctl status cipher-governance-catalog.timer
+sudo systemctl status cipher-cloudflared.service
 sudo systemctl start cipher-governance-catalog.service
 sudo journalctl -u cipher-core -n 100 --no-pager
 sudo journalctl -u cipher-tradier -n 100 --no-pager

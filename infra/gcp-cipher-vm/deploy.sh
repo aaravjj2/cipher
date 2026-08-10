@@ -118,6 +118,7 @@ sync_secret ALPACA_ALGO_PLUS_KEY cipher-alpaca-algo-plus-key
 sync_secret ALPACA_ALGO_PLUS_SECRET cipher-alpaca-algo-plus-secret
 sync_secret LSE_API_KEY cipher-lse-api-key
 sync_secret CIPHER_APP_PASSWORD_HASH cipher-app-password-hash
+sync_secret CLOUDFLARE_TUNNEL_TOKEN cipher-cloudflare-tunnel-token
 
 if gcloud secrets describe tradier-access-token >/dev/null 2>&1; then
   gcloud secrets add-iam-policy-binding tradier-access-token \

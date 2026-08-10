@@ -1,0 +1,40 @@
+[Unit]
+Description=Cipher outbound-only Cloudflare Tunnel connector
+Wants=network-online.target
+After=network-online.target cipher-web.service
+Requires=cipher-web.service
+ConditionPathExists=/etc/cipher/cloudflare-tunnel.token
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+DynamicUser=yes
+LoadCredential=tunnel-token:/etc/cipher/cloudflare-tunnel.token
+ExecStart=/usr/bin/cloudflared tunnel --no-autoupdate --metrics 127.0.0.1:20241 run --token-file %d/tunnel-token
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateDevices=true
+PrivateTmp=true
+ProtectClock=true
+ProtectControlGroups=true
+ProtectHome=true
+ProtectHostname=true
+ProtectKernelLogs=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+ProtectSystem=strict
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=true
+RestrictRealtime=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+SystemCallArchitectures=native
+UMask=0077
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=cipher-cloudflared
+
+[Install]
+WantedBy=multi-user.target
