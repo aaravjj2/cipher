@@ -16,6 +16,7 @@ import {
   ScannerIcon,
   SettingsIcon,
   MenuIcon,
+  NewsIcon,
 } from "@/components/icons";
 
 type IconComponent = ComponentType<SVGProps<SVGSVGElement>>;
@@ -40,6 +41,7 @@ export const NAV_SECTIONS: NavSection[] = [
       { label: "Strike Matrix", icon: GridIcon },
       { label: "Night Vision", icon: NightVisionIcon },
       { label: "Spyglass", icon: SearchIcon },
+      { label: "News", icon: NewsIcon },
       { label: "My Watchlists", icon: StarIcon },
       { label: "Standing", icon: JournalIcon },
       { label: "Holdings", icon: PortfolioIcon },

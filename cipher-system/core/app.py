@@ -41,6 +41,7 @@ import holdings
 import ask_cipher
 import chat_jobs
 import workspace_layouts
+from company_research_engine import yahoo_rss_headlines
 from zoneinfo import ZoneInfo
 
 # Exchange local time. Session boundaries and trading dates are ET facts, not UTC
@@ -253,6 +254,32 @@ def standing_status():
         "prospective_registrations": _open_prospective_registrations(),
         "shadow_positions": _open_shadow_positions(),
         "clocks": evidence_status.status().get("clocks", []),
+    }
+
+
+NEWS_CAVEAT = (
+    "Headlines only, straight from Yahoo Finance's public RSS feed for this symbol. "
+    "Cipher does not score, rank, summarize, or derive any signal from them, and "
+    "nothing here feeds a strategy or verdict. Relevance is Yahoo's — the feed mixes "
+    "in general-market stories alongside symbol-specific ones. Publish times are as "
+    "reported by the feed."
+)
+
+
+def news_headlines(ticker: str, limit: int = 15) -> dict:
+    """Public-RSS headlines for one symbol, wrapped in the same envelope every other
+    read-only route uses. Deliberately a thin pass-through of the already-shipped
+    yahoo_rss_headlines() — no sentiment model, no ML scoring, no alerting. Those
+    would each be a number Cipher would be asserting rather than reading, which is
+    exactly what this codebase's no-fabrication rule exists to prevent."""
+    limit = max(1, min(int(limit), 50))
+    return {
+        "as_of": utcnow(),
+        "read_only": True,
+        "ticker": str(ticker or "").strip().upper(),
+        "source": "Yahoo Finance RSS",
+        "caveat": NEWS_CAVEAT,
+        "headlines": yahoo_rss_headlines(str(ticker or "").strip().upper(), limit),
     }
 
 
@@ -1746,6 +1773,8 @@ class Handler(BaseHTTPRequestHandler):
                     quote_fn=quote, bars_fn=bars,
                     include_benchmark=(pget("benchmark") or "").lower() in {"1", "true", "yes"},
                 )
+            elif parsed.path == "/api/news":
+                data = news_headlines(ticker, limit=int(pget("limit", "15")))
             elif parsed.path == "/api/workspace-layouts":
                 name = pget("name")
                 data = (
@@ -2152,6 +2181,7 @@ class Handler(BaseHTTPRequestHandler):
                             "/api/governance",
                             "/api/standing",
                             "/api/holdings",
+                            "/api/news",
                             "/api/workspace-layouts",
                             "/api/ask",
                             "/api/research-status",

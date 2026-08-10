@@ -4,6 +4,7 @@ import { memo } from "react";
 import { StrikeMatrix as StrikeMatrixBase } from "@/components/panels/StrikeMatrix";
 import { NightVision as NightVisionBase } from "@/components/panels/NightVision";
 import { Spyglass as SpyglassBase, type SpyglassTab } from "@/components/panels/Spyglass";
+import { News as NewsBase } from "@/components/panels/News";
 import { Watchlists as WatchlistsBase } from "@/components/panels/Watchlists";
 import { Standing as StandingBase } from "@/components/panels/Standing";
 import { Holdings as HoldingsBase } from "@/components/panels/Holdings";
@@ -34,6 +35,7 @@ import { Settings as SettingsBase } from "@/components/panels/Settings";
 const StrikeMatrix = memo(StrikeMatrixBase);
 const NightVision = memo(NightVisionBase);
 const Spyglass = memo(SpyglassBase);
+const News = memo(NewsBase);
 const Watchlists = memo(WatchlistsBase);
 const Standing = memo(StandingBase);
 const Holdings = memo(HoldingsBase);
@@ -50,6 +52,7 @@ export const PANEL_TITLES: Record<string, string> = {
   "Strike Matrix": "STRIKE MATRIX",
   "Night Vision": "NIGHT VISION",
   Spyglass: "SPYGLASS",
+  News: "NEWS",
   "My Watchlists": "MY WATCHLISTS",
   Standing: "STANDING",
   Holdings: "HOLDINGS",
@@ -102,6 +105,8 @@ export function PanelHost({
       return (
         <Spyglass ticker={ticker} activeTab={spyglassTab} onActiveTabChange={onSpyglassTabChange} />
       );
+    case "News":
+      return <News ticker={ticker} />;
     case "My Watchlists":
       return <Watchlists />;
     case "Standing":

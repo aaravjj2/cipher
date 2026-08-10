@@ -996,6 +996,37 @@ export function startAskJob(
   return postJson("/api/ask", { message, history }, signal);
 }
 
+// News — /api/news, a pass-through of Yahoo Finance's public RSS feed for one symbol.
+// Headlines only: there is no score, rank, summary or derived signal in this payload,
+// and the backend's `caveat` string says so in the UI's own words.
+
+export type RealNewsHeadline = {
+  title: string;
+  link: string;
+  /** RFC-822 date exactly as the feed reported it, e.g. "Mon, 10 Aug 2026 18:25:25 +0000". */
+  published: string;
+};
+
+export type RealNews = {
+  as_of: string;
+  read_only: boolean;
+  ticker: string;
+  source: string;
+  caveat: string;
+  headlines: RealNewsHeadline[];
+};
+
+export function fetchNews(
+  ticker: string,
+  limit = 15,
+  signal?: AbortSignal
+): Promise<RealNews> {
+  return getJson<RealNews>(
+    `/api/news?ticker=${encodeURIComponent(ticker)}&limit=${limit}`,
+    signal
+  );
+}
+
 // Workspace layouts — core/workspace_layouts.py. The grid blob is dockview's own
 // serialized state and is stored opaquely: the backend validates the envelope (name,
 // size) and never interprets the grid, so the shape below stays deliberately loose.

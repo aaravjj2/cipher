@@ -249,3 +249,15 @@ export function ChevronRightIcon(props: SVGProps<SVGSVGElement>) {
     </svg>
   );
 }
+
+/** Newspaper — the News panel. Same flat single-path currentColor style as the rest. */
+export function NewsIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" width="16" height="16" {...props}>
+      <path
+        fill="currentColor"
+        d="M4 4h13a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1zm2 2v3h9V6zm0 5v2h9v-2zm0 4v2h6v-2zm13-7h1a1 1 0 0 1 1 1v10a1 1 0 0 1-2 0z"
+      />
+    </svg>
+  );
+}
