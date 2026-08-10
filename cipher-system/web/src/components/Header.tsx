@@ -401,18 +401,30 @@ export function Header({
           greeting's ~138px yields 836px, which clears 818 with a little slack. The 1850px
           threshold is that shortfall added back to the 1707px viewport it was measured at, so the
           greeting reappears only once the toolbar is already satisfied. `ml-auto` moves to the
-          logout button below it so the right edge still pins.
+          badge below it so the right edge still pins.
         */}
         <span className="hidden min-[1850px]:inline min-[1850px]:ml-auto" style={{ color: "var(--text-mute)" }}>
           Welcome {displayName}! 🚀
         </span>
-        <button
-          type="button"
-          className="ml-auto min-[1850px]:ml-0 shrink-0 rounded-[8px] px-[14px] py-2"
-          style={{ border: "1px solid var(--line)", color: "var(--text-dim)" }}
+        {/*
+          This slot held a "Logout" button with no onClick, cloned from the reference site.
+          There is no authentication in this app at all — app/server.mjs has no session,
+          cookie or login path, and its only credential check guards /api/scanner-ingest.
+          A logout control therefore implied an account boundary that does not exist, which
+          is the wrong thing to imply about a service reachable over a network.
+
+          What replaces it is the one fact about this build worth pinning to the header:
+          Cipher never places an order. That is an enforced invariant, not a hopeful label
+          — core/research_platform/seven_layer_stack.py fails the boundary audit if any
+          order-submitting symbol appears in the tree.
+        */}
+        <span
+          className="ml-auto min-[1850px]:ml-0 shrink-0 rounded-[8px] px-[14px] py-2 text-[11px] font-bold uppercase"
+          style={{ border: "1px solid var(--line)", color: "var(--text-mute)", letterSpacing: "0.1em" }}
+          title="Cipher is research-only: it reads market data and runs backtests, and has no order-placing path."
         >
-          Logout
-        </button>
+          Research only
+        </span>
       </div>
     </header>
   );
