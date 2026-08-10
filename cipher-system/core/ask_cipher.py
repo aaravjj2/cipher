@@ -293,6 +293,51 @@ def _chunk_text(text: str, size: int = 40) -> list[str]:
     return chunks or [text]
 
 
+def describe_provider_error(exc: BaseException) -> str:
+    """Turns a provider exception into one sentence a reader can act on.
+
+    The SDK's own string form is a Python repr of a nested error dict -- roughly a
+    thousand characters of quoting and `previous_errors` -- which lands in the chat
+    bubble verbatim and buries the one thing that matters: whose fault it is and what
+    fixes it. The provider's own `message` is already a clean sentence, so this pulls
+    that out and prefixes the cause.
+
+    Nothing is invented: the numbers, limits and remedy text all come from the
+    provider's response. An error this does not recognise is returned in the existing
+    `Type: message` form rather than being smoothed over into something reassuring.
+    """
+    status = getattr(exc, "status_code", None)
+    detail = ""
+    body = getattr(exc, "body", None)
+    if isinstance(body, dict):
+        # Two shapes seen in practice: the OpenAI SDK hands back the *inner* error
+        # object already unwrapped (`{"message": ..., "code": ...}`), while a raw
+        # gateway response still has it nested under "error". Verified against a live
+        # 402 from OpenRouter, which takes the first branch.
+        inner = body.get("error")
+        if isinstance(inner, dict):
+            detail = str(inner.get("message") or "")
+        elif isinstance(inner, str):
+            detail = inner
+        elif isinstance(body.get("message"), str):
+            detail = body["message"]
+    if not detail:
+        detail = f"{type(exc).__name__}: {exc}"
+
+    causes = {
+        402: "Ask Cipher's LLM provider is out of credits, so this answer could not be generated.",
+        401: "Ask Cipher's LLM provider rejected the API key.",
+        403: "Ask Cipher's LLM provider refused this request.",
+        429: "Ask Cipher's LLM provider is rate-limiting this key.",
+    }
+    cause = causes.get(status)
+    if cause:
+        return f"{cause} Provider said: {detail}"
+    if status:
+        return f"Ask Cipher's LLM provider returned HTTP {status}. Provider said: {detail}"
+    return f"{type(exc).__name__}: {exc}"
+
+
 def _run_chat_job_openrouter(
     message: str, history: list[dict], tool_impls: dict[str, Callable], append_event: Callable, api_key: str
 ) -> None:
@@ -358,4 +403,4 @@ def run_chat_job(message: str, history: list[dict], tool_impls: dict[str, Callab
         else:
             _run_chat_job_openrouter(message, history, tool_impls, append_event, openrouter_key)
     except Exception as exc:  # noqa: BLE001 - surface every failure as a terminal chat event
-        append_event({"type": "error", "error": f"{type(exc).__name__}: {exc}"})
+        append_event({"type": "error", "error": describe_provider_error(exc)})
