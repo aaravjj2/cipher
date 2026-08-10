@@ -996,6 +996,61 @@ export function startAskJob(
   return postJson("/api/ask", { message, history }, signal);
 }
 
+// Workspace layouts — core/workspace_layouts.py. The grid blob is dockview's own
+// serialized state and is stored opaquely: the backend validates the envelope (name,
+// size) and never interprets the grid, so the shape below stays deliberately loose.
+
+export type WorkspaceLayoutMeta = {
+  name: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type WorkspaceLayoutsStatus = {
+  as_of: string;
+  layouts: WorkspaceLayoutMeta[];
+  count: number;
+  max_layouts: number;
+};
+
+/** A single saved layout, including the dockview blob. */
+export type WorkspaceLayoutRecord = WorkspaceLayoutMeta & {
+  layout: Record<string, unknown>;
+};
+
+export function fetchWorkspaceLayouts(signal?: AbortSignal): Promise<WorkspaceLayoutsStatus> {
+  return getJson<WorkspaceLayoutsStatus>("/api/workspace-layouts", signal);
+}
+
+export function fetchWorkspaceLayout(
+  name: string,
+  signal?: AbortSignal
+): Promise<WorkspaceLayoutRecord> {
+  return getJson<WorkspaceLayoutRecord>(
+    `/api/workspace-layouts?name=${encodeURIComponent(name)}`,
+    signal
+  );
+}
+
+export function saveWorkspaceLayout(
+  name: string,
+  layout: Record<string, unknown>,
+  signal?: AbortSignal
+): Promise<WorkspaceLayoutMeta> {
+  return postJson<WorkspaceLayoutMeta>(
+    "/api/workspace-layouts?action=save",
+    { name, layout },
+    signal
+  );
+}
+
+export function deleteWorkspaceLayout(
+  name: string,
+  signal?: AbortSignal
+): Promise<{ deleted: true; name: string }> {
+  return postJson("/api/workspace-layouts?action=delete", { name }, signal);
+}
+
 export type RealScanUniverse = {
   count: number;
   /** Optionable tickers, ordered by the backend's own liquidity/size ranking. */

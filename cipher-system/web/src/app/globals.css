@@ -139,6 +139,60 @@
   --sidebar-ring: oklch(0.556 0 0);
 }
 
+/*
+  Command palette (cmdk). Only the bits that can't be inline styles: cmdk marks the
+  keyboard-selected row with `data-selected="true"`, and its group headings are rendered
+  by the library itself, so both are styled by attribute here. Colours are Cipher tokens,
+  and the selected row reuses --nav-active so palette selection matches sidebar selection.
+*/
+[cmdk-group-heading] {
+  padding: 8px 12px 4px;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  color: var(--text-mute);
+}
+
+[cmdk-item][data-selected="true"] {
+  background: var(--nav-active);
+  color: var(--text);
+}
+
+[cmdk-item][data-selected="true"] span {
+  color: var(--text);
+}
+
+/*
+  Workspace mode's docking grid (dockview) ships its own themes; `dockview-theme-cipher`
+  is layered on top of `dockview-theme-abyss` to re-point its colour variables at Cipher's
+  tokens, so tab strips and sashes read as part of the app rather than as an embedded
+  widget. Only colours/metrics are overridden — the structural CSS stays dockview's own.
+  Applied via the theme object's className in components/panels/Workspace.tsx.
+*/
+.dockview-theme-cipher {
+  --dv-group-view-background-color: var(--bg);
+  --dv-tabs-and-actions-container-background-color: var(--panel);
+  --dv-activegroup-visiblepanel-tab-background-color: var(--panel-2);
+  --dv-activegroup-hiddenpanel-tab-background-color: var(--panel);
+  --dv-inactivegroup-visiblepanel-tab-background-color: var(--panel-2);
+  --dv-inactivegroup-hiddenpanel-tab-background-color: var(--panel);
+  --dv-activegroup-visiblepanel-tab-color: var(--text);
+  --dv-activegroup-hiddenpanel-tab-color: var(--text-mute);
+  --dv-inactivegroup-visiblepanel-tab-color: var(--text-dim);
+  --dv-inactivegroup-hiddenpanel-tab-color: var(--text-mute);
+  --dv-tab-divider-color: var(--line);
+  --dv-separator-border: var(--line);
+  --dv-paneview-header-border-color: var(--line);
+  --dv-paneview-active-outline-color: var(--accent);
+  --dv-active-sash-color: var(--accent);
+  --dv-drag-over-background-color: color-mix(in srgb, var(--accent) 22%, transparent);
+  --dv-icon-hover-background-color: color-mix(in srgb, var(--panel-2) 90%, transparent);
+  --dv-tabs-and-actions-container-height: 30px;
+  --dv-tabs-and-actions-container-font-size: 11px;
+  --dv-tab-border-radius: 6px;
+  --dv-border-radius: 8px;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

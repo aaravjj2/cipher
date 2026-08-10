@@ -1,61 +1,16 @@
 "use client";
 
-import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Header } from "@/components/Header";
 import { Sidebar } from "@/components/Sidebar";
-import { StrikeMatrix as StrikeMatrixBase } from "@/components/panels/StrikeMatrix";
-import { NightVision as NightVisionBase } from "@/components/panels/NightVision";
-import { Spyglass as SpyglassBase, SpyglassHeaderTabs, type SpyglassTab } from "@/components/panels/Spyglass";
-import { Watchlists as WatchlistsBase } from "@/components/panels/Watchlists";
-import { Standing as StandingBase } from "@/components/panels/Standing";
-import { Holdings as HoldingsBase } from "@/components/panels/Holdings";
-import { AskCipher as AskCipherBase } from "@/components/panels/AskCipher";
-import { Trident as TridentBase } from "@/components/panels/Trident";
-import { ChartSaves as ChartSavesBase } from "@/components/panels/ChartSaves";
-import { SetupScanner as SetupScannerBase } from "@/components/panels/SetupScanner";
-import { Backtest as BacktestBase } from "@/components/panels/Backtest";
-import { StrategyCatalogPanel as StrategyCatalogBase } from "@/components/panels/StrategyCatalog";
-import { Settings as SettingsBase } from "@/components/panels/Settings";
+import { CommandPalette, useCommandPaletteShortcut } from "@/components/CommandPalette";
+import { PanelHost, panelTitle } from "@/components/PanelHost";
+import { TickerStrip } from "@/components/TickerStrip";
+import { Workspace } from "@/components/panels/Workspace";
+import { SpyglassHeaderTabs, type SpyglassTab } from "@/components/panels/Spyglass";
 import { fetchQuote, type RealQuote } from "@/lib/api";
 
-/**
- * Every panel below does its own polling (quotes, matrices, flow) independently of
- * page-level state. Without memoization, Header's 10s quote poll — or any other state
- * change here — would re-render whichever heavy panel (hundreds of heatmap cells) happens
- * to be mounted, even though its own props never changed. Wrapping at the import site
- * (rather than inside each panel file) keeps this a single-file, low-risk fix.
- */
-const StrikeMatrix = memo(StrikeMatrixBase);
-const NightVision = memo(NightVisionBase);
-const Spyglass = memo(SpyglassBase);
-const Watchlists = memo(WatchlistsBase);
-const Standing = memo(StandingBase);
-const Holdings = memo(HoldingsBase);
-const AskCipher = memo(AskCipherBase);
-const Backtest = memo(BacktestBase);
-const StrategyCatalog = memo(StrategyCatalogBase);
-const Trident = memo(TridentBase);
-const ChartSaves = memo(ChartSavesBase);
-const SetupScanner = memo(SetupScannerBase);
-const Settings = memo(SettingsBase);
-
 const QUOTE_REFRESH_MS = 10_000;
-
-const PANEL_TITLES: Record<string, string> = {
-  "Strike Matrix": "STRIKE MATRIX",
-  "Night Vision": "NIGHT VISION",
-  Spyglass: "SPYGLASS",
-  "My Watchlists": "MY WATCHLISTS",
-  Standing: "STANDING",
-  Holdings: "HOLDINGS",
-  "Ask Cipher": "ASK CIPHER",
-  Trident: "TRIDENT",
-  "Chart Saves": "CHART SAVES",
-  "Setup Scanner": "SETUP SCANNER",
-  Backtest: "SIGNAL BACKTEST",
-  Strategies: "STRATEGY CATALOG",
-  Settings: "SETTINGS",
-};
 
 // Confirmed against the real site: the header subtitle changes with Spyglass's sub-view
 // (e.g. "BIO FLOW" while on Bio), not just the sidebar panel name.
@@ -71,6 +26,19 @@ export default function Home() {
   const [activePanel, setActivePanel] = useState("Strike Matrix");
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [spyglassTab, setSpyglassTab] = useState<SpyglassTab>("spyglass");
+  /**
+   * Workspace (multi-pane) mode is opt-in and off by default: single-panel mode is still
+   * the primary way the app is used, and this only changes how panels are laid out — the
+   * panels themselves are identical components either way (see components/PanelHost.tsx).
+   */
+  const [tiledMode, setTiledMode] = useState(false);
+  /**
+   * Tile-open requests for Workspace mode. The counter matters: after closing a tile,
+   * clicking the same sidebar entry again produces an unchanged label, so only a bumped
+   * `seq` re-opens it.
+   */
+  const [openRequest, setOpenRequest] = useState({ label: "Strike Matrix", seq: 0 });
+  const [paletteOpen, setPaletteOpen] = useState(false);
   // Workspace tabs (real site's "1"/"2" next to the quote) — each slot keeps its own
   // active ticker; navigation/sidebar state stays shared across both, per the header
   // layout (tabs sit next to the ticker search, not the sidebar).
@@ -108,20 +76,30 @@ export default function Home() {
   const handleActivePanelChange = useCallback((panel: string) => {
     setActivePanel(panel);
     if (panel === "Spyglass") setSpyglassTab("spyglass");
+    setOpenRequest((prev) => ({ label: panel, seq: prev.seq + 1 }));
   }, []);
   const handleMobileOpenChange = useCallback((open: boolean) => setMobileNavOpen(open), []);
   const handleMenuClick = useCallback(() => setMobileNavOpen(true), []);
+  const handlePaletteOpen = useCallback(() => setPaletteOpen(true), []);
+
+  useCommandPaletteShortcut(setPaletteOpen);
 
   const rightSlot = useMemo(
     () =>
-      activePanel === "Spyglass" ? (
+      !tiledMode && activePanel === "Spyglass" ? (
         <SpyglassHeaderTabs activeTab={spyglassTab} onChange={setSpyglassTab} />
       ) : undefined,
-    [activePanel, spyglassTab]
+    [tiledMode, activePanel, spyglassTab]
   );
 
   const price = quote ? `$${quote.price_context.toFixed(2)}` : undefined;
   const changePct = quote ? quote.day_change_pct : undefined;
+
+  const headerPanelName = tiledMode
+    ? "WORKSPACE"
+    : activePanel === "Spyglass"
+      ? SPYGLASS_SUB_TITLES[spyglassTab]
+      : panelTitle(activePanel);
 
   return (
     <div className="flex h-screen overflow-hidden" style={{ background: "var(--bg)" }}>
@@ -130,15 +108,14 @@ export default function Home() {
         onActivePanelChange={handleActivePanelChange}
         mobileOpen={mobileNavOpen}
         onMobileOpenChange={handleMobileOpenChange}
+        tiledMode={tiledMode}
+        onTiledModeChange={setTiledMode}
+        onCommandPaletteOpen={handlePaletteOpen}
       />
 
       <div className="flex flex-1 flex-col min-w-0 overflow-hidden">
         <Header
-          panelName={
-            activePanel === "Spyglass"
-              ? SPYGLASS_SUB_TITLES[spyglassTab]
-              : PANEL_TITLES[activePanel] ?? activePanel.toUpperCase()
-          }
+          panelName={headerPanelName}
           rightSlot={rightSlot}
           onMenuClick={handleMenuClick}
           ticker={ticker}
@@ -151,24 +128,33 @@ export default function Home() {
           onWorkspaceChange={setActiveWorkspace}
         />
 
-        <main className="flex-1 overflow-y-auto overflow-x-hidden p-6">
-          {activePanel === "Strike Matrix" && <StrikeMatrix ticker={ticker} toolbarSlot={toolbarSlot} />}
-          {activePanel === "Night Vision" && <NightVision ticker={ticker} toolbarSlot={toolbarSlot} />}
-          {activePanel === "Spyglass" && (
-            <Spyglass ticker={ticker} activeTab={spyglassTab} onActiveTabChange={setSpyglassTab} />
-          )}
-          {activePanel === "My Watchlists" && <Watchlists />}
-          {activePanel === "Standing" && <Standing />}
-          {activePanel === "Holdings" && <Holdings />}
-          {activePanel === "Ask Cipher" && <AskCipher />}
-          {activePanel === "Backtest" && <Backtest ticker={ticker} />}
-          {activePanel === "Strategies" && <StrategyCatalog />}
-          {activePanel === "Trident" && <Trident toolbarSlot={toolbarSlot} />}
-          {activePanel === "Chart Saves" && <ChartSaves />}
-          {activePanel === "Setup Scanner" && <SetupScanner />}
-          {activePanel === "Settings" && <Settings />}
-        </main>
+        <TickerStrip activeTicker={ticker} onSelect={setTicker} />
+
+        {tiledMode ? (
+          // Workspace mode owns its own scrolling: the grid must fill the viewport exactly
+          // (dockview sizes itself from its container), and each tile scrolls internally.
+          <main className="flex-1 min-h-0 overflow-hidden">
+            <Workspace ticker={ticker} openRequest={openRequest} />
+          </main>
+        ) : (
+          <main className="flex-1 overflow-y-auto overflow-x-hidden p-6">
+            <PanelHost
+              panel={activePanel}
+              ticker={ticker}
+              toolbarSlot={toolbarSlot}
+              spyglassTab={spyglassTab}
+              onSpyglassTabChange={setSpyglassTab}
+            />
+          </main>
+        )}
       </div>
+
+      <CommandPalette
+        open={paletteOpen}
+        onOpenChange={setPaletteOpen}
+        onPanelSelect={handleActivePanelChange}
+        onTickerSelect={setTicker}
+      />
     </div>
   );
 }

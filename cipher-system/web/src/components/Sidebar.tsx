@@ -20,18 +20,20 @@ import {
 
 type IconComponent = ComponentType<SVGProps<SVGSVGElement>>;
 
-type NavItem = {
+export type NavItem = {
   label: string;
   icon: IconComponent;
   cipherX?: boolean;
 };
 
-type NavSection = {
+export type NavSection = {
   label: string;
   items: NavItem[];
 };
 
-const NAV_SECTIONS: NavSection[] = [
+/** Exported so the command palette offers exactly the panels the sidebar does — one list,
+ *  so a panel added here shows up in the palette without a second edit. */
+export const NAV_SECTIONS: NavSection[] = [
   {
     label: "WORKSPACE",
     items: [
@@ -145,6 +147,84 @@ function SidebarNav({ collapsed, activePanel, onSelect }: SidebarNavProps) {
   );
 }
 
+type SidebarFooterProps = {
+  collapsed: boolean;
+  tiledMode: boolean;
+  onTiledModeChange?: (tiled: boolean) => void;
+  onCommandPaletteOpen?: () => void;
+};
+
+/**
+ * Mode toggle + palette hint, pinned to the bottom of the nav.
+ *
+ * This sits in the sidebar rather than the header on purpose: the header row already
+ * carries the ticker search, quote, workspace tabs and the active panel's own toolbar,
+ * and the widest of those toolbars (Strike Matrix) has previously been clipped by exactly
+ * this kind of addition (see the width note in Header.tsx). The sidebar's bottom is empty.
+ */
+function SidebarFooter({
+  collapsed,
+  tiledMode,
+  onTiledModeChange,
+  onCommandPaletteOpen,
+}: SidebarFooterProps) {
+  if (!onTiledModeChange && !onCommandPaletteOpen) return null;
+  return (
+    <div className="mt-auto flex flex-col gap-[4px] pt-3" style={{ borderTop: "1px solid var(--line)" }}>
+      {onTiledModeChange && (
+        <button
+          type="button"
+          onClick={() => onTiledModeChange(!tiledMode)}
+          aria-pressed={tiledMode}
+          title={tiledMode ? "Back to one panel at a time" : "Open several panels at once"}
+          className={cn(
+            "flex flex-row items-center gap-[8px] w-full min-h-[30px] rounded-[8px] text-[11.5px] font-semibold",
+            collapsed ? "justify-center px-0" : "px-[11px]"
+          )}
+          style={{
+            background: tiledMode ? "var(--nav-active)" : "transparent",
+            border: "1px solid var(--line)",
+            color: tiledMode ? "var(--text)" : "var(--text-dim)",
+          }}
+        >
+          <GridIcon width={14} height={14} className="shrink-0" />
+          {!collapsed && <span>{tiledMode ? "Workspace on" : "Workspace"}</span>}
+        </button>
+      )}
+      {onCommandPaletteOpen && (
+        <button
+          type="button"
+          onClick={onCommandPaletteOpen}
+          title="Command palette"
+          className={cn(
+            "flex flex-row items-center gap-[8px] w-full min-h-[30px] rounded-[8px] text-[11.5px] font-semibold",
+            collapsed ? "justify-center px-0" : "px-[11px]"
+          )}
+          style={{ border: "1px solid var(--line)", color: "var(--text-dim)" }}
+        >
+          <SearchIcon width={14} height={14} className="shrink-0" />
+          {!collapsed && (
+            <span className="flex flex-1 flex-row items-center justify-between">
+              Commands
+              <kbd
+                className="rounded-[4px] px-[4px] py-[1px] text-[9px]"
+                style={{
+                  background: "var(--panel-2)",
+                  border: "1px solid var(--line)",
+                  fontFamily: "var(--font-mono)",
+                  color: "var(--text-mute)",
+                }}
+              >
+                ⌘K
+              </kbd>
+            </span>
+          )}
+        </button>
+      )}
+    </div>
+  );
+}
+
 type SidebarProps = {
   /**
    * Controlled mobile-drawer open state. Header.tsx's `.nav-toggle` hamburger is meant to
@@ -167,6 +247,15 @@ type SidebarProps = {
    */
   activePanel?: string;
   onActivePanelChange?: (panel: string) => void;
+  /**
+   * Workspace (multi-pane) mode. Owned by the page, not here, because the page is what
+   * swaps the main region between one panel and the docking grid — the sidebar only
+   * renders the toggle. Omit both to hide the toggle entirely.
+   */
+  tiledMode?: boolean;
+  onTiledModeChange?: (tiled: boolean) => void;
+  /** Opens the command palette. Omit to hide the button (the Ctrl/Cmd+K shortcut is the page's). */
+  onCommandPaletteOpen?: () => void;
 };
 
 export function Sidebar({
@@ -174,6 +263,9 @@ export function Sidebar({
   onMobileOpenChange,
   activePanel: activePanelProp,
   onActivePanelChange,
+  tiledMode = false,
+  onTiledModeChange,
+  onCommandPaletteOpen,
 }: SidebarProps = {}) {
   const [collapsed, setCollapsed] = useState(false);
   const [internalActivePanel, setInternalActivePanel] = useState("Strike Matrix");
@@ -265,6 +357,12 @@ export function Sidebar({
         </div>
 
         <SidebarNav collapsed={collapsed} activePanel={activePanel} onSelect={setActivePanel} />
+        <SidebarFooter
+          collapsed={collapsed}
+          tiledMode={tiledMode}
+          onTiledModeChange={onTiledModeChange}
+          onCommandPaletteOpen={onCommandPaletteOpen}
+        />
       </aside>
 
       {/* Mobile slide-in drawer — approximate mobile drawer — verify against live site */}
@@ -298,6 +396,26 @@ export function Sidebar({
             setActivePanel(label);
             setMobileOpen(false);
           }}
+        />
+        <SidebarFooter
+          collapsed={false}
+          tiledMode={tiledMode}
+          onTiledModeChange={
+            onTiledModeChange
+              ? (next) => {
+                  onTiledModeChange(next);
+                  setMobileOpen(false);
+                }
+              : undefined
+          }
+          onCommandPaletteOpen={
+            onCommandPaletteOpen
+              ? () => {
+                  onCommandPaletteOpen();
+                  setMobileOpen(false);
+                }
+              : undefined
+          }
         />
       </aside>
     </>

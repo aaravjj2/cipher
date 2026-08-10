@@ -40,6 +40,7 @@ import backtest_jobs
 import holdings
 import ask_cipher
 import chat_jobs
+import workspace_layouts
 from zoneinfo import ZoneInfo
 
 # Exchange local time. Session boundaries and trading dates are ET facts, not UTC
@@ -1745,6 +1746,13 @@ class Handler(BaseHTTPRequestHandler):
                     quote_fn=quote, bars_fn=bars,
                     include_benchmark=(pget("benchmark") or "").lower() in {"1", "true", "yes"},
                 )
+            elif parsed.path == "/api/workspace-layouts":
+                name = pget("name")
+                data = (
+                    workspace_layouts.get_layout(name)
+                    if name
+                    else workspace_layouts.layouts_status()
+                )
             elif parsed.path == "/api/contract-search":
                 data = contract_search(
                     ticker,
@@ -2144,6 +2152,7 @@ class Handler(BaseHTTPRequestHandler):
                             "/api/governance",
                             "/api/standing",
                             "/api/holdings",
+                            "/api/workspace-layouts",
                             "/api/ask",
                             "/api/research-status",
                             "/api/evidence-status",
@@ -2266,6 +2275,26 @@ class Handler(BaseHTTPRequestHandler):
                     return
                 self.send_json(400, {"error": f"Unknown holdings POST action: {action or '(none)'}"})
                 return
+            if parsed.path == "/api/workspace-layouts":
+                action = (pget("action") or "").lower()
+                body = self._read_json_body()
+                if not isinstance(body, dict):
+                    raise ValueError("request body must be a JSON object")
+                if action == "save":
+                    data = workspace_layouts.save_layout(
+                        name=body.get("name", ""), layout=body.get("layout"),
+                    )
+                    self.send_json(200, data)
+                    return
+                if action == "delete":
+                    data = workspace_layouts.delete_layout(body.get("name", ""))
+                    self.send_json(200, data)
+                    return
+                self.send_json(
+                    400,
+                    {"error": f"Unknown workspace-layouts POST action: {action or '(none)'}"},
+                )
+                return
             if parsed.path == "/api/ask":
                 body = self._read_json_body()
                 if not isinstance(body, dict):
@@ -2293,6 +2322,7 @@ class Handler(BaseHTTPRequestHandler):
                     "routes": [
                         "/api/backtest?action=ingest-scan",
                         "/api/holdings?action=add|close|delete",
+                        "/api/workspace-layouts?action=save|delete",
                         "/api/ask",
                     ],
                 },
