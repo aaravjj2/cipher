@@ -180,17 +180,10 @@ export function SpotRow({
   );
 }
 
-/** Deterministic PRNG (mulberry32) so mock heatmap data is stable across server/client renders. */
-export function mulberry32(seed: number) {
-  let state = seed;
-  return function next() {
-    state |= 0;
-    state = (state + 0x6d2b79f5) | 0;
-    let t = Math.imul(state ^ (state >>> 15), 1 | state);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
+// A mulberry32 PRNG lived here to seed "mock heatmap data". Strike Matrix and Trident
+// both take real GEX from /api/matrix now, so nothing called it — and an exported,
+// unused random-number generator sitting in a panel that renders dollar figures is an
+// invitation to fill a gap with invented numbers. Removed rather than left loaded.
 
 /** Index of the first strike <= spot in a descending strike list — the row the spot-row marker precedes. */
 export function findSpotInsertIndex(descendingStrikes: number[], spot: number): number {

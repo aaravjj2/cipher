@@ -182,6 +182,53 @@ function ToolbarButton({
   );
 }
 
+/**
+ * The tape's own timestamp, in the slot the dead "Trade Date" picker used to occupy.
+ *
+ * core/app.py's flow() takes no date argument — it derives the tape from the *latest*
+ * chain snapshot, and there is no historical options store behind it. So a date input
+ * here could never filter anything: it accepted a date, changed nothing, and left the
+ * reader believing they were looking at that session. What a tape reader actually needs
+ * from this corner is how stale the prints are, which is a number the response really
+ * carries.
+ *
+ * The date picker survives only in Contract Search, where the backend does accept it.
+ */
+function AsOfField({ asOf }: { asOf: string }) {
+  const ms = Date.parse(asOf);
+  const shown =
+    asOf && !Number.isNaN(ms)
+      ? new Date(ms).toLocaleString("en-US", {
+          month: "short",
+          day: "numeric",
+          hour: "numeric",
+          minute: "2-digit",
+          second: "2-digit",
+        })
+      : "—";
+  return (
+    <div className="flex flex-col gap-1 shrink-0">
+      <span
+        className="text-[10px] font-bold uppercase"
+        style={{ letterSpacing: "0.12em", color: "var(--text-mute)" }}
+      >
+        Snapshot
+      </span>
+      <span
+        className="rounded-[8px] px-[10px] py-[6px] text-[12px]"
+        style={{
+          background: "var(--panel-2)",
+          border: "1px solid var(--line)",
+          color: asOf ? "var(--text)" : "var(--text-mute)",
+          fontFamily: "var(--font-mono)",
+        }}
+      >
+        {shown}
+      </span>
+    </div>
+  );
+}
+
 function DateField({
   value,
   onChange,
@@ -402,14 +449,6 @@ const PREMIUM_TO_MAX_PRICE: Record<PremiumBucket, number | undefined> = {
 };
 
 function SpyglassView({ ticker }: { ticker: string }) {
-  // Trade Date has no confirmed real-backend filtering param (core/app.py's flow() has
-  // no date argument), so it stays a visual-only field, per the original spec's TODO.
-  // Prefilled with today's date (client-only, matches the real site) to avoid a hydration
-  // mismatch against a build-time date.
-  const [tradeDate, setTradeDate] = useState("");
-  useEffect(() => {
-    setTradeDate(new Date().toISOString().slice(0, 10));
-  }, []);
   // "All px", not the ≤$0.50 contract-price cap. The two price filters compose:
   // maxPrice caps the per-contract price while minPremium floors the notional, so
   // the old default asked for prints of ≤$0.50 options worth ≥$5,000 — 100+
@@ -422,6 +461,7 @@ function SpyglassView({ ticker }: { ticker: string }) {
   const [moneyness, setMoneyness] = useState<MoneynessFilter>("moneyness");
 
   const [prints, setPrints] = useState<RealFlowPrint[]>([]);
+  const [asOf, setAsOf] = useState("");
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [errorMessage, setErrorMessage] = useState("");
 
@@ -442,6 +482,7 @@ function SpyglassView({ ticker }: { ticker: string }) {
       try {
         const res = await fetchFlow(ticker, filters, signal);
         setPrints(res.prints);
+        setAsOf(res.as_of);
         setStatus("ready");
         setErrorMessage("");
       } catch (err) {
@@ -473,7 +514,7 @@ function SpyglassView({ ticker }: { ticker: string }) {
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-row flex-wrap items-end gap-2">
-        <DateField value={tradeDate} onChange={setTradeDate} />
+        <AsOfField asOf={asOf} />
         <PillGroup options={PREMIUM_OPTIONS} value={premium} onChange={setPremium} />
         <PillGroup options={SIZE_OPTIONS} value={size} onChange={setSize} />
         <PillGroup options={CALL_PUT_OPTIONS} value={callPut} onChange={setCallPut} />
@@ -515,12 +556,12 @@ function SpyglassView({ ticker }: { ticker: string }) {
 const OTM_THRESHOLD: Record<OtmBucket, number> = { "5": 5, "10": 10, "25": 25, "50": 50 };
 
 function BioView() {
-  const [tradeDate, setTradeDate] = useState("");
   const [otm, setOtm] = useState<OtmBucket>("5");
   const [size, setSize] = useState<SizeBucket>("5k");
   const [callPut, setCallPut] = useState<CallPutFilter>("all");
 
   const [prints, setPrints] = useState<RealFlowPrint[]>([]);
+  const [asOf, setAsOf] = useState("");
   const [status, setStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState("");
   const [progressText, setProgressText] = useState("");
@@ -554,6 +595,7 @@ function BioView() {
             if (j.status === "done") {
               if (pollRef.current) clearInterval(pollRef.current);
               setPrints(j.result?.prints ?? []);
+              setAsOf(j.result?.as_of ?? "");
               setStatus("ready");
             } else if (j.status === "error") {
               if (pollRef.current) clearInterval(pollRef.current);
@@ -599,7 +641,7 @@ function BioView() {
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-row flex-wrap items-end gap-2">
-        <DateField value={tradeDate} onChange={setTradeDate} />
+        <AsOfField asOf={asOf} />
         <PillGroup options={OTM_OPTIONS} value={otm} onChange={setOtm} />
         <PillGroup options={SIZE_OPTIONS} value={size} onChange={setSize} />
         <PillGroup options={CALL_PUT_OPTIONS} value={callPut} onChange={setCallPut} />
