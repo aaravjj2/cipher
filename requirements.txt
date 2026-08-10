@@ -3,6 +3,7 @@
 numpy
 scipy
 websockets==16.1.1
+anthropic
 
 # Testing
 pytest>=8.0.0

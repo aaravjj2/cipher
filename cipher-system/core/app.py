@@ -38,6 +38,8 @@ import session_levels
 import evidence_status
 import backtest_jobs
 import holdings
+import ask_cipher
+import chat_jobs
 from zoneinfo import ZoneInfo
 
 # Exchange local time. Session boundaries and trading dates are ET facts, not UTC
@@ -250,6 +252,34 @@ def standing_status():
         "prospective_registrations": _open_prospective_registrations(),
         "shadow_positions": _open_shadow_positions(),
         "clocks": evidence_status.status().get("clocks", []),
+    }
+
+
+def _list_strategies_for_chat(family: str | None = None) -> dict:
+    """Catalog metadata for Ask Cipher's list_strategies tool — separate from
+    the /api/strategies?action=list GET handler because that route has no
+    family filter and this one needs one; duplicating the small dict-shape
+    rather than adding an unused parameter to an already-shipped route."""
+    import strategy_catalog as _catalog
+
+    specs = _catalog.CATALOG.values()
+    if family:
+        specs = [s for s in specs if s.family == family]
+    return {
+        "summary": _catalog.summary(),
+        "strategies": [
+            {
+                "strategy_id": spec.strategy_id,
+                "name": spec.name,
+                "family": spec.family,
+                "source": spec.source,
+                "data_requirement": spec.data_requirement,
+                "bar_timeframe": spec.bar_timeframe,
+                "evaluable": spec.evaluable,
+                "blocked_reason": spec.blocked_reason,
+            }
+            for spec in specs
+        ],
     }
 
 
@@ -1556,6 +1586,7 @@ class Handler(BaseHTTPRequestHandler):
             return values[-1]
 
         job_id = pget("job") or pget("id")
+        source = chat_jobs if pget("type") == "chat" else backtest_jobs
         self.send_sse_headers()
         if not job_id:
             self.write_event("error", {"error": "missing job id (?job=<id>)"})
@@ -1565,7 +1596,7 @@ class Handler(BaseHTTPRequestHandler):
         sent = 0
         try:
             while True:
-                job = backtest_jobs.get_job(job_id)
+                job = source.get_job(job_id)
                 if job is None:
                     self.write_event("error", {"error": "unknown job", "job_id": job_id})
                     return
@@ -2113,6 +2144,7 @@ class Handler(BaseHTTPRequestHandler):
                             "/api/governance",
                             "/api/standing",
                             "/api/holdings",
+                            "/api/ask",
                             "/api/research-status",
                             "/api/evidence-status",
                             "/api/signal-backtest",
@@ -2234,6 +2266,26 @@ class Handler(BaseHTTPRequestHandler):
                     return
                 self.send_json(400, {"error": f"Unknown holdings POST action: {action or '(none)'}"})
                 return
+            if parsed.path == "/api/ask":
+                body = self._read_json_body()
+                if not isinstance(body, dict):
+                    raise ValueError("request body must be a JSON object")
+                message = str(body.get("message") or "").strip()
+                if not message:
+                    raise ValueError("message is required")
+                history = body.get("history") or []
+                if not isinstance(history, list):
+                    raise ValueError("history must be a list")
+                tool_impls = {
+                    "get_evidence_status": evidence_status.status,
+                    "get_standing": standing_status,
+                    "get_holdings": lambda: holdings.holdings_status(quote_fn=quote, bars_fn=bars),
+                    "get_quote": quote,
+                    "list_strategies": _list_strategies_for_chat,
+                }
+                job_id = chat_jobs.start_chat_job(message, history, tool_impls)
+                self.send_json(202, {"job_id": job_id, "status": "queued"})
+                return
             self.send_json(
                 404,
                 {
@@ -2241,6 +2293,7 @@ class Handler(BaseHTTPRequestHandler):
                     "routes": [
                         "/api/backtest?action=ingest-scan",
                         "/api/holdings?action=add|close|delete",
+                        "/api/ask",
                     ],
                 },
             )

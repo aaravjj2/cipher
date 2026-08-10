@@ -62,6 +62,7 @@ const routes = {
   "/api/governance": "/api/governance",
   "/api/standing": "/api/standing",
   "/api/holdings": "/api/holdings",
+  "/api/ask": "/api/ask",
   "/api/research-status": "/api/research-status",
   "/api/evidence-status": "/api/evidence-status",
   "/api/signal-backtest": "/api/signal-backtest",

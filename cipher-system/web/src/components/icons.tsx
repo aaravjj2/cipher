@@ -93,6 +93,17 @@ export function PortfolioIcon(props: SVGProps<SVGSVGElement>) {
   );
 }
 
+export function ChatIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" width="16" height="16" {...props}>
+      <path
+        fill="currentColor"
+        d="M4 4h16a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H9l-4.4 3.3A1 1 0 0 1 3 19.5V5a1 1 0 0 1 1-1m3 5v2h10V9zm0 4v2h7v-2z"
+      />
+    </svg>
+  );
+}
+
 export function TridentIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" width="16" height="16" {...props}>

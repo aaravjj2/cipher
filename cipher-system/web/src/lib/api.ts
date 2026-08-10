@@ -981,6 +981,21 @@ export function deleteHolding(id: string, signal?: AbortSignal): Promise<{ delet
   return postJson(`/api/holdings?action=delete`, { id }, signal);
 }
 
+// Ask Cipher — core/ask_cipher.py. Grounded strictly in tool calls made this
+// turn against Cipher's own data; no live orders, no fresh backtests (those
+// take minutes and live in the async job UIs, not a chat turn).
+
+export type AskChatRole = "user" | "assistant";
+export type AskChatMessage = { role: AskChatRole; content: string };
+
+export function startAskJob(
+  message: string,
+  history: AskChatMessage[],
+  signal?: AbortSignal
+): Promise<{ job_id: string; status: string }> {
+  return postJson("/api/ask", { message, history }, signal);
+}
+
 export type RealScanUniverse = {
   count: number;
   /** Optionable tickers, ordered by the backend's own liquidity/size ranking. */
