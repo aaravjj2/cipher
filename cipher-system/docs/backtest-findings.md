@@ -392,3 +392,49 @@ The rolling data window changed, and the claimed disjoint replication did not
 survive that update. Measured cost improves absolute returns but does not change a
 verdict in this controlled rerun. Until the disjoint result replicates on a locked
 window, this remains an original-universe finding rather than out-of-sample evidence.
+
+## Leveraged-ETF wheel: the entry filters cannot be validated on the current archive
+
+2026-08-11. `core/wheel_entry_control.py` adds the matched random-entry control the wheel
+runs never had. It holds universe, sizing, contract selection, IV band, POP enforcement,
+exit/roll/assignment logic, and expected entry count fixed, and randomizes only *which*
+eligible day an entry lands on. Both arms share one eligibility definition
+(`_evaluate_gates`), so the matched rate has an honest denominator.
+
+Running it over 2024-02-01..2026-06-01 on the approved universe:
+
+```
+signal fired on 274 of 2336 eligible days
+per-symbol rate   NVDL 15.2%  SOXL 11.5%  TSLL 12.3%  TQQQ 7.9%
+real arm          8 events, 4 closed trades, +1.797% total return, 348 skips
+control arms      median 0 events (max 2 across 8 replicates)
+verdict           comparison_valid = false
+```
+
+**The comparison is refused, and the refusal is the finding.** A naive reading gives
+`beat_control_pct = 100`, which is wrong: the control did not lose, it never traded. The
+option archives under `data/historical_options` were populated by downloading chains for
+the days the signal selected (`decision_selections`, `download_plan_*`), so chain
+availability is *correlated with the signal*. Random entry lands on days with no chain and
+takes no position. The percentile would be measuring data coverage, not entry timing.
+`MIN_CONTROL_ACTIVITY_RATIO = 0.5` now blocks that reading.
+
+A valid control needs option chains downloaded for the control's random dates too. Until
+that exists, no run in `data/leveraged_etf_wheel/` supports a claim about the down-day or
+weekly-cloud filters.
+
+Two things surfaced alongside it, independent of the control:
+
+- Of 32 runs carrying a `report.json`, **15 produced zero events**. The 17 that traded
+  span −4.839% to +3.526% total return over ~2.3 years on 1–38 closed trades.
+- The highest trade counts come from the progressively relaxed variants (`iv150`,
+  `relaxpop`), i.e. the gates were loosened until positions appeared. The strict variants
+  are the ones that produced nothing.
+
+Separately, the wheel could not run at all against current data until this work: it
+queries `bars where timeframe='1Day'`, and `data/historical_bars.sqlite` has neither that
+table name nor a `timeframe` column, with zero symbol overlap with the wheel universe.
+Daily bars for NVDL/TSLL/SOXL/TQQQ were downloaded to
+`data/historical_equities/wheel_universe/equity_bars.sqlite` (916–1304 bars each,
+2021-06-01..2026-08-10). The 32 existing runs are therefore not reproducible from any
+equity store now present, which is its own reason to treat them as historical artifacts.
