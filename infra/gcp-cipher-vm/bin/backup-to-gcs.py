@@ -53,10 +53,28 @@ TAR_INCLUDES = [
     # in download_runs.config_json inside each dataset database, i.e. inside the directory
     # this backup skips. Refreshed by refresh_options_rebuild_recipes() below.
     "cipher-system/data/options_rebuild_recipes",
+    # Listed for its 23.7 MB of manifests, lab reports and rankings, not its 9.7 GB of bulk;
+    # TAR_EXCLUDES below drops the databases and raw pages. Three lab output directories
+    # (fixed_width_multi_stock_lab, weekly_bearish_debit_option_lab,
+    # weekly_low_capital_option_lab) live here because the runners write to ARCHIVE_ROOT by
+    # design, so they were in no backup while this path was excluded wholesale.
+    "cipher-system/data/historical_options",
     "reports",
 ]
 
 RECIPE_EXPORTER = ROOT / "cipher-system" / "scripts" / "export_options_rebuild_recipes.py"
+
+# Applied to every include. `data/historical_options` is listed above for its manifests, lab
+# reports and rankings -- 23.7 MB across 230 JSON/CSV/MD files, which includes the three lab
+# output directories the runners write under ARCHIVE_ROOT by design and which were therefore
+# in no backup. Its bulk is skipped: 8.77 GB of .sqlite archives and 913 MB of .gz raw API
+# pages, both re-downloadable from Alpaca. The run configs *inside* those databases are the
+# one thing not recoverable from the manifests, which is what RECIPE_EXPORTER extracts.
+#
+# Verified that no other included directory contains .gz files, so this is not silently
+# dropping data elsewhere. sqlite-wal and sqlite-shm go too: a WAL sidecar without its
+# database restores nothing, and the databases are captured properly via the backup API.
+TAR_EXCLUDES = ["*.gz", "*.sqlite", "*.sqlite-wal", "*.sqlite-shm"]
 
 
 def sqlite_safe_copy(src: Path, dst: Path) -> bool:
@@ -141,12 +159,15 @@ def refresh_options_rebuild_recipes() -> str | None:
     return None
 
 
-def create_operational_archive(archive: Path, root: Path, includes: list[str]) -> bool:
+def create_operational_archive(
+    archive: Path, root: Path, includes: list[str], excludes: list[str] | None = None
+) -> bool:
     """Create a complete operational archive, or raise instead of accepting partial data."""
     tar_paths = [rel for rel in includes if (root / rel).exists()]
     if not tar_paths:
         return False
-    cmd = ["tar", "--zstd", "-cf", str(archive), "-C", str(root), *tar_paths]
+    exclude_args = [f"--exclude={pattern}" for pattern in (excludes or TAR_EXCLUDES)]
+    cmd = ["tar", "--zstd", "-cf", str(archive), "-C", str(root), *exclude_args, *tar_paths]
     # A partial archive is worse than a failed backup because it looks
     # restorable. Surface disappearing/unreadable inputs immediately.
     subprocess.run(cmd, check=True)

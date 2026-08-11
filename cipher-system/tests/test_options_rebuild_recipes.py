@@ -107,8 +107,11 @@ def test_the_backup_includes_the_recipes_and_refreshes_them_first():
     spec.loader.exec_module(module)
 
     assert "cipher-system/data/options_rebuild_recipes" in module.TAR_INCLUDES
-    # Excluding the bulk directory is the decision this export makes safe; it must stay out.
-    assert not any("historical_options" in item for item in module.TAR_INCLUDES)
+    # historical_options is included for its manifests and lab reports, and its bulk is
+    # dropped by TAR_EXCLUDES rather than by omitting the path. The recipes are still needed
+    # because the run configs live inside the excluded databases.
+    assert "cipher-system/data/historical_options" in module.TAR_INCLUDES
+    assert "*.sqlite" in module.TAR_EXCLUDES
     source = (REPO / "infra/gcp-cipher-vm/bin/backup-to-gcs.py").read_text(encoding="utf-8")
     refresh_at = source.index("refresh_options_rebuild_recipes()")
     tar_at = source.index("create_operational_archive(archive, ROOT, TAR_INCLUDES)")
@@ -127,3 +130,60 @@ def test_a_recipe_export_failure_warns_instead_of_failing_the_backup(monkeypatch
     monkeypatch.setattr(module, "RECIPE_EXPORTER", Path("/nonexistent/exporter.py"))
     warning = module.refresh_options_rebuild_recipes()
     assert warning and "missing" in warning
+
+
+def test_nested_datasets_are_found_not_silently_skipped(tmp_path):
+    """eod_indices_targeted nests one dataset per index; a top-level walk missed all three.
+
+    That is the failure mode this whole export exists to prevent: a recovery path that looks
+    complete because the thing it omitted never appeared in any output.
+    """
+    source, output = tmp_path / "src", tmp_path / "out"
+    source.mkdir()
+    parent = source / "eod_indices_targeted"
+    for index in ("iwm", "qqq", "spy"):
+        _dataset(parent, index, [(index.upper(), "completed", {"start_date": "2026-02-02"})])
+    _dataset(source, "flat", [("NVDL", "completed", {"start_date": "2026-01-01"})])
+
+    index_payload = exporter.export(source, output)
+
+    names = sorted(p.stem for p in output.glob("*.json") if p.name != "index.json")
+    assert names == [
+        "eod_indices_targeted__iwm",
+        "eod_indices_targeted__qqq",
+        "eod_indices_targeted__spy",
+        "flat",
+    ]
+    # Nested siblings must not collide on a bare directory name.
+    assert len(names) == len(set(names))
+    assert index_payload["total_runs"] == 4
+    # The parent directory holds no database of its own but is not "missing" -- it contains
+    # datasets, and reporting it as missing would be noise.
+    assert "eod_indices_targeted" not in index_payload["datasets_without_database"]
+
+
+def test_a_directory_with_neither_database_nor_nested_dataset_is_reported(tmp_path):
+    source, output = tmp_path / "src", tmp_path / "out"
+    source.mkdir()
+    (source / "lab_outputs_only").mkdir()
+    (source / "lab_outputs_only" / "report.json").write_text("{}", encoding="utf-8")
+    _dataset(source, "real", [("NVDL", "completed", {"start_date": "2026-01-01"})])
+
+    payload = exporter.export(source, output)
+    assert payload["datasets_without_database"] == ["lab_outputs_only"]
+
+
+def test_the_backup_carries_option_manifests_while_excluding_the_bulk():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "backup_to_gcs3", REPO / "infra/gcp-cipher-vm/bin/backup-to-gcs.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["backup_to_gcs3"] = module
+    spec.loader.exec_module(module)
+
+    assert "cipher-system/data/historical_options" in module.TAR_INCLUDES
+    # The point of including it is the manifests and lab reports, not 8.77 GB of databases
+    # or 913 MB of raw pages.
+    for pattern in ("*.gz", "*.sqlite", "*.sqlite-wal", "*.sqlite-shm"):
+        assert pattern in module.TAR_EXCLUDES, f"{pattern} must stay excluded"

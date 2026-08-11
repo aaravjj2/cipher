@@ -73,13 +73,21 @@ def export(source: Path, output: Path) -> dict:
     output.mkdir(parents=True, exist_ok=True)
     written: list[dict] = []
     missing: list[str] = []
-    for dataset_dir in sorted(p for p in source.iterdir() if p.is_dir()):
-        db = dataset_dir / "historical_options.sqlite"
-        if not db.is_file():
-            missing.append(dataset_dir.name)
-            continue
+    # Recursive rather than one level deep: eod_indices_targeted nests a dataset per index
+    # (iwm/qqq/spy, two runs each), and a top-level-only walk silently missed all three --
+    # exactly the kind of gap that makes a recovery path look complete when it is not.
+    databases = sorted(source.rglob("historical_options.sqlite"))
+    found_dirs = {db.parent for db in databases}
+    for candidate in sorted(p for p in source.iterdir() if p.is_dir()):
+        if not any(d == candidate or candidate in d.parents for d in found_dirs):
+            missing.append(candidate.name)
+    for db in databases:
+        dataset_dir = db.parent
+        # Name by path relative to the source so nested datasets stay distinguishable
+        # instead of three siblings all writing to "iwm.json".
+        name = dataset_dir.relative_to(source).as_posix().replace("/", "__")
         recipe = dataset_recipe(db)
-        recipe["dataset"] = dataset_dir.name
+        recipe["dataset"] = name
         recipe["source_database"] = str(db)
         recipe["exported_at"] = datetime.now(timezone.utc).isoformat()
         manifest = dataset_dir / "download_manifest.json"
@@ -91,10 +99,10 @@ def export(source: Path, output: Path) -> dict:
                 recipe["status"] = payload.get("status")
             except (OSError, ValueError):
                 pass
-        target = output / f"{dataset_dir.name}.json"
+        target = output / f"{name}.json"
         target.write_text(json.dumps(recipe, indent=2, sort_keys=True, default=str), encoding="utf-8")
         written.append({
-            "dataset": dataset_dir.name,
+            "dataset": name,
             "runs": recipe["run_count"],
             "bytes": target.stat().st_size,
         })
