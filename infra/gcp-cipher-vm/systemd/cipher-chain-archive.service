@@ -1,0 +1,41 @@
+[Unit]
+# Moves closed live option-chain JSONL days to verified GCS cold storage.
+#
+# These files are captured OPRA snapshots -- per-contract bid/ask/mid/last at a timestamp --
+# and no vendor sells them back, so they are the most irreplaceable data on the VM. They are
+# also the largest: 43.5 GiB across 92 files before the first scheduled run, growing a few GB
+# per session with no retention of any kind.
+#
+# This ran once by hand on 2026-08-01, stalled, and left 43.5 GiB unarchived until a timer
+# existed. That is the failure this unit prevents: the archiver working correctly is not the
+# same as the archiver running.
+#
+# Deletion is safe because it is earned, not assumed: live_chain_archive.py compresses,
+# uploads, reloads the blob, checks remote size and sha256 metadata, records a ledger
+# receipt, and only then unlinks. Verified independently before enabling this -- three files
+# already deleted by the 2026-08-01 run were re-downloaded and their DECOMPRESSED content
+# hashed to the byte against the recorded source_sha256.
+Description=Archive closed live option-chain days to verified GCS cold storage
+Wants=network-online.target
+After=network-online.target cipher-backup.service cipher-parquet-retention.service
+
+[Service]
+Type=oneshot
+User=aarav
+Group=aarav
+WorkingDirectory=/home/aarav/Aarav/cipher/cipher-system
+Environment=GOOGLE_CLOUD_PROJECT=project-eec91607-77a2-4be6-837
+# The cipher venv, not the research venv: this needs google-cloud-storage, which
+# .venv-research-py312 does not have.
+# --compression-level 10 rather than the default 3. Measured on a real 642 MB chain file:
+# level 3 gives 7.71x in 9s, level 10 gives 15.2x in 32s. For write-once/read-rarely cold
+# data, halving stored bytes forever is worth ~20s per file.
+# --keep-dates 2 leaves the two most recent days on disk for hot queries.
+ExecStart=/home/aarav/.venvs/cipher/bin/python /home/aarav/Aarav/cipher/cipher-system/scripts/archive_live_option_chains.py --compression-level 10 --keep-dates 2
+# zstd runs -T1 inside the module, but compression plus a multi-GB upload still competes
+# with the live collector, so this yields.
+Nice=15
+IOSchedulingClass=idle
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=cipher-chain-archive

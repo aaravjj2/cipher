@@ -438,3 +438,49 @@ Daily bars for NVDL/TSLL/SOXL/TQQQ were downloaded to
 `data/historical_equities/wheel_universe/equity_bars.sqlite` (916–1304 bars each,
 2021-06-01..2026-08-10). The 32 existing runs are therefore not reproducible from any
 equity store now present, which is its own reason to treat them as historical artifacts.
+
+## Leveraged-ETF wheel: 64 of 66 variants are profitable, and 12 of 66 beat cash
+
+2026-08-11. `data/leveraged_etf_wheel/parameter_lab_2026/` sweeps 66 parameter variants
+over 2026-01-02..2026-07-24 (203 days). Its own `report.md` is careful to say it is "a
+post-thesis sensitivity analysis, not an independent holdout." The numbers:
+
+```
+                total      annualized
+  worst        -0.913%        -1.64%
+  median       +0.666%        +1.20%
+  best         +3.856%        +7.04%
+
+  variants > 0%          : 64 / 66
+  variants > 4% annual   : 12 / 66
+```
+
+**The 64/66 hit rate is an artifact of the wrong comparison.** Selling cash-secured puts on
+leveraged ETFs during a rising 7-month window earns a small positive almost regardless of
+parameters, so "is it above zero" separates nothing. Against a 4% cash yield the picture
+inverts: 54 of 66 variants lose to a T-bill while carrying assignment risk on 2x-3x
+leveraged ETFs, and the median variant returns +1.20% annualized.
+
+`WheelConfig.risk_free_rate` is already `0.04`, and `core/leveraged_etf_csp_wheel.py` uses
+it at lines 857 and 906 to Black-Scholes-price the very options being sold. It is never used
+as a hurdle. The engine prices its instruments off a 4% rate and then reports returns
+against zero.
+
+Two consequences for how the existing runs should be read:
+
+- The headline "best return" in any sweep is selected from 66 draws with no holdout, so
+  +7.04% annualized is an upper order statistic, not an expectation. The median is the
+  honest central estimate and it is +1.20%.
+- This is independent of the missing entry control. Even if the down-day and weekly-cloud
+  filters were validated, the strategy as parameterized does not clear cash for most
+  settings.
+
+Recommended change, not yet made: report excess return over `risk_free_rate` alongside
+`total_return_pct` in `BacktestResult.summary`, so a wheel result cannot be read as a win
+without passing the hurdle the engine already assumes. That is a change to a published
+metric, so it needs a decision rather than a quiet edit.
+
+Correction to an earlier note in this session: `parameter_lab_2026/report.json` was flagged
+as malformed because a survey script looked for a `summary` key. It is not malformed -- it
+is a sweep artifact keyed by `variants`/`pop_floor_summary`/`variant_count`. No quarantine
+is needed.

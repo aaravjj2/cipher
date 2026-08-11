@@ -92,6 +92,75 @@ could not be created in Secret Manager. Two consequences:
 Grant the service account `roles/secretmanager.admin` (or create the secret from a
 privileged account) to make the hash durable, then re-run `cipher-secrets.service`.
 
+## What is backed up, and by which of the two mechanisms
+
+Backup is split in two, and reading only one of them gives a false picture of coverage.
+
+**`cipher-backup.timer` (03:15 ET)** — `backup-to-gcs.py`. Handles *hot, small, mutable*
+state: the five SQLite databases via the SQLite backup API, plus a zstd tar of
+`gex_snapshots`, `tradier_stream_events`, `accessobsidian_scans`, `backtest_results`,
+`flash_agentic`, `forward_tests`, `governance/artifacts`, `research_snapshots`,
+`warehouse_exports`, and `reports`. Every object is uploaded with a sha256 in its metadata
+and its size verified remotely.
+
+**`cipher-chain-archive.timer` (06:15 ET)** — `archive_live_option_chains.py`. Handles the
+*cold, huge, append-only* corpus: `data/live_option_chains/` under the `cold/` prefix.
+Files are compressed, uploaded, verified, ledgered in
+`data/live_option_chains_archive.sqlite`, and only then deleted locally. `--keep-dates 2`
+leaves the two newest days hot.
+
+**`cipher-parquet-retention.timer` (05:15 ET)** — a mirror, not a backup. It builds verified
+Parquet copies of completed `tradier_stream_events` days and never prunes the source.
+
+Deliberately **not** backed up:
+
+- **`data/historical_options` (9.8 GB)** — excluded because it is reproducible. It was built
+  by `core/historical_options_download.py` from Alpaca and can be rebuilt from the
+  `download_manifest.json` in each dataset directory. Rebuilding costs API quota and hours,
+  not data.
+- **`web/node_modules`, `.venv*`, `app/public`, `web/out`** — build artifacts.
+
+The distinction that matters: the live chains are *captured observations* that no vendor
+will sell back, so they are the one corpus where a missing backup is permanent loss. The
+2026-08-01 hand-run of the archiver stalled and left 43.5 GiB unarchived until the timer
+above existed. The archiver working is not the same as the archiver running.
+
+Verify recoverability rather than trusting the ledger — download an archived object,
+decompress it, and hash the result against the receipt's `source_sha256`:
+
+```bash
+sqlite3 data/live_option_chains_archive.sqlite \
+  'select object_uri, source_sha256, source_size_bytes from archive_receipts limit 1'
+gcloud storage cp <object_uri> /tmp/o.zst && zstd -d -f -o /tmp/o.jsonl /tmp/o.zst
+sha256sum /tmp/o.jsonl   # must equal source_sha256
+```
+
+## Bucket lifecycle — required, and blocked on IAM
+
+`gs://project-eec91607-77a2-4be6-837-cipher-runtime` held **378.90 GiB** with one full daily
+copy per day and nothing pruned. The VM service account
+`cipher-vm-runtime@…` lacks `storage.buckets.get`, so this cannot be read or set from the
+VM — `gcloud storage buckets describe` is denied. Run the following from an account holding
+`roles/storage.admin`:
+
+```bash
+cat > /tmp/lifecycle.json <<'JSON'
+{"rule": [
+  {"action": {"type": "Delete"},
+   "condition": {"age": 30, "matchesPrefix": ["backups/"]}},
+  {"action": {"type": "SetStorageClass", "storageClass": "NEARLINE"},
+   "condition": {"age": 30, "matchesPrefix": ["cold/"]}}
+]}
+JSON
+gcloud storage buckets update gs://project-eec91607-77a2-4be6-837-cipher-runtime \
+  --lifecycle-file=/tmp/lifecycle.json
+```
+
+**The prefixes are not interchangeable.** `backups/` is a daily full copy where only recent
+generations matter, so deleting at 30 days is the point. `cold/` is the only copy of the
+live option chains — it must never carry a Delete rule. Transitioning it to NEARLINE cuts
+storage cost while keeping the data, which is why the two prefixes get different actions.
+
 ## Operational commands
 
 ```bash

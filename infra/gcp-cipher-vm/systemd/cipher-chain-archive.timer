@@ -1,0 +1,15 @@
+[Unit]
+Description=Daily verified cold-storage archive of closed live option-chain days
+
+[Timer]
+# 06:15 ET runs after the 03:15 backup and the 05:15 Parquet mirror, so the three disk-heavy
+# jobs never overlap, and well before the 07:30 ET collector window opens.
+OnCalendar=*-*-* 06:15:00 America/New_York
+# A skipped day is not self-healing: chains accumulate at several GB per session and the
+# only thing keeping the disk from filling is this job actually running.
+Persistent=true
+RandomizedDelaySec=900
+Unit=cipher-chain-archive.service
+
+[Install]
+WantedBy=timers.target

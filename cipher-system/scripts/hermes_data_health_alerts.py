@@ -21,6 +21,7 @@ from hermes_delivery import send_hermes_message
 
 
 ROOT = Path(__file__).resolve().parents[1]
+CORE = ROOT / "core"
 DATA = ROOT / "data"
 DEFAULT_STATE = DATA / "alerts" / "data_health_state.json"
 GOVERNANCE_RUNNER = ROOT.parent / "infra" / "gcp-cipher-vm" / "bin" / "run-governance-catalog.sh"
@@ -47,14 +48,44 @@ def parse_dt(value: str | None) -> datetime | None:
         return None
 
 
-def market_window(kind: str) -> bool:
-    now = datetime.now(NY)
-    if now.weekday() >= 5:
+def market_window(kind: str, now: datetime | None = None) -> bool:
+    """Whether a collector should be producing data right now.
+
+    This must track when *data flows*, not when the process is alive. The two are
+    different for tradier: `run-tradier-loop.sh` starts the capture process at 07:30 ET,
+    but `core/tradier_stream_capture.py:regular_session_open` only records events between
+    09:30 and 16:00 ET, deliberately, because extended-hours quotes are excluded from the
+    validation dataset.
+
+    This function previously claimed 07:30-17:00 for tradier, so for roughly three hours of
+    every trading day it expected data that by design does not exist, reported `stale`, and
+    pushed that to Telegram. An alert that is wrong on a schedule is worse than no alert:
+    it trains the reader to ignore the channel that also carries the real outages.
+
+    The capture window is therefore read from the collector itself rather than restated
+    here, so the two cannot drift apart again.
+    """
+    current = now or datetime.now(NY)
+    if current.weekday() >= 5:
         return False
-    current = now.time()
     if kind == "tradier":
-        return time(7, 30) <= current <= time(17, 0)
-    return time(9, 30) <= current <= time(16, 10)
+        return _tradier_session_open(current)
+    # GEX and chain snapshots are captured on the regular session with a short tail for
+    # the closing snapshot to land.
+    return time(9, 30) <= current.time() <= time(16, 10)
+
+
+def _tradier_session_open(current: datetime) -> bool:
+    """Defer to the collector's own session gate, falling back to its literal bounds."""
+    try:
+        sys.path.insert(0, str(CORE))
+        from tradier_stream_capture import regular_session_open
+
+        return bool(regular_session_open(current))
+    except Exception:
+        # A failed import must not silence the check entirely; mirror the collector's
+        # documented 09:30-16:00 ET regular session instead of the old 07:30-17:00.
+        return time(9, 30) <= current.time() < time(16, 0)
 
 
 def latest_tradier(db_path: Path) -> dict[str, Any]:
