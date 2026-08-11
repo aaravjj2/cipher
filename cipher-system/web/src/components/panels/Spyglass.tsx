@@ -341,7 +341,7 @@ function SpyglassTable({
 }) {
   return (
     <div className="rounded-[10px] overflow-x-auto" style={{ border: "1px solid var(--line)" }}>
-      <table className="w-full min-w-[860px] border-collapse" style={{ fontFamily: "var(--font-mono)" }}>
+      <table aria-label="Options flow prints" className="w-full min-w-[860px] border-collapse" style={{ fontFamily: "var(--font-mono)" }}>
         <thead>
           <tr>
             {TABLE_HEADERS.map((header, i) => {
@@ -351,6 +351,7 @@ function SpyglassTable({
               return (
                 <th
                   key={header}
+                  scope="col"
                   className={cn("text-[11px] font-bold uppercase px-3 py-[10px] whitespace-nowrap", i === 0 ? "text-left" : "text-right")}
                   style={{
                     letterSpacing: "0.06em",
@@ -828,12 +829,16 @@ function ContractSearchResultView({ result }: { result: ContractSearchResult }) 
         {result.caveat}
       </div>
 
-      <div className="overflow-x-auto">
-        <table className="w-full border-collapse text-left text-[12px] tabular-nums">
+      {/* Contract Search has six dense, fixed-content columns. Keep its horizontal
+          scroll local to the result table so a narrow phone does not widen the whole
+          panel or clip the trade tape. */}
+      <div className="overflow-x-auto rounded-[10px]" style={{ border: "1px solid var(--line)" }}>
+        <div className="min-w-[560px]">
+          <table aria-label="Contract search trade tape" className="w-full border-collapse text-left text-[12px] tabular-nums">
           <thead>
             <tr style={{ color: "var(--text-mute)" }}>
               {["TIME", "SIZE", "PRICE", "PREMIUM", "SIDE", "EXCH"].map((h) => (
-                <th key={h} className="whitespace-nowrap border-b px-3 py-1 text-[10px] font-semibold" style={{ borderColor: "var(--line)" }}>
+                <th key={h} scope="col" className="whitespace-nowrap border-b px-3 py-1 text-[10px] font-semibold" style={{ borderColor: "var(--line)" }}>
                   {h}
                 </th>
               ))}
@@ -860,7 +865,8 @@ function ContractSearchResultView({ result }: { result: ContractSearchResult }) 
               </tr>
             ))}
           </tbody>
-        </table>
+          </table>
+        </div>
       </div>
     </div>
   );

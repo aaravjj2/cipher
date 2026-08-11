@@ -157,9 +157,9 @@ def test_eligibility_is_identical_across_both_arms():
 
 def test_summary_refuses_a_verdict_without_enough_replicates():
     class _Result:
-        def __init__(self, value):
-            self.summary = {"total_return_pct": value, "closed_option_events": 1,
-                            "research_grade_blockers": ["nbbo unavailable"]}
+        def __init__(self, value):            self.summary = {"total_return_pct": value, "events": 2, "closed_option_events": 1,
+                                "research_grade_blockers": ["nbbo unavailable"]}
+
 
     thin = summarize_control(_Result(5.0), [_Result(1.0)])
     assert thin["beat_control_pct"] is None
@@ -175,6 +175,22 @@ def test_summary_refuses_a_verdict_without_enough_replicates():
 
     middling = summarize_control(_Result(2.5), controls)
     assert middling["beat_control_pct"] == 50.0
+
+
+def test_a_zero_event_real_arm_is_invalid_not_as_a_100_percent_win():
+    """A zero/zero sample is empty evidence, not a successful comparison."""
+    class _Result:
+        def __init__(self, value, events):
+            self.summary = {"total_return_pct": value, "events": events,
+                            "closed_option_events": 0,
+                            "research_grade_blockers": []}
+
+    empty = summarize_control(_Result(0.0, 0), [_Result(0.0, 0) for _ in range(40)])
+    assert empty["empty_sample"] is True
+    assert empty["comparison_valid"] is False
+    assert empty["beat_control_pct"] is None
+    assert "INVALID" in empty["interpretation"]
+    assert any("no events" in blocker for blocker in empty["research_grade_blockers"])
 
 
 def test_a_starved_control_is_reported_invalid_not_as_a_100_percent_win():

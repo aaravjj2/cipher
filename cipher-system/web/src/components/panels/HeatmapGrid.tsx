@@ -35,28 +35,70 @@ export function getCellColor(value: number, maxAbs: number): string {
   return `color-mix(in srgb, var(${token}) ${mixPct.toFixed(1)}%, var(--panel))`;
 }
 
+/**
+ * Compact explanation for the shared signed-exposure heatmap scale.
+ * The intensity is relative to the largest absolute value currently shown, not a
+ * cross-ticker or cross-session absolute scale. That distinction prevents viewers
+ * from comparing color saturation across separate panels as if it were normalized.
+ */
+export function ExposureLegend({ className = "" }: { className?: string }) {
+  return (
+    <div
+      role="group"
+      aria-label="Exposure color scale"
+      className={`flex flex-row flex-wrap items-center gap-x-3 gap-y-1 text-[10px] ${className}`}
+      style={{ color: "var(--text-mute)", fontFamily: "var(--font-mono)" }}
+    >
+      <span className="font-semibold" style={{ color: "var(--text-dim)" }}>Exposure scale</span>
+      <span className="inline-flex items-center gap-1">
+        <span aria-hidden="true" className="h-[8px] w-[8px] rounded-full" style={{ background: "var(--accent)" }} />
+        Positive exposure · purple
+      </span>
+      <span className="inline-flex items-center gap-1">
+        <span aria-hidden="true" className="h-[8px] w-[8px] rounded-full" style={{ background: "var(--neg)" }} />
+        Negative exposure · red
+      </span>
+      <span className="inline-flex items-center gap-1">
+        <span aria-hidden="true" className="h-[8px] w-[8px] rounded-full" style={{ background: "var(--gold)" }} />
+        Largest |exposure|
+      </span>
+      <span>Intensity is relative within each heatmap</span>
+    </div>
+  );
+}
+
 /** Standard colored data cell (`.cell.score[.star]`) — one per (strike, expiration/instrument). */
 export function HeatmapCell({
   value,
   maxAbs,
   isStar = false,
   modeled = false,
+  ariaLabel,
   style,
 }: {
-  value: number;
+  value: number | null;
   maxAbs: number;
   isStar?: boolean;
   /** Marks a cell whose exposure was reconstructed rather than read from the feed. */
   modeled?: boolean;
+  /** Full semantic label, supplied by a heatmap when the cell is part of an ARIA grid. */
+  ariaLabel?: string;
   style?: CSSProperties;
 }) {
+  const unavailable = value == null;
+  const displayValue = unavailable ? "unknown" : formatDollar(value);
+
   return (
     <div
-      className={cn("cell score", isStar && "star", modeled && "modeled")}
+      role={ariaLabel ? "cell" : undefined}
+      aria-label={ariaLabel}
+      className={cn("cell score", isStar && "star", modeled && "modeled", unavailable && "unknown")}
       title={
-        modeled
-          ? "Reconstructed: gamma solved from the option mid price and/or open interest substituted by session volume."
-          : undefined
+        unavailable
+          ? "Unknown: no listed/calculable exposure is available for this strike and expiration."
+          : modeled
+            ? "Reconstructed: gamma solved from the option mid price and/or open interest substituted by session volume."
+            : undefined
       }
       style={{
         margin: "1px",
@@ -69,8 +111,8 @@ export function HeatmapCell({
         fontSize: "11px",
         fontWeight: 700,
         letterSpacing: "0.22px",
-        background: isStar ? "var(--gold)" : getCellColor(value, maxAbs),
-        color: isStar ? "rgb(21,16,0)" : "#ffffff",
+        background: unavailable ? "var(--panel-2)" : isStar ? "var(--gold)" : getCellColor(value, maxAbs),
+        color: unavailable ? "var(--text-mute)" : isStar ? "rgb(21,16,0)" : "#ffffff",
         // Subtle, non-alarming: a dotted underline reads as "softer evidence" without
         // competing with the heat colouring that carries the actual signal.
         borderBottom: modeled
@@ -79,7 +121,7 @@ export function HeatmapCell({
         ...style,
       }}
     >
-      {formatDollar(value)}
+      {displayValue}
     </div>
   );
 }
@@ -88,10 +130,13 @@ export function HeatmapCell({
 export function StrikeLabelCell({
   strike,
   isAtm = false,
+  ariaLabel,
   style,
 }: {
   strike: number;
   isAtm?: boolean;
+  /** Full semantic label, supplied by a heatmap when the label is a row header. */
+  ariaLabel?: string;
   style?: CSSProperties;
 }) {
   return (
@@ -99,6 +144,8 @@ export function StrikeLabelCell({
       // Anchor for Strike Matrix's auto-snap-to-golden: rows render as fragments,
       // so this sticky label is the one element per strike that can be scrolled to.
       data-strike={strike}
+      role={ariaLabel ? "rowheader" : undefined}
+      aria-label={ariaLabel}
       className={cn("k-cell", isAtm && "atm")}
       style={{
         position: "sticky",
@@ -138,6 +185,8 @@ export function SpotRow({
 }) {
   return (
     <div
+      role="row"
+      aria-label={`Spot price ${spot.toFixed(2)}`}
       className="spot-row"
       style={{
         gridColumn: `1 / span ${columnCount}`,
@@ -157,6 +206,8 @@ export function SpotRow({
         }}
       />
       <span
+        role="cell"
+        aria-label={`${label} ${spot.toFixed(2)}`}
         className="spot-pill"
         style={{
           position: "sticky",

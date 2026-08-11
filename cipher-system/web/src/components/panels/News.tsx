@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { fetchNews, type RealNews } from "@/lib/api";
+import { SkeletonCards } from "@/components/ui/skeleton";
 
 /**
  * News panel — the active symbol's headlines from Yahoo Finance's public RSS feed
@@ -111,9 +112,7 @@ export function News({ ticker }: NewsProps) {
         )}
 
         {!error && !data && (
-          <p className="text-[12.5px] italic" style={{ color: "var(--text-mute)" }}>
-            Loading headlines…
-          </p>
+          <SkeletonCards label={`Loading ${ticker} headlines…`} count={3} lines={2} />
         )}
 
         {headlines.length > 0 && (

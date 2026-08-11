@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchFlow, type RealFlowPrint } from "@/lib/api";
+import { Skeleton, SkeletonRegion } from "@/components/ui/skeleton";
 
 /**
  * TS overlay — the real product's FLOW TAPE.
@@ -189,7 +190,7 @@ export default function FlowTape({ ticker }: { ticker: string }) {
       </div>
 
       {error && (
-        <div className="px-3 py-2 text-[10px]" style={{ color: "var(--negative)" }}>
+        <div className="px-3 py-2 text-[10px]" style={{ color: "var(--neg)" }}>
           {error}
         </div>
       )}
@@ -210,10 +211,21 @@ export default function FlowTape({ ticker }: { ticker: string }) {
             </tr>
           </thead>
           <tbody>
+            {prints.length === 0 && loading && (
+              <tr aria-label={`Loading flow prints for ${ticker}`}>
+                <td colSpan={6} className="px-3 py-3">
+                  <SkeletonRegion label={`Loading flow prints for ${ticker}…`}>
+                    {["w-[72%]", "w-[54%]", "w-[64%]", "w-[44%]"].map((width) => (
+                      <Skeleton key={width} className={`h-[16px] ${width}`} />
+                    ))}
+                  </SkeletonRegion>
+                </td>
+              </tr>
+            )}
             {prints.length === 0 && !loading && !error && (
               <tr>
                 <td colSpan={6} className="px-3 py-4 text-center text-[10px]" style={{ color: "var(--text-mute)" }}>
-                  No prints above {money(minPremium)} for {ticker} this session.
+                  No prints above {money(minPremium)} for {ticker} this session. Lower the premium threshold or keep Live on for new prints.
                 </td>
               </tr>
             )}

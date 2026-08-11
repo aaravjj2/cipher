@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { ChevronLeftIcon, ChevronRightIcon } from "@/components/icons";
 import { readLocal, writeLocal } from "@/lib/localStorage";
 import { fetchStanding, type StandingStatus } from "@/lib/api";
+import { SkeletonCards } from "@/components/ui/skeleton";
 
 /**
  * Standing panel — what is currently open (prospective registrations, shadow
@@ -169,6 +170,7 @@ export function Standing() {
   const [formDate, setFormDate] = useState("");
   const [formNote, setFormNote] = useState("");
   const [status, setStatus] = useState<StandingStatus | null>(null);
+  const [statusLoading, setStatusLoading] = useState(true);
   const [error, setError] = useState(false);
 
   useEffect(() => {
@@ -186,7 +188,14 @@ export function Standing() {
 
   useEffect(() => {
     const controller = new AbortController();
-    fetchStanding(controller.signal).then(setStatus).catch(() => setError(true));
+    fetchStanding(controller.signal)
+      .then(setStatus)
+      .catch(() => {
+        if (!controller.signal.aborted) setError(true);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setStatusLoading(false);
+      });
     return () => controller.abort();
   }, []);
 
@@ -229,12 +238,8 @@ export function Standing() {
     return map;
   }, [notes, view]);
 
-  if (!view || !today) {
-    return (
-      <section className="flex items-center justify-center py-20" style={{ color: "var(--text-mute)" }}>
-        Loading standing…
-      </section>
-    );
+  if (!view || !today || statusLoading) {
+    return <SkeletonCards label="Loading standing and accrual status…" count={3} lines={3} />;
   }
 
   const leadingBlanks = firstWeekdayOfMonth(view.year, view.month);
@@ -270,7 +275,9 @@ export function Standing() {
       {/* Open commitments */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <Section title="Open prospective registrations">
-          {registrations.length === 0 ? (
+          {error ? (
+            <EmptyRow>Prospective registrations unavailable while the core service is offline.</EmptyRow>
+          ) : registrations.length === 0 ? (
             <EmptyRow>No open prospective registrations.</EmptyRow>
           ) : (
             <div className="flex flex-col gap-3">
@@ -280,7 +287,9 @@ export function Standing() {
         </Section>
 
         <Section title="Open shadow positions">
-          {shadowPositions.length === 0 ? (
+          {error ? (
+            <EmptyRow>Shadow positions unavailable while the core service is offline.</EmptyRow>
+          ) : shadowPositions.length === 0 ? (
             <EmptyRow>No open shadow positions.</EmptyRow>
           ) : (
             <div className="flex flex-col gap-2">
@@ -291,7 +300,9 @@ export function Standing() {
       </div>
 
       <Section title="Accrual clocks">
-        {clocks.length === 0 ? (
+        {error ? (
+          <EmptyRow>Accrual clocks unavailable while the core service is offline.</EmptyRow>
+        ) : clocks.length === 0 ? (
           <EmptyRow>No accrual clocks reported.</EmptyRow>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

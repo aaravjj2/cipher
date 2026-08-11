@@ -257,8 +257,8 @@ def profile_summary(rows):
         observed = any(cell["available"] for cell in row["cells"])
         if not observed:
             continue
-        call = sum(cell["call_gex"] for cell in row["cells"])
-        put = sum(cell["put_gex"] for cell in row["cells"])
+        call = sum((cell.get("call_gex") or 0.0) for cell in row["cells"])
+        put = sum((cell.get("put_gex") or 0.0) for cell in row["cells"])
         profile.append({"strike": row["strike"], "call": call, "put": put, "net": call + put})
     if not profile:
         return {

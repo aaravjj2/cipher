@@ -10,7 +10,9 @@ export type Quote = {
 export type StrikeMatrixCell = {
   strike: number;
   expirationIso: string;
-  value: number; // signed dollar exposure, e.g. -12700000 -> "-$12.7M"
+  value: number | null; // null means the contract/cell is unavailable; a listed zero remains 0
+  /** Whether the backend had a listed/calculable cell at this strike and expiration. */
+  available: boolean;
   /** Exposure leans on a reconstructed gamma and/or volume-as-open-interest. */
   modeled?: boolean;
 };

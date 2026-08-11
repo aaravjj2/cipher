@@ -20,17 +20,17 @@ export type RealQuote = {
 
 export type RealMatrixCell = {
   expiration: string; // ISO date, e.g. "2026-08-07"
-  call_gex: number;
-  put_gex: number;
-  net_gex: number;
-  call_vex: number;
-  put_vex: number;
-  net_vex: number;
-  call_oi: number;
-  put_oi: number;
-  volume: number;
-  call_mid: number;
-  put_mid: number;
+  call_gex: number | null;
+  put_gex: number | null;
+  net_gex: number | null;
+  call_vex: number | null;
+  put_vex: number | null;
+  net_vex: number | null;
+  call_oi: number | null;
+  put_oi: number | null;
+  volume: number | null;
+  call_mid: number | null;
+  put_mid: number | null;
   listed: boolean;
   oi_assumed_zero: boolean;
   // Provenance: gamma reconstructed via the implied-vol solver rather than taken from
@@ -40,6 +40,20 @@ export type RealMatrixCell = {
   iv_min_tick?: boolean;
   oi_from_volume?: boolean;
   available: boolean;
+  gex_available?: boolean;
+  vex_available?: boolean;
+  call_listed?: boolean;
+  put_listed?: boolean;
+  call_gex_available?: boolean;
+  put_gex_available?: boolean;
+  call_vex_available?: boolean;
+  put_vex_available?: boolean;
+  call_oi_available?: boolean;
+  put_oi_available?: boolean;
+  oi_available?: boolean;
+  volume_available?: boolean;
+  call_mid_available?: boolean;
+  put_mid_available?: boolean;
 };
 
 export type RealMatrixRow = {
@@ -64,7 +78,7 @@ export type RealMatrixResponse = {
   as_of: string;
   feed: string;
   quote: RealQuote;
-  depth_points: number;
+  depth_points: number | null;
   depth_mode: string;
   expirations: string[];
   total_expirations_available: number;

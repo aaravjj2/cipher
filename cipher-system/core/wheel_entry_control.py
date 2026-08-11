@@ -217,12 +217,25 @@ def summarize_control(
     control_events = [int(r.summary.get("events") or 0) for r in controls]
     control_events_median = median(control_events) if control_events else 0.0
     activity_ratio = (control_events_median / actual_events) if actual_events > 0 else None
+    empty_sample = actual_events == 0
     starved = activity_ratio is not None and activity_ratio < MIN_CONTROL_ACTIVITY_RATIO
 
-    verdict_available = actual_value is not None and len(control_values) >= 2 and not starved
+    verdict_available = (
+        actual_value is not None
+        and len(control_values) >= 2
+        and not starved
+        and not empty_sample
+    )
     beat_pct = _percentile_of(float(actual_value), control_values) if verdict_available else None
 
-    if starved:
+    if empty_sample:
+        interpretation = (
+            "INVALID: the real arm produced no events in the locked window, so the "
+            "control comparison has no empirical sample. A zero-return real arm and "
+            "zero-return controls cannot support a 100% win claim; check the selected "
+            "equity/archive coverage before interpreting the strategy."
+        )
+    elif starved:
         interpretation = (
             f"INVALID: control replicates traded a median of {control_events_median} times "
             f"against the real arm's {actual_events}, below the {MIN_CONTROL_ACTIVITY_RATIO:.0%} "
@@ -243,6 +256,7 @@ def summarize_control(
     return {
         "comparison_valid": verdict_available,
         "control_starved": starved,
+        "empty_sample": empty_sample,
         "actual_events": actual_events,
         "control_events_max": max(control_events, default=0),
         "control_events_median": control_events_median,
@@ -273,5 +287,9 @@ def summarize_control(
         + (
             ["option-chain availability is conditional on the signal, so this control is starved"]
             if starved else []
+        )
+        + (
+            ["the real arm produced no events in the locked window, so no comparison is supported"]
+            if empty_sample else []
         ),
     }

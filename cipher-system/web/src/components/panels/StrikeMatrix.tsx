@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { DownloadIcon, RefreshIcon, StrikeMatrixIcon } from "@/components/icons";
 import {
+  ExposureLegend,
   findSpotInsertIndex,
   formatDollar,
   getCellColor,
@@ -12,6 +13,7 @@ import {
   StrikeLabelCell,
 } from "@/components/panels/HeatmapGrid";
 import { ApiError, fetchMatrix, type RealMatrixResponse } from "@/lib/api";
+import { SkeletonGrid } from "@/components/ui/skeleton";
 import type {
   ExposureMetric,
   MatrixDensity,
@@ -88,10 +90,14 @@ function buildCells(
     for (const cell of row.cells) {
       if (!isoSet.has(cell.expiration)) continue;
       const value = metric === "gex" ? cell.net_gex : cell.net_vex;
+      const available = metric === "gex"
+        ? cell.gex_available ?? cell.available
+        : cell.vex_available ?? cell.available;
       map.set(`${row.strike}|${cell.expiration}`, {
         strike: row.strike,
         expirationIso: cell.expiration,
-        value,
+        value: available ? value : null,
+        available,
         modeled: Boolean(cell.gamma_modeled || cell.oi_from_volume || cell.iv_min_tick),
       });
     }
@@ -272,6 +278,7 @@ export function StrikeMatrix({
       for (const exp of expirations) {
         const cell = activeCells.get(`${strike}|${exp.iso}`);
         if (!cell) continue;
+        if (cell.value == null) continue;
         const abs = Math.abs(cell.value);
         if (abs > max) {
           max = abs;
@@ -332,7 +339,10 @@ export function StrikeMatrix({
         if (cell) all.push(cell);
       }
     }
-    return all.sort((a, b) => Math.abs(b.value) - Math.abs(a.value)).slice(0, 6);
+    return all
+      .filter((cell): cell is StrikeMatrixCell & { value: number } => cell.value != null)
+      .sort((a, b) => Math.abs(b.value) - Math.abs(a.value))
+      .slice(0, 6);
   }, [displayStrikes, expirations, activeCells]);
 
   const gridTemplateColumns = `92px repeat(${Math.max(expirations.length, 1)}, minmax(200px, 1fr))`;
@@ -400,13 +410,16 @@ export function StrikeMatrix({
         <div className="flex flex-row items-center gap-2 overflow-x-auto pb-1">{toolbar}</div>
       )}
 
+      <ExposureLegend />
+
       {status === "loading" && (
-        <div
-          className="flex items-center justify-center rounded-[10px] py-16 text-[13px]"
-          style={{ border: "1px solid var(--line)", color: "var(--text-mute)" }}
-        >
-          Loading live strike matrix for {ticker}…
-        </div>
+        // Shaped like the grid that follows, so the panel does not jump when the fetch lands.
+        // Column count tracks the density toggle for the same reason.
+        <SkeletonGrid
+          label={`Loading live strike matrix for ${ticker}…`}
+          rows={16}
+          columns={expirationCount > 6 ? 8 : 5}
+        />
       )}
 
       {status === "error" && (
@@ -446,6 +459,8 @@ export function StrikeMatrix({
             >
               <div
                 className="grid"
+                role="table"
+                aria-label={`${data.ticker} ${metric.toUpperCase()} exposure by strike and expiration`}
                 style={{
                   display: "grid",
                   gridTemplateColumns,
@@ -454,50 +469,55 @@ export function StrikeMatrix({
                   color: "var(--text)",
                 }}
               >
-                {/* Corner cell — sticky on BOTH axes, highest z-index */}
-                <div
-                  className="h-cell h-strike flex flex-row items-center justify-between gap-1"
-                  style={{
-                    position: "sticky",
-                    top: 0,
-                    left: 0,
-                    zIndex: 30,
-                    background: "var(--bg)",
-                    padding: "12px 8px 8px 10px",
-                    height: "34.667px",
-                    fontSize: "11px",
-                    fontWeight: 700,
-                    letterSpacing: "0.66px",
-                    color: "var(--text-dim)",
-                  }}
-                >
-                  <span>STRIKE</span>
-                  <DownloadIcon width={12} height={12} style={{ color: "var(--text-mute)" }} />
-                </div>
-
-                {/* Expiration headers — sticky top */}
-                {expirations.map((exp) => (
+                <div role="row" style={{ display: "contents" }}>
+                  {/* Corner cell — sticky on BOTH axes, highest z-index */}
                   <div
-                    key={exp.iso}
-                    className="h-cell flex flex-col items-center justify-start"
+                    role="columnheader"
+                    className="h-cell h-strike flex flex-row items-center justify-between gap-1"
                     style={{
                       position: "sticky",
                       top: 0,
-                      zIndex: 20,
+                      left: 0,
+                      zIndex: 30,
                       background: "var(--bg)",
-                      padding: "12px 8px 8px",
+                      padding: "12px 8px 8px 10px",
                       height: "34.667px",
                       fontSize: "11px",
                       fontWeight: 700,
                       letterSpacing: "0.66px",
                       color: "var(--text-dim)",
-                      textAlign: "center",
                     }}
                   >
-                    <span>{exp.dateLabel}</span>
-                    <span style={{ opacity: 0.85, fontSize: "9.5px", fontWeight: 600 }}>{exp.daysLabel}</span>
+                    <span>STRIKE</span>
+                    <DownloadIcon width={12} height={12} style={{ color: "var(--text-mute)" }} />
                   </div>
-                ))}
+
+                  {/* Expiration headers — sticky top */}
+                  {expirations.map((exp) => (
+                    <div
+                      key={exp.iso}
+                      role="columnheader"
+                      aria-label={`${exp.dateLabel}, ${exp.daysLabel} to expiration`}
+                      className="h-cell flex flex-col items-center justify-start"
+                      style={{
+                        position: "sticky",
+                        top: 0,
+                        zIndex: 20,
+                        background: "var(--bg)",
+                        padding: "12px 8px 8px",
+                        height: "34.667px",
+                        fontSize: "11px",
+                        fontWeight: 700,
+                        letterSpacing: "0.66px",
+                        color: "var(--text-dim)",
+                        textAlign: "center",
+                      }}
+                    >
+                      <span>{exp.dateLabel}</span>
+                      <span style={{ opacity: 0.85, fontSize: "9.5px", fontWeight: 600 }}>{exp.daysLabel}</span>
+                    </div>
+                  ))}
+                </div>
 
                 {/* Data rows, with the spot-row marker inserted at the right position */}
                 {displayStrikes.map((strike, i) => {
@@ -511,6 +531,7 @@ export function StrikeMatrix({
                       cells={activeCells}
                       maxAbs={maxAbs}
                       starKey={starKey}
+                      metric={metric}
                     />
                   );
                   if (i === spotInsertIndex) {
@@ -553,15 +574,15 @@ export function StrikeMatrix({
                       key={key}
                       className="flex flex-row items-center justify-between rounded-[4px] px-2 py-[7px]"
                       style={{
-                        background: isStar ? "var(--gold)" : getCellColor(cell.value, maxAbs),
-                        color: isStar ? "rgb(21,16,0)" : "#ffffff",
+                        background: cell.value == null ? "var(--panel-2)" : isStar ? "var(--gold)" : getCellColor(cell.value, maxAbs),
+                        color: cell.value == null ? "var(--text-mute)" : isStar ? "rgb(21,16,0)" : "#ffffff",
                         fontSize: "11px",
                         fontWeight: 700,
                       }}
                     >
                       <span>{cell.strike}</span>
                       <span style={{ opacity: 0.8, fontSize: "10px" }}>{expLabel}</span>
-                      <span>{formatDollar(cell.value)}</span>
+                      <span>{cell.value == null ? "unknown" : formatDollar(cell.value)}</span>
                     </div>
                   );
                 })}
@@ -606,6 +627,7 @@ function ExpandableRow({
   cells,
   maxAbs,
   starKey,
+  metric,
 }: {
   strike: number;
   isAtm: boolean;
@@ -613,14 +635,19 @@ function ExpandableRow({
   cells: Map<string, StrikeMatrixCell>;
   maxAbs: number;
   starKey: string;
+  metric: ExposureMetric;
 }) {
   return (
-    <>
-      <StrikeLabelCell strike={strike} isAtm={isAtm} />
+    <div role="row" style={{ display: "contents" }}>
+      <StrikeLabelCell
+        strike={strike}
+        isAtm={isAtm}
+        ariaLabel={`Strike ${strike}`}
+      />
       {expirations.map((exp) => {
         const key = `${strike}|${exp.iso}`;
         const cell = cells.get(key);
-        const value = cell?.value ?? 0;
+        const value = cell?.value ?? null;
         const isStar = key === starKey;
         return (
           <HeatmapCell
@@ -629,10 +656,11 @@ function ExpandableRow({
             maxAbs={maxAbs}
             isStar={isStar}
             modeled={cells.get(key)?.modeled}
+            ariaLabel={`${metric.toUpperCase()} ${value == null ? "unknown" : formatDollar(value)} at strike ${strike}, expiration ${exp.dateLabel}, ${exp.daysLabel} to expiration${isStar ? ", largest absolute exposure" : ""}`}
           />
         );
       })}
-    </>
+    </div>
   );
 }
 

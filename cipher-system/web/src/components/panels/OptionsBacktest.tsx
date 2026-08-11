@@ -13,6 +13,7 @@ import {
   type OptionsLabProtocol,
   type OptionsLabJob,
 } from "@/lib/api";
+import { SkeletonCards } from "@/components/ui/skeleton";
 
 type LoadedReport = {
   id: string;
@@ -194,9 +195,20 @@ export function OptionsBacktest() {
   if (error) {
     return <p className="text-[12px]" style={{ color: "var(--neg)" }}>{error}</p>;
   }
-  if (!catalog || !dataset) {
-    return <p className="text-[12px]" style={{ color: "var(--text-mute)" }}>Loading options research catalog…</p>;
+  if (!catalog) {
+    return <SkeletonCards label="Loading historical options research catalog…" count={3} lines={3} />;
   }
+  if (!catalog.datasets.length) {
+    return (
+      <section className="rounded-[var(--radius)] p-5" style={{ background: "var(--panel)", border: "1px solid var(--line)" }}>
+        <h2 className="text-[15px] font-semibold" style={{ color: "var(--text)" }}>Historical options research</h2>
+        <p className="mt-2 text-[12px] leading-relaxed" style={{ color: "var(--text-mute)" }}>
+          The catalog is available, but no research datasets are registered yet. Add or capture an approved dataset before running a protocol or opening a report.
+        </p>
+      </section>
+    );
+  }
+  if (!dataset) return null;
 
   return (
     <div className="flex flex-col gap-4" style={{ color: "var(--text)" }}>

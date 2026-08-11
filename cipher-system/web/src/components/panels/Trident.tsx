@@ -3,9 +3,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { ChevronDownIcon, RefreshIcon } from "@/components/icons";
-import { findSpotInsertIndex, HeatmapCell, SpotRow, StrikeLabelCell } from "@/components/panels/HeatmapGrid";
+import { ExposureLegend, findSpotInsertIndex, formatDollar, HeatmapCell, SpotRow, StrikeLabelCell } from "@/components/panels/HeatmapGrid";
 import { ApiError, fetchMatrix, type RealMatrixResponse } from "@/lib/api";
 import type { ExposureMetric, StrikeMatrixCell } from "@/types/cipher";
+import { SkeletonGrid } from "@/components/ui/skeleton";
 
 /**
  * Trident panel — 3 independent single-column strike heatmaps (SPY / QQQ / IWM) side by
@@ -51,10 +52,15 @@ function buildCells(data: RealMatrixResponse, expIso: string, metric: ExposureMe
   for (const row of data.rows) {
     const cell = row.cells.find((c) => c.expiration === expIso);
     if (!cell) continue;
+    const available = metric === "gex"
+      ? cell.gex_available ?? cell.available
+      : cell.vex_available ?? cell.available;
     map.set(String(row.strike), {
       strike: row.strike,
       expirationIso: expIso,
-      value: metric === "gex" ? cell.net_gex : cell.net_vex,
+      value: available ? (metric === "gex" ? cell.net_gex : cell.net_vex) : null,
+      available,
+      modeled: Boolean(cell.gamma_modeled || cell.oi_from_volume || cell.iv_min_tick),
     });
   }
   return map;
@@ -109,9 +115,9 @@ function PillGroup<T extends string>({
  *
  *   FC   — highlight the largest upside and downside walls. Buildable today:
  *          /api/matrix already returns per-strike net_gex, so this is a max/min
- *          selection over the existing grid plus a highlight style. No new endpoint.
- *   Auto — auto-refresh every few seconds. StrikeMatrix already implements exactly
- *          this (AUTO_REFRESH_MS + an "Auto refresh" pill); reuse that, do not
+ *          selection over the existing grid plus a highlight style. No new endpoint.   *   Auto — auto-refresh every 60 seconds. StrikeMatrix already implements exactly
+   *          this (AUTO_REFRESH_MS + an "Auto refresh" pill); reuse that, do not
+
  *          reinvent it.
  *   SP   — open the Night Vision chart alongside, i.e. a split/dual-pane view.
  *          This is a layout change in page.tsx rather than a data change.
@@ -273,12 +279,14 @@ export function Trident({ toolbarSlot = null }: { toolbarSlot?: HTMLDivElement |
   useEffect(() => {
     const controller = new AbortController();
     load(controller.signal);
-    const interval = setInterval(() => load(undefined, true), AUTO_REFRESH_MS);
-    return () => {
-      controller.abort();
-      clearInterval(interval);
-    };
+    return () => controller.abort();
   }, [load]);
+
+  useEffect(() => {
+    if (!flags.auto) return;
+    const interval = setInterval(() => load(undefined, true), AUTO_REFRESH_MS);
+    return () => clearInterval(interval);
+  }, [flags.auto, load]);
 
   const columns = useMemo(() => {
     if (!data) return [];
@@ -295,6 +303,7 @@ export function Trident({ toolbarSlot = null }: { toolbarSlot?: HTMLDivElement |
       for (const strike of strikes) {
         const cell = cells.get(String(strike));
         if (!cell) continue;
+        if (cell.value == null) continue;
         const abs = Math.abs(cell.value);
         if (abs > maxAbs) {
           maxAbs = abs;
@@ -311,6 +320,7 @@ export function Trident({ toolbarSlot = null }: { toolbarSlot?: HTMLDivElement |
 
       return {
         ticker,
+        metric,
         spot,
         changePct: d.quote.day_change_pct,
         strikes,
@@ -355,13 +365,14 @@ export function Trident({ toolbarSlot = null }: { toolbarSlot?: HTMLDivElement |
         <div className="flex flex-row flex-wrap items-center gap-2 pb-1">{toolbar}</div>
       )}
 
+      <ExposureLegend />
+
       {status === "loading" && (
-        <div
-          className="flex items-center justify-center rounded-[10px] py-16 text-[13px]"
-          style={{ border: "1px solid var(--line)", color: "var(--text-mute)" }}
-        >
-          Loading live Trident data…
-        </div>
+        // Trident fetches a matrix per reference ticker, each around 1.4 MB, so this state is
+        // held for ten to fifteen seconds. A centred line of text over that long reads as a
+        // stall; a grid-shaped placeholder reads as progress and stops the layout jumping when
+        // the data lands. The sentence is still there for screen readers via SkeletonRegion.
+        <SkeletonGrid label="Loading live Trident exposure…" rows={12} columns={4} />
       )}
 
       {status === "error" && (
@@ -399,6 +410,7 @@ export function Trident({ toolbarSlot = null }: { toolbarSlot?: HTMLDivElement |
 
 type TridentColumnData = {
   ticker: string;
+  metric: ExposureMetric;
   spot: number;
   changePct: number;
   strikes: number[];
@@ -420,6 +432,8 @@ function TridentColumn({ column }: { column: TridentColumnData }) {
     >
       {/* Column header: ticker / price / change% / expiration label */}
       <div
+        role="heading"
+        aria-level={3}
         className="flex flex-row items-baseline justify-between gap-2 px-[10px] py-[8px]"
         style={{ background: "var(--bg)", borderBottom: "1px solid var(--line)" }}
       >
@@ -445,10 +459,10 @@ function TridentColumn({ column }: { column: TridentColumnData }) {
       {/* Independent vertical scroll per instrument */}
       <div
         className="relative overflow-y-auto overflow-x-hidden"
-        style={{ height: "620px", background: "var(--panel)" }}
-      >
-        <div
+        style={{ height: "620px", background: "var(--panel)" }}        >          <div
           className="grid"
+          role="table"
+          aria-label={`${column.ticker} ${column.metric.toUpperCase()} exposure by strike`}
           style={{
             display: "grid",
             gridTemplateColumns: "56px 1fr",
@@ -457,16 +471,32 @@ function TridentColumn({ column }: { column: TridentColumnData }) {
             color: "var(--text)",
           }}
         >
+          <div role="row" className="sr-only">
+            <div role="columnheader">Strike</div>
+            <div role="columnheader">{column.metric.toUpperCase()} exposure</div>
+          </div>
           {column.strikes.map((strike, i) => {
             const isAtm = strike === column.atmStrike;
             const cell = column.cells.get(String(strike));
-            const value = cell?.value ?? 0;
+            const value = cell?.value ?? null;
             const isStar = String(strike) === column.starKey;
             const row = (
-              <>
-                <StrikeLabelCell key={`k-${strike}`} strike={strike} isAtm={isAtm} />
-                <HeatmapCell key={`c-${strike}`} value={value} maxAbs={column.maxAbs} isStar={isStar} />
-              </>
+              <div role="row" style={{ display: "contents" }}>
+                <StrikeLabelCell
+                  key={`k-${strike}`}
+                  strike={strike}
+                  isAtm={isAtm}
+                  ariaLabel={`${column.ticker} strike ${strike}`}
+                />
+                <HeatmapCell
+                  key={`c-${strike}`}
+                  value={value}
+                  maxAbs={column.maxAbs}
+                  isStar={isStar}
+                  modeled={cell?.modeled}
+                  ariaLabel={`${column.metric.toUpperCase()} ${value == null ? "unknown" : formatDollar(value)} for ${column.ticker} at strike ${strike}, expiration ${column.expLabel.dateLabel}, ${column.expLabel.daysLabel} to expiration${isStar ? ", largest absolute exposure" : ""}`}
+                />
+              </div>
             );
             if (i === column.spotInsertIndex) {
               return (

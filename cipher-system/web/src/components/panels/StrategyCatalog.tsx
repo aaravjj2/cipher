@@ -264,17 +264,21 @@ export function StrategyCatalogPanel() {
         </div>
       )}
 
-      <div className="overflow-x-auto">
-        <table className="w-full text-[11.5px]" style={{ borderCollapse: "collapse" }}>
+      {/* Keep the seven-column verdict register readable on narrow screens. The
+          wrapper owns horizontal scrolling; the table retains enough width for
+          Strategy/Why text and numeric columns instead of collapsing into a
+          page-level overflow trap. */}
+      <div className="overflow-x-auto rounded-[8px]" style={{ border: "1px solid var(--line)" }}>
+        <table aria-label="Strategy catalog verdicts" className="w-full min-w-[760px] text-[11.5px]" style={{ borderCollapse: "collapse" }}>
           <thead>
             <tr style={{ color: "var(--text-mute)" }}>
-              <th className="text-left font-medium py-[6px] pr-[10px]">Strategy</th>
-              <th className="text-left font-medium py-[6px] pr-[10px]">Family</th>
-              <th className="text-left font-medium py-[6px] pr-[10px]">Verdict</th>
-              <th className="text-right font-medium py-[6px] pr-[10px]">Trades</th>
-              <th className="text-right font-medium py-[6px] pr-[10px]">Avg</th>
-              <th className="text-right font-medium py-[6px] pr-[10px]">PF</th>
-              <th className="text-left font-medium py-[6px]">Why</th>
+              <th scope="col" className="text-left font-medium py-[6px] pr-[10px]">Strategy</th>
+              <th scope="col" className="text-left font-medium py-[6px] pr-[10px]">Family</th>
+              <th scope="col" className="text-left font-medium py-[6px] pr-[10px]">Verdict</th>
+              <th scope="col" className="text-right font-medium py-[6px] pr-[10px]">Trades</th>
+              <th scope="col" className="text-right font-medium py-[6px] pr-[10px]">Avg</th>
+              <th scope="col" className="text-right font-medium py-[6px] pr-[10px]">PF</th>
+              <th scope="col" className="text-left font-medium py-[6px]">Why</th>
             </tr>
           </thead>
           <tbody>
@@ -286,7 +290,7 @@ export function StrategyCatalogPanel() {
               const accrual = v?.accrual;
               return (
                 <tr key={row.strategy_id} style={{ borderTop: "1px solid var(--line)" }}>
-                  <td className="py-[7px] pr-[10px] font-mono text-[11px]">{row.strategy_id}</td>
+                  <th scope="row" className="py-[7px] pr-[10px] text-left font-mono text-[11px]">{row.strategy_id}</th>
                   <td className="py-[7px] pr-[10px]" style={{ color: "var(--text-dim)" }}>
                     {row.family}
                   </td>

@@ -175,6 +175,14 @@ class BarState:
     # up-release in a weak uptrend and a down-release in a weak downtrend both
     # land there), so anything acting on the name alone gets half of them backwards.
     setup_direction: str = ""      # BULLISH | BEARISH | ""
+    # Raw CLPS classification retained for Pine strategy consumers. The event
+    # vocabulary alone cannot distinguish the A/B trend grade.
+    clps_down: bool = False
+    clps_up: bool = False
+    clps_down_a: bool = False
+    clps_up_a: bool = False
+    trend_up: bool = False
+    trend_down: bool = False
 
 
 # Event vocabulary, matched to the real product's timeline wording.
@@ -447,6 +455,12 @@ def compute(bars, params=None):
                 events=events,
                 setup=setup_name,
                 setup_direction=setup_dir_now,
+                clps_down=bool(gate and clps_down),
+                clps_up=bool(gate and clps_up),
+                clps_down_a=bool(gate and clps_down and trend_down),
+                clps_up_a=bool(gate and clps_up and trend_up),
+                trend_up=trend_up,
+                trend_down=trend_down,
             )
         )
 

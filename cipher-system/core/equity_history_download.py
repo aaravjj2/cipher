@@ -123,8 +123,19 @@ class EquityBarStore:
             )
 
     @staticmethod
-    def window_key(symbol: str, timeframe: str, start_at: str, end_at: str) -> str:
-        raw = f"{symbol}|{timeframe}|{start_at}|{end_at}|all|sip".encode()
+    def window_key(
+        symbol: str,
+        timeframe: str,
+        start_at: str,
+        end_at: str,
+        feed: str = "sip",
+    ) -> str:
+        """Identify a download window including the market-data feed.
+
+        Feed is part of the dataset identity: resuming an SIP window as IEX (or
+        vice versa) would silently create a mixed-quality archive.
+        """
+        raw = f"{symbol}|{timeframe}|{start_at}|{end_at}|all|{feed.lower()}".encode()
         return hashlib.sha256(raw).hexdigest()
 
     def completed(self, key: str) -> bool:
@@ -300,7 +311,7 @@ def download_bars(
     resume: bool = True,
 ) -> DownloadSummary:
     start_at, end_at = window_times(start_day, end_day)
-    key = store.window_key(symbol, timeframe, start_at, end_at)
+    key = store.window_key(symbol, timeframe, start_at, end_at, feed=feed)
     if resume and store.completed(key):
         return DownloadSummary(
             symbol, timeframe, start_day.isoformat(), end_day.isoformat(), 0, 0, True

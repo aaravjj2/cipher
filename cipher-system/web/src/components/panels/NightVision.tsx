@@ -421,7 +421,12 @@ export function NightVision({
     for (const row of nightVision.rows) {
       const cell = row.cells.find((c) => c.expiration === nearestExpiration);
       if (!cell) continue;
-      rows.push({ strike: row.strike, value: gexMetric === "gex" ? cell.net_gex : cell.net_vex });
+      const available = gexMetric === "gex"
+        ? cell.gex_available ?? cell.available
+        : cell.vex_available ?? cell.available;
+      const value = gexMetric === "gex" ? cell.net_gex : cell.net_vex;
+      if (!available || value == null) continue;
+      rows.push({ strike: row.strike, value });
     }
     return rows.sort((a, b) => b.strike - a.strike);
   }, [nightVision, nearestExpiration, gexMetric]);

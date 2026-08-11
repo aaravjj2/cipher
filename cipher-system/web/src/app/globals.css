@@ -214,3 +214,21 @@
 .cipher-no-scrollbar::-webkit-scrollbar {
   display: none;
 }
+
+/* Loading placeholders. The pulse is defined here rather than using Tailwind's animate-pulse
+   so the reduced-motion case can drop it entirely: a grid of sixty pulsing cells is precisely
+   the large-area animation that setting exists to suppress, and merely slowing it is not the
+   same as honouring it. The block stays visible either way, so the placeholder still reads as
+   "content is coming" without motion. */
+@keyframes cipher-skeleton-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+.cipher-skeleton {
+  animation: cipher-skeleton-pulse 1.6s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .cipher-skeleton {
+    animation: none;
+  }
+}

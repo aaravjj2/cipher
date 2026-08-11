@@ -769,8 +769,14 @@ def matrix(ticker, feed, depth, expiration_count, force=False, chain_pages=None)
         (c["expiry"], c["strike"]): {
             "call": 0.0,
             "put": 0.0,
+            "call_listed": False,
+            "put_listed": False,
+            "call_gex_available": False,
+            "put_gex_available": False,
             "call_vex": 0.0,
             "put_vex": 0.0,
+            "call_vex_available": False,
+            "put_vex_available": False,
             "call_oi": 0.0,
             "put_oi": 0.0,
             "volume": 0.0,
@@ -778,10 +784,18 @@ def matrix(ticker, feed, depth, expiration_count, force=False, chain_pages=None)
             "put_mid": None,
             "listed": False,
             "oi_assumed_zero": False,
+            "call_oi_available": False,
+            "put_oi_available": False,
+            "oi_available": False,
+            "volume_available": False,
+            "call_mid_available": False,
+            "put_mid_available": False,
             "gamma_modeled": False,
             "iv_min_tick": False,
             "oi_from_volume": False,
             "available": False,
+            "gex_available": False,
+            "vex_available": False,
         }
         for c in contracts
         if c["expiry"] in expirations and c["strike"] in strikes
@@ -799,14 +813,22 @@ def matrix(ticker, feed, depth, expiration_count, force=False, chain_pages=None)
         cell = by_cell[key]
         side = contract["type"]
         cell["listed"] = True
+        cell[f"{side}_listed"] = True
         raw_oi = number(contract.get("open_interest"))
         if raw_oi is None:
             cell["oi_assumed_zero"] = True
             oi_assumed_zero += 1
         cell[side + "_oi"] += raw_oi or 0.0
-        cell["volume"] += number(contract.get("volume")) or 0.0
+        if raw_oi is not None:
+            cell[f"{side}_oi_available"] = True
+            cell["oi_available"] = True
+        raw_volume = number(contract.get("volume"))
+        cell["volume"] += raw_volume or 0.0
+        if raw_volume is not None:
+            cell["volume_available"] = True
         if contract.get("mid") is not None:
             cell[side + "_mid"] = contract["mid"]
+            cell[side + "_mid_available"] = True
         # Provenance: a cell whose exposure leans on a reconstructed gamma or a
         # volume-for-OI substitution is weaker evidence than one built from feed
         # greeks and real open interest, and should not read as equally solid.
@@ -821,16 +843,20 @@ def matrix(ticker, feed, depth, expiration_count, force=False, chain_pages=None)
         value = gex(contract, spot)
         if value is None:
             missing_gamma += 1
-            # Listed contract without usable gamma/IV: still surface as a $0 cell
-            # so the grid does not look like the strike/expiry is absent.
-            if cell.get("call_mid") is not None or cell.get("put_mid") is not None or cell["listed"]:
-                cell["available"] = True
+            # A listed contract without usable gamma/size is not a measured zero.
+            # Keep `available` false so every consumer can preserve the distinction
+            # between unknown exposure and a calculable zero-OI exposure. The cell's
+            # `listed` flag still records that a contract exists at this strike/expiry.
             continue
         cell[side] += value
+        cell[f"{side}_gex_available"] = True
+        cell["gex_available"] = True
+        cell["available"] = True
         vanna_value = vex(contract, spot)
         if vanna_value is not None:
             cell[side + "_vex"] += vanna_value
-        cell["available"] = True
+            cell[f"{side}_vex_available"] = True
+            cell["vex_available"] = True
     rows = []
     for strike in strikes:
         values = []
@@ -840,21 +866,45 @@ def matrix(ticker, feed, depth, expiration_count, force=False, chain_pages=None)
                 {
                     "call": 0,
                     "put": 0,
+                    "call_vex": 0,
+                    "put_vex": 0,
+                    "call_listed": False,
+                    "put_listed": False,
+                    "call_gex_available": False,
+                    "put_gex_available": False,
+                    "call_vex_available": False,
+                    "put_vex_available": False,
                     "available": False,
+                    "gex_available": False,
+                    "vex_available": False,
                     "listed": False,
                     "oi_assumed_zero": False,
+                    "call_oi_available": False,
+                    "put_oi_available": False,
+                    "oi_available": False,
+                    "volume_available": False,
+                    "call_mid_available": False,
+                    "put_mid_available": False,
                 },
             )
-            net = cell["call"] + cell["put"]
+            listed_sides = [side for side in ("call", "put") if cell.get(f"{side}_listed")]
+            gex_available = bool(listed_sides) and all(
+                cell.get(f"{side}_gex_available") for side in listed_sides
+            )
+            vex_available = bool(listed_sides) and all(
+                cell.get(f"{side}_vex_available") for side in listed_sides
+            )
+            net = cell["call"] + cell["put"] if gex_available else None
+            net_vex = cell.get("call_vex", 0.0) + cell.get("put_vex", 0.0) if vex_available else None
             values.append(
                 {
                     "expiration": expiry,
-                    "call_gex": cell["call"],
-                    "put_gex": cell["put"],
+                    "call_gex": cell["call"] if cell.get("call_gex_available") else None,
+                    "put_gex": cell["put"] if cell.get("put_gex_available") else None,
                     "net_gex": net,
-                    "call_vex": cell.get("call_vex", 0.0),
-                    "put_vex": cell.get("put_vex", 0.0),
-                    "net_vex": cell.get("call_vex", 0.0) + cell.get("put_vex", 0.0),
+                    "call_vex": cell.get("call_vex", 0.0) if cell.get("call_vex_available") else None,
+                    "put_vex": cell.get("put_vex", 0.0) if cell.get("put_vex_available") else None,
+                    "net_vex": net_vex,
                     "call_oi": cell.get("call_oi", 0.0),
                     "put_oi": cell.get("put_oi", 0.0),
                     "volume": cell.get("volume", 0.0),
@@ -862,9 +912,23 @@ def matrix(ticker, feed, depth, expiration_count, force=False, chain_pages=None)
                     "put_mid": cell.get("put_mid"),
                     "listed": bool(cell.get("listed")),
                     "oi_assumed_zero": bool(cell.get("oi_assumed_zero")),
+                    "call_oi_available": bool(cell.get("call_oi_available")),
+                    "put_oi_available": bool(cell.get("put_oi_available")),
+                    "oi_available": bool(cell.get("oi_available")),
+                    "volume_available": bool(cell.get("volume_available")),
+                    "call_mid_available": bool(cell.get("call_mid_available")),
+                    "put_mid_available": bool(cell.get("put_mid_available")),
+                    "call_listed": bool(cell.get("call_listed")),
+                    "put_listed": bool(cell.get("put_listed")),
+                    "call_gex_available": bool(cell.get("call_gex_available")),
+                    "put_gex_available": bool(cell.get("put_gex_available")),
+                    "call_vex_available": bool(cell.get("call_vex_available")),
+                    "put_vex_available": bool(cell.get("put_vex_available")),
                     "gamma_modeled": bool(cell.get("gamma_modeled")),
                     "oi_from_volume": bool(cell.get("oi_from_volume")),
-                    "available": cell["available"],
+                    "available": gex_available,
+                    "gex_available": gex_available,
+                    "vex_available": vex_available,
                 }
             )
         rows.append(
@@ -885,7 +949,7 @@ def matrix(ticker, feed, depth, expiration_count, force=False, chain_pages=None)
         "total_expirations_available": total_expirations_available,
         "rows": rows,
         "formula": "Gamma × open interest × 100 × spot² × 0.01; puts receive a negative sign. Null OI remains unknown.",
-        "caveat": "This is a public-OI heuristic, not verified dealer positioning.",
+        "caveat": "This is a public-OI heuristic, not verified dealer positioning. Cells with unavailable exposure inputs remain unknown rather than zero.",
         "coverage": {
             "contracts": len(contracts),
             "contracts_missing_gamma": missing_gamma,
@@ -922,14 +986,13 @@ def heatmap(ticker, feed, depth, expiration_count):
     rows = list(reversed(payload["rows"]))
     expirations = payload["expirations"]
 
-    def surface(field, unavailable_null=True):
-        """One field across the strike/expiration grid, null where the cell is unavailable.
+    def surface(field, availability_field="available"):
+        """One field across the strike/expiration grid, null where exposure is unavailable.
 
-        Nulling is the default because an unavailable cell means the contract is not listed
-        at that strike and expiration (`listed: false`, every numeric field already 0.0,
-        both mids null -- verified against a live SPY matrix: no unavailable cell carries a
-        nonzero value). On a heatmap "no contract exists here" and "a listed contract with
-        zero open interest" are different facts that render identically once both are 0.
+        Nulling is the default because an unavailable cell means either that no contract is
+        listed at that strike/expiration or that a listed contract lacks usable exposure inputs.
+        On a heatmap both cases are unknown; neither should render as a measured zero. A listed
+        contract with genuinely calculable zero exposure remains numeric zero.
 
         `net_gex` and `net_vex` already opted into this. `oi` did not go through this helper
         at all and summed two `.get(..., 0.0)` defaults, so 1180 of 3255 SPY cells reported
@@ -938,13 +1001,29 @@ def heatmap(ticker, feed, depth, expiration_count):
         field that is genuinely known for unlisted strikes; none currently is.
         """
         return [
-            [(cell.get(field) if cell.get("available") or not unavailable_null else None) for cell in row["cells"]]
+            [
+                (cell.get(field) if cell.get(availability_field, cell.get("available")) else None)
+                for cell in row["cells"]
+            ]
             for row in rows
         ]
 
     def combined_oi(cell):
-        """Total open interest, or None when the strike is not listed."""
-        if not cell.get("available"):
+        """Total OI, or None when a listed option side has unknown OI.
+
+        An absent side contributes zero; a listed side whose OI is unavailable must
+        keep the combined surface unknown rather than being silently summed as zero.
+        The legacy fallback preserves compatibility with older/stub cells that do not
+        carry per-side listing flags.
+        """
+        listed_sides = [
+            side for side in ("call", "put") if cell.get(f"{side}_listed")
+        ]
+        if listed_sides:
+            if not all(cell.get(f"{side}_oi_available") for side in listed_sides):
+                return None
+            return sum((cell.get(f"{side}_oi") or 0.0) for side in listed_sides)
+        if not cell.get("oi_available", cell.get("available")):
             return None
         return (cell.get("call_oi") or 0.0) + (cell.get("put_oi") or 0.0)
 
@@ -959,11 +1038,11 @@ def heatmap(ticker, feed, depth, expiration_count):
         "gex": surface("net_gex"),
         "vex": surface("net_vex"),
         "oi": [[combined_oi(cell) for cell in row["cells"]] for row in rows],
-        "vol": surface("volume"),
-        "call_oi": surface("call_oi"),
-        "put_oi": surface("put_oi"),
-        "call_mid": surface("call_mid"),
-        "put_mid": surface("put_mid"),
+        "vol": surface("volume", "volume_available"),
+        "call_oi": surface("call_oi", "call_oi_available"),
+        "put_oi": surface("put_oi", "put_oi_available"),
+        "call_mid": surface("call_mid", "call_mid_available"),
+        "put_mid": surface("put_mid", "put_mid_available"),
         "totals": {
             "gex_by_expiration": [
                 sum((row["cells"][i].get("net_gex") or 0.0) for row in rows) for i in range(len(expirations))
@@ -980,8 +1059,8 @@ def heatmap(ticker, feed, depth, expiration_count):
         },
         "caveat": (
             "This is a transparent local estimate, not a reproduction of a proprietary "
-            "exposure model. A null cell means the contract is not listed at that strike and "
-            "expiration; it is not a zero measurement."
+            "exposure model. A null cell means no listed/calculable exposure is available at "
+            "that strike and expiration; it is not a zero measurement."
         ),
     }
 
@@ -993,8 +1072,8 @@ def night_vision(ticker, feed, depth, expiration_count, force=False):
     for row in payload["rows"]:
         if not any(cell["available"] for cell in row["cells"]):
             continue
-        net_gex = sum(cell["net_gex"] for cell in row["cells"])
-        net_vex = sum(cell.get("net_vex") or 0.0 for cell in row["cells"])
+        net_gex = sum((cell.get("net_gex") or 0.0) for cell in row["cells"])
+        net_vex = sum((cell.get("net_vex") or 0.0) for cell in row["cells"])
         levels.append({"price": row["strike"], "net_gex": net_gex, "abs_gex": abs(net_gex), "net_vex": net_vex, "abs_vex": abs(net_vex)})
         xray.append(
             {
