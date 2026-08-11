@@ -33,6 +33,7 @@ WEIGHTS_CLUSTER_PATH = LAB / "weights_cluster.json"
 CLUSTER_SCORE_WEIGHTS_PATH = LAB / "cluster_score_weights.json"
 FLASH_INDEX_REF = LAB / "flash_index_ref.json"
 ACTIVE_PATH = LAB / "active.json"
+PAIRED_DIR = LAB / "paired"
 
 # Heuristic Cluster-scan ranking (not ridge-fit commercial labels).
 # Hard tier from hard_rank_order, then weighted factors within tier.
@@ -112,6 +113,18 @@ FLASH_FEATURE_NAMES = [
     "dow_sin",
     "dow_cos",
     "dist_to_event",
+]
+
+# Historical GEX snapshots cannot reconstruct the commercial card's independent
+# runway-clarity input, so features_from_model() deliberately falls back to the
+# same surface-thinness value used by runway_thinness.  They also have no event
+# calendar, making dist_to_event the documented zero stub.  Fitting either column
+# would guarantee collinearity/degeneracy by construction.  Prospective paired
+# captures retain the full feature list; the historical as-of route uses only the
+# information that actually existed in its archived surface.
+PAIRED_FLASH_FEATURE_NAMES = [
+    name for name in FLASH_FEATURE_NAMES
+    if name not in {"runway_clarity_norm", "dist_to_event"}
 ]
 
 # Live OPRA fields kept when merging with commercial card geometry.
@@ -402,6 +415,52 @@ def load_flash_commercial() -> list[dict]:
             continue
         out.extend(parse_commercial_csv(path))
     return _dedupe_by_ticker(out)
+
+
+def load_paired_flash_labels() -> list[dict]:
+    """Load strict point-in-time pairs without collapsing separate sessions.
+
+    These records already contain local historical features reconstructed from a
+    GEX snapshot at or before the label.  They must never be replaced with the
+    latest-per-ticker feature index, which would introduce lookahead leakage.
+    """
+    ensure_dirs()
+    rows: dict[str, dict] = {}
+    for path in sorted(PAIRED_DIR.glob("*.jsonl")) if PAIRED_DIR.exists() else []:
+        with path.open(encoding="utf-8") as handle:
+            for line_number, line in enumerate(handle, start=1):
+                if not line.strip():
+                    continue
+                try:
+                    raw = json.loads(line)
+                    ticker = str(raw.get("ticker") or "").upper().strip()
+                    session_date = str(raw.get("session_date") or "")[:10]
+                    score = float(raw.get("score"))
+                    feat = raw.get("features") or {}
+                    if (
+                        not ticker
+                        or not _DATE_RE.fullmatch(session_date)
+                        or not 0.0 <= score <= 100.0
+                        or any(name not in feat or not math.isfinite(float(feat[name])) for name in PAIRED_FLASH_FEATURE_NAMES)
+                    ):
+                        continue
+                except (TypeError, ValueError, json.JSONDecodeError):
+                    continue
+                key = f"{session_date}:{ticker}"
+                rows.setdefault(
+                    key,
+                    {
+                        "ticker": ticker,
+                        "session_date": session_date,
+                        "score": score,
+                        "rank": raw.get("rank"),
+                        "feat": {name: float(feat[name]) for name in PAIRED_FLASH_FEATURE_NAMES},
+                        "source": f"paired_gex_asof_v{raw.get('pair_version', 1)}",
+                        "pair_file": str(path),
+                        "pair_line": line_number,
+                    },
+                )
+    return sorted(rows.values(), key=lambda row: (row["session_date"], row["ticker"]))
 
 
 def load_flash_index_ref() -> list[dict]:
@@ -756,8 +815,20 @@ def fit_weights(*, use_local_features=True, l2=1.0, rank_loss=False) -> dict:
 
 
 def fit_flash_weights(*, use_local_features=True, l2=1.0, rank_loss=False) -> dict:
-    """Fit Flash runway head from commercial/other flash CSVs."""
+    """Fit Flash from strict historical pairs, with legacy CSV fallback.
+
+    ``use_local_features`` remains for API compatibility and controls only the
+    fallback.  Paired rows always use their own point-in-time GEX features.
+    """
     ensure_dirs()
+    paired = load_paired_flash_labels()
+    if len(paired) >= 5:
+        load_flash_index_ref()
+        return _fit_and_write(
+            paired, PAIRED_FLASH_FEATURE_NAMES, WEIGHTS_FLASH_PATH,
+            l2=l2, head="flash", rank_loss=rank_loss,
+        )
+
     labels = load_flash_commercial()
     if len(labels) < 5:
         return {
