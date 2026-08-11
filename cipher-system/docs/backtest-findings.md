@@ -535,3 +535,33 @@ per symbol that the signal did *not* pick. That is a download of the same order 
 existing corpus, via `core/historical_options_download.py`, and it is the only way to make
 `MIN_CONTROL_ACTIVITY_RATIO` reachable. Until then `wheel_entry_control_study.py` will
 correctly keep refusing to publish a percentile.
+
+## Wheel entry control: recommend not buying the data yet
+
+2026-08-11. The plan for this session called for downloading option chains on a random
+sample of non-signal dates so `wheel_entry_control_study.py` could produce a valid
+percentile. That download is the only way to make `MIN_CONTROL_ACTIVITY_RATIO` reachable and
+it remains the correct step *if the strategy is worth validating*. On the evidence gathered
+today it is not yet, and the download is deliberately left undone.
+
+The reasoning, in order of how much it costs to establish:
+
+1. The median swept parameterization returns **+1.20% annualized against the 4% risk-free
+   rate the engine itself uses to price the options it sells**. Only 12 of 66 variants clear
+   that hurdle. Establishing whether entry *timing* contributes to a return that is below
+   cash answers a second-order question while the first-order one is unresolved.
+2. The corpus is **69 decision dates** across four symbols. A control built on a comparable
+   sample would be a test with the same sparsity problem, so the download needed is not a
+   top-up — it is roughly the size of the existing corpus again, per arm.
+3. The runs with the most trades are the progressively relaxed variants. Loosening gates
+   until positions appear, then validating the entry filter, tests the wrong thing.
+
+The cheaper experiment that should come first: take the strategy as parameterized, compute
+excess return over `risk_free_rate` (now reported in `BacktestResult.summary` as
+`excess_annualized_vs_risk_free_pct`), and establish whether *any* parameterization clears
+the hurdle out of sample on a locked window. If none does, the entry-timing question is moot
+and the data purchase is avoided entirely. If one does, the control download becomes worth
+its cost and the random dates should be drawn only over that surviving configuration.
+
+This is a recommendation to sequence the work, not a verdict on the strategy. The control
+harness stays in place and will keep refusing to publish a percentile until the data exists.
