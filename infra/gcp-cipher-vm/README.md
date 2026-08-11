@@ -203,6 +203,63 @@ generations matter, so deleting at 30 days is the point. `cold/` is the only cop
 live option chains — it must never carry a Delete rule. Transitioning it to NEARLINE cuts
 storage cost while keeping the data, which is why the two prefixes get different actions.
 
+## The login password exists in exactly one place
+
+`CIPHER_APP_PASSWORD_HASH` is listed in `sync-secrets.py`'s `SECRETS` map against the Secret
+Manager name `cipher-app-password-hash`, which reads as though a rebuild would restore it. It
+would not. The VM service account cannot read any secret:
+
+```
+$ gcloud secrets versions access latest --secret=cipher-app-password-hash
+ERROR: PERMISSION_DENIED: Permission 'secretmanager.versions.access' denied on resource
+(or it may not exist).  … authenticated as cipher-vm-runtime@…
+```
+
+The denial is indistinguishable from the secret not existing, so treat the hash as living
+**only** in `/etc/cipher/cipher.env` on this VM. Nothing else has a copy.
+
+What this does and does not mean:
+
+- **It is not an exposure — but it was.** `createAuthGate` defaults `enabled` to true unless
+  `CIPHER_APP_AUTH` is explicitly `off`, and `app/server.mjs` throws on startup when auth is
+  enabled with no hash configured, so a VM rebuilt without the env file now refuses to serve
+  rather than serving unauthenticated. Until 2026-08-11 `sync-secrets.py` wrote
+  `CIPHER_APP_AUTH=off` whenever no hash resolved, and `off` is the one value that disables
+  the gate: the startup guard never fired and `isAuthenticated()` returned true for every
+  request. That turned this exact rebuild case into a wide-open server on a published port.
+  It now writes `on` unconditionally, which is what its comment had always claimed.
+- **It is an availability risk.** That same rebuild leaves `cipher-web.service` unable to
+  start, and there is no restore path from Secret Manager.
+- `sync-secrets.py` degrades correctly in the meantime: on a Secret Manager failure it keeps
+  the existing values rather than writing blanks, so a sync run on the current IAM does not
+  destroy the hash.
+
+Recovery needs no cloud access, because the password is chosen rather than recovered:
+
+```bash
+printf '%s' "$NEW_PASSWORD" | node cipher-system/scripts/set-app-password.mjs
+# then put the printed hash in /etc/cipher/cipher.env as
+#   CIPHER_APP_PASSWORD_HASH=<hash>
+# and: sudo systemctl restart cipher-web.service
+```
+
+Rotating the hash invalidates every existing session, because `sessionSecretFor` derives the
+signing secret from the hash itself.
+
+To make a rebuild self-healing, a privileged account has to create the secret and grant the
+VM read access — the same account that runs the bucket-lifecycle command above:
+
+```bash
+printf '%s' "$PASSWORD" | node cipher-system/scripts/set-app-password.mjs \
+  | gcloud secrets create cipher-app-password-hash --data-file=-
+gcloud secrets add-iam-policy-binding cipher-app-password-hash \
+  --member=serviceAccount:cipher-vm-runtime@project-eec91607-77a2-4be6-837.iam.gserviceaccount.com \
+  --role=roles/secretmanager.secretAccessor
+```
+
+Pipe the password rather than passing it as an argument: an argv password is visible in `ps`
+and lands in shell history, which is why `set-app-password.mjs` reads stdin only.
+
 ## Accepted weaknesses on the public URL
 
 Reviewed 2026-08-11 after publishing. These are decisions, not oversights.

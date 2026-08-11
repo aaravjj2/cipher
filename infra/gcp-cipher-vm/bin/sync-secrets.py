@@ -108,9 +108,21 @@ def render_env(resolved: dict[str, str], existing: dict[str, str]) -> str:
     """
     lines = [f"{name}={quote(value)}" for name, value in resolved.items()]
     lines += [f"{name}={value}" for name, value in MANAGED_STATIC.items()]
-    # Auth follows the password, in both directions: configured means on, absent means the
-    # server refuses to start rather than quietly serving market data to anyone.
-    lines.append(f"CIPHER_APP_AUTH={'on' if resolved.get('CIPHER_APP_PASSWORD_HASH') else 'off'}")
+    # Always `on`. This used to follow the password -- `off` when no hash resolved -- which
+    # did the opposite of what it intended. `off` is the one value that *disables* the gate:
+    # createAuthGate reads `enabled = CIPHER_APP_AUTH !== "off"`, so server.mjs's startup
+    # guard (`enabled && !configured`) never fires and isAuthenticated() returns true for
+    # every request. A missing hash therefore produced a wide-open server on a published
+    # port instead of one that refuses to start.
+    #
+    # The case is not hypothetical: resolve_secrets only drops the hash when Secret Manager
+    # is unreachable *and* no value is on disk, which is exactly a fresh VM rebuild -- the
+    # moment the file is least likely to be inspected before the port goes live.
+    #
+    # Writing `on` unconditionally makes a missing hash fail closed, which is what the
+    # original comment promised. The `off` escape hatch still exists for local development;
+    # it is set by hand, and this script only provisions the internet-facing VM.
+    lines.append("CIPHER_APP_AUTH=on")
     carried = {name: value for name, value in existing.items() if name not in MANAGED_NAMES}
     if carried:
         lines.append("# Preserved across syncs; set outside this script.")

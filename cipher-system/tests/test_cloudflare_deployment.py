@@ -28,12 +28,31 @@ def test_cloudflare_token_is_written_atomically_and_privately(tmp_path: Path):
     assert not (tmp_path / ".token.tmp").exists()
 
 
-def test_secret_sync_makes_local_auth_mode_explicit():
+def test_secret_sync_never_writes_the_value_that_disables_the_gate():
+    """A missing hash must fail closed, not open.
+
+    This previously asserted the opposite -- that an unresolved password writes
+    `CIPHER_APP_AUTH=off` -- which locked in a fail-open. `off` is the single value that
+    turns the gate off: `createAuthGate` computes `enabled = CIPHER_APP_AUTH !== "off"`, so
+    server.mjs's `enabled && !configured` startup guard never fires and `isAuthenticated()`
+    returns true for every request. The result was an unauthenticated server on a published
+    port, reached precisely when Secret Manager is unreachable and no hash is on disk: a
+    fresh VM rebuild.
+
+    With `on`, that same state makes the server refuse to start instead.
+    """
     sync = load(REPO / "infra/gcp-cipher-vm/bin/sync-secrets.py", "sync_secrets")
     with_password = sync.render_env({"CIPHER_APP_PASSWORD_HASH": "scrypt$16384$8$1$aa$bb"}, {})
     assert "CIPHER_APP_AUTH=on" in with_password
     assert "CIPHER_APP_AUTH=off" not in with_password
-    assert "CIPHER_APP_AUTH=off" in sync.render_env({}, {})
+
+    without_password = sync.render_env({}, {})
+    assert "CIPHER_APP_AUTH=on" in without_password
+    assert "CIPHER_APP_AUTH=off" not in without_password
+
+    # An operator's hand-set `off` must not survive a sync on the public VM either, since
+    # CIPHER_APP_AUTH is managed and the carried-forward set excludes it.
+    assert "CIPHER_APP_AUTH=off" not in sync.render_env({}, {"CIPHER_APP_AUTH": "off"})
 
 
 def test_secret_sync_preserves_keys_it_does_not_manage(tmp_path: Path):
