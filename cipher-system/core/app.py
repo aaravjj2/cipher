@@ -922,11 +922,31 @@ def heatmap(ticker, feed, depth, expiration_count):
     rows = list(reversed(payload["rows"]))
     expirations = payload["expirations"]
 
-    def surface(field, unavailable_null=False):
+    def surface(field, unavailable_null=True):
+        """One field across the strike/expiration grid, null where the cell is unavailable.
+
+        Nulling is the default because an unavailable cell means the contract is not listed
+        at that strike and expiration (`listed: false`, every numeric field already 0.0,
+        both mids null -- verified against a live SPY matrix: no unavailable cell carries a
+        nonzero value). On a heatmap "no contract exists here" and "a listed contract with
+        zero open interest" are different facts that render identically once both are 0.
+
+        `net_gex` and `net_vex` already opted into this. `oi` did not go through this helper
+        at all and summed two `.get(..., 0.0)` defaults, so 1180 of 3255 SPY cells reported
+        0.0 open interest where the same cells reported null exposure -- 36% of the surface
+        asserting a measurement it did not have. Pass `unavailable_null=False` only for a
+        field that is genuinely known for unlisted strikes; none currently is.
+        """
         return [
             [(cell.get(field) if cell.get("available") or not unavailable_null else None) for cell in row["cells"]]
             for row in rows
         ]
+
+    def combined_oi(cell):
+        """Total open interest, or None when the strike is not listed."""
+        if not cell.get("available"):
+            return None
+        return (cell.get("call_oi") or 0.0) + (cell.get("put_oi") or 0.0)
 
     return {
         "schema_version": "local-heatmap-v1",
@@ -936,9 +956,9 @@ def heatmap(ticker, feed, depth, expiration_count):
         "updated": payload["as_of"],
         "expirations": expirations,
         "strikes": [row["strike"] for row in rows],
-        "gex": surface("net_gex", True),
-        "vex": surface("net_vex", True),
-        "oi": [[cell.get("call_oi", 0.0) + cell.get("put_oi", 0.0) for cell in row["cells"]] for row in rows],
+        "gex": surface("net_gex"),
+        "vex": surface("net_vex"),
+        "oi": [[combined_oi(cell) for cell in row["cells"]] for row in rows],
         "vol": surface("volume"),
         "call_oi": surface("call_oi"),
         "put_oi": surface("put_oi"),
@@ -958,7 +978,11 @@ def heatmap(ticker, feed, depth, expiration_count):
             "gex": payload["formula"],
             "vex": "Black-Scholes vanna × OI × 100 × spot × 0.01; a local estimate with call/put sign convention.",
         },
-        "caveat": "This is a transparent local estimate, not a reproduction of a proprietary exposure model.",
+        "caveat": (
+            "This is a transparent local estimate, not a reproduction of a proprietary "
+            "exposure model. A null cell means the contract is not listed at that strike and "
+            "expiration; it is not a zero measurement."
+        ),
     }
 
 
