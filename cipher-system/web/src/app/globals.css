@@ -204,3 +204,13 @@
     @apply font-sans;
   }
 }
+/* Horizontal toolbar strips scroll but must not show a scrollbar track: the header row is
+   ~44px tall and a visible track eats a meaningful share of it, while ToolbarSlot's edge-fade
+   already signals that there is more to reach. Scrolling itself is untouched -- wheel,
+   trackpad, keyboard and programmatic scrollLeft all still work. */
+.cipher-no-scrollbar {
+  scrollbar-width: none;
+}
+.cipher-no-scrollbar::-webkit-scrollbar {
+  display: none;
+}

@@ -45,6 +45,80 @@ type HeaderProps = {
   displayName?: string;
 };
 
+/**
+ * The portal target for a panel's toolbar, with an edge cue when it overflows.
+ *
+ * The slot has always scrolled horizontally, which is correct -- Trident's toolbar is a
+ * GEX/VEX pair plus a selector plus five toggles plus a label, and letting it grow would
+ * push the row past its siblings. What it lacked was any sign that it had scrolled. At 1600px
+ * the Strike Matrix toolbar clips mid-control, so "Auto refresh" rendered as a truncated "Au"
+ * against the panel edge and looked like a rendering fault rather than more content.
+ *
+ * A fade on whichever side has hidden content is the conventional cue and costs no layout
+ * space, which matters here because the row is already full. Wrapping to a second row was the
+ * alternative and would shift the grid down on every panel that has a long toolbar.
+ */
+function ToolbarSlot({ slotRef }: { slotRef: (el: HTMLDivElement | null) => void }) {
+  const [node, setNode] = useState<HTMLDivElement | null>(null);
+  const [edges, setEdges] = useState({ start: false, end: false });
+
+  useEffect(() => {
+    if (!node) return;
+    const measure = () => {
+      const overflow = node.scrollWidth - node.clientWidth;
+      // 2px of slack: sub-pixel layout rounding otherwise reports a permanent 1px overflow
+      // and leaves the fade showing on a toolbar that fits.
+      setEdges({
+        start: node.scrollLeft > 2,
+        end: overflow > 2 && node.scrollLeft < overflow - 2,
+      });
+    };
+    measure();
+    node.addEventListener("scroll", measure, { passive: true });
+    // Toolbars are portalled in after mount and change with the active panel, so width has to
+    // be observed rather than measured once.
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    for (const child of Array.from(node.children)) observer.observe(child);
+    const mutations = new MutationObserver(() => {
+      measure();
+      for (const child of Array.from(node.children)) observer.observe(child);
+    });
+    mutations.observe(node, { childList: true, subtree: true });
+    return () => {
+      node.removeEventListener("scroll", measure);
+      observer.disconnect();
+      mutations.disconnect();
+    };
+  }, [node]);
+
+  return (
+    <div className="relative flex-1 min-w-0">
+      <div
+        ref={(el) => {
+          setNode(el);
+          slotRef(el);
+        }}
+        className="flex flex-row items-center gap-2 overflow-x-auto min-w-0 cipher-no-scrollbar"
+      />
+      {edges.start && (
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-y-0 left-0 w-8"
+          style={{ background: "linear-gradient(to right, var(--bg), transparent)" }}
+        />
+      )}
+      {edges.end && (
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-y-0 right-0 w-8"
+          style={{ background: "linear-gradient(to left, var(--bg), transparent)" }}
+        />
+      )}
+    </div>
+  );
+}
+
 export function Header({
   panelName,
   rightSlot,
@@ -379,12 +453,7 @@ export function Header({
             hold many buttons (Trident's GEX/VEX + selector + 5 toggles + label), so it always
             scrolls internally — flex-1 min-w-0 is what lets overflow-x-auto actually engage
             instead of the row just growing past its siblings. */}
-        {toolbarSlotRef && (
-          <div
-            ref={toolbarSlotRef}
-            className="flex flex-row items-center gap-2 overflow-x-auto flex-1 min-w-0"
-          />
-        )}
+        {toolbarSlotRef && <ToolbarSlot slotRef={toolbarSlotRef} />}
 
         {/* Panel-specific action buttons */}
         {rightSlot && (

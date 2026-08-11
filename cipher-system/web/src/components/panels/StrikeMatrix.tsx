@@ -385,8 +385,11 @@ export function StrikeMatrix({
   );
 
   return (
+    // h-full + min-h-0 so the grid below can own its vertical scrolling. Without a bounded
+    // height here the grid grows to its full 2961px and `main` scrolls it, which is what
+    // silently disabled the sticky expiration headers -- see the grid-scroll comment.
     <section
-      className="strike-matrix flex flex-col gap-3"
+      className="strike-matrix flex flex-col gap-3 h-full min-h-0"
       style={{ fontFamily: "var(--font-mono)", color: "var(--text)" }}
     >
       {/* Toolbar — portals into Header when a slot is provided (matches the real site's
@@ -425,11 +428,20 @@ export function StrikeMatrix({
 
       {status === "ready" && data && (
         <>
-          <div className="flex flex-row gap-3 items-start">
-            {/* Grid — its own horizontal scroll container so it never breaks page-level scroll */}
+          <div className="flex flex-row gap-3 items-stretch flex-1 min-h-0">
+            {/* Grid — owns scrolling on BOTH axes.
+                It must own the vertical axis too, not just the horizontal. `overflow-x: auto`
+                cannot coexist with `overflow-y: visible` -- CSS computes the other axis to
+                `auto` -- so this element became the nearest scrollport for the sticky
+                expiration headers while `main` did the actual vertical scrolling. The headers
+                then pinned to a container that never scrolls, and since the grid auto-scrolls
+                to spot on load they sat ~1040px above the viewport and were never seen: six
+                columns of exposure with nothing saying which expiration each one was.
+                Bounding the height here puts the scrollport and the scrolling on the same
+                element, which is what makes `position: sticky` mean anything. */}
             <div
               ref={gridRef}
-              className="grid-scroll relative flex-1 min-w-0 overflow-x-auto rounded-[10px]"
+              className="grid-scroll relative flex-1 min-w-0 min-h-0 overflow-auto rounded-[10px]"
               style={{ border: "1px solid var(--line)" }}
             >
               <div
@@ -519,8 +531,11 @@ export function StrikeMatrix({
 
             {/* Sniper mode: docked side panel, desktop only */}
             {mode === "sniper" && (
+              // min-h-0 + overflow-y-auto because the row is now items-stretch: this rail
+              // fills the panel height, so a long Top Pulls list must scroll inside itself
+              // rather than pushing the row taller than the viewport.
               <aside
-                className="hidden lg:flex flex-col gap-1.5 w-[220px] shrink-0 rounded-[10px] p-2"
+                className="hidden lg:flex flex-col gap-1.5 w-[220px] shrink-0 min-h-0 overflow-y-auto rounded-[10px] p-2"
                 style={{ border: "1px solid var(--line)", background: "var(--panel)" }}
               >
                 <div
