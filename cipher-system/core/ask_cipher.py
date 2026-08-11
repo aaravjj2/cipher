@@ -81,6 +81,30 @@ def _openrouter_api_key() -> str | None:
     return _env_key("OPENROUTER_API_KEY")
 
 
+def _groq_api_key() -> str | None:
+    return _env_key("GROQ_API_KEY")
+
+
+# Groq (groq.com), not Grok (xAI) -- different company, different API. Serves open-weight
+# models, so answers are weaker than claude-opus-5; what it buys is a provider with an
+# unexhausted balance and no per-request affordability ceiling.
+#
+# Ask Cipher is useless without tool calling, and Groq's catalogue is not uniform on that.
+# Tested against Cipher's real _OPENAI_TOOL_SPECS: gpt-oss-120b and qwen/qwen3.6-27b both
+# produced a correct `get_quote {"ticker":"SPY"}`; llama-3.3-70b-versatile failed with
+# `tool_use_failed`. Override with CIPHER_GROQ_MODEL if the catalogue changes.
+GROQ_MODEL = _env_key("CIPHER_GROQ_MODEL") or "openai/gpt-oss-120b"
+# No affordability ceiling here, so this is the real answer-length budget rather than a
+# figure trimmed to fit a balance.
+GROQ_MAX_TOKENS = 4096
+
+# Which provider to try first. Anthropic is preferred when configured because it is the
+# model this prompt was written against; Groq comes before OpenRouter because OpenRouter's
+# balance is the thing that failed. Override with CIPHER_ASK_PROVIDER=anthropic|groq|openrouter
+# to pin one explicitly.
+PROVIDER_ORDER = ("anthropic", "groq", "openrouter")
+
+
 OPENROUTER_MODEL = "anthropic/claude-opus-5"
 # Lower than MAX_TOKENS: this path exists specifically for accounts running on
 # a small OpenRouter balance, where a 4096-token ceiling can exceed what's
@@ -432,9 +456,63 @@ def describe_provider_error(exc: BaseException) -> str:
 def _run_chat_job_openrouter(
     message: str, history: list[dict], tool_impls: dict[str, Callable], append_event: Callable, api_key: str
 ) -> None:
+    """OpenRouter, which is OpenAI-compatible and routes to claude-opus-5."""
+    _run_chat_job_openai_compatible(
+        message, history, tool_impls, append_event, api_key,
+        base_url="https://openrouter.ai/api/v1",
+        model=OPENROUTER_MODEL,
+        max_tokens=OPENROUTER_MAX_TOKENS,
+        affordability_retry=True,
+    )
+
+
+def _run_chat_job_groq(
+    message: str, history: list[dict], tool_impls: dict[str, Callable], append_event: Callable, api_key: str
+) -> None:
+    """Groq, also OpenAI-compatible, serving open models rather than Claude.
+
+    Note for anyone who arrives here looking for xAI: this is Groq (groq.com), not Grok.
+    Different company, different API. The model is open-weight, so answers will not match
+    claude-opus-5 in quality -- what it buys is a working provider with an unexhausted
+    balance and no per-request affordability ceiling.
+
+    GROQ_MODEL is `openai/gpt-oss-120b` because Ask Cipher is useless without tool calling
+    and that is not uniform across Groq's catalogue. Tested against Cipher's real
+    `_OPENAI_TOOL_SPECS`: gpt-oss-120b and qwen3.6-27b both emitted a correct
+    `get_quote {"ticker":"SPY"}`, while llama-3.3-70b-versatile failed outright with
+    `tool_use_failed`.
+    """
+    _run_chat_job_openai_compatible(
+        message, history, tool_impls, append_event, api_key,
+        base_url="https://api.groq.com/openai/v1",
+        model=GROQ_MODEL,
+        max_tokens=GROQ_MAX_TOKENS,
+        affordability_retry=False,
+    )
+
+
+def _run_chat_job_openai_compatible(
+    message: str,
+    history: list[dict],
+    tool_impls: dict[str, Callable],
+    append_event: Callable,
+    api_key: str,
+    *,
+    base_url: str,
+    model: str,
+    max_tokens: int,
+    affordability_retry: bool,
+) -> None:
+    """One tool-calling chat turn against any OpenAI-compatible endpoint.
+
+    `affordability_retry` is OpenRouter-only. It exists because OpenRouter answers a request
+    it cannot fund with a 402 naming the budget the balance allows; Groq has no such
+    behaviour, and the remembered budget must not leak across providers or a Groq turn would
+    silently inherit OpenRouter's shrunken ceiling.
+    """
     import openai
 
-    client = openai.OpenAI(api_key=api_key, base_url="https://openrouter.ai/api/v1")
+    client = openai.OpenAI(api_key=api_key, base_url=base_url)
     messages = [{"role": "system", "content": SYSTEM_PROMPT}] + list(history) + [{"role": "user", "content": message}]
 
     final_text = ""
@@ -444,8 +522,8 @@ def _run_chat_job_openrouter(
     # low-balance account working without hardcoding a figure that goes stale as the
     # balance moves. It is only safe because `finish_reason == "length"` below rejects a
     # truncated answer -- a smaller budget must fail loudly, never silently shorten.
-    budget = _learned_budget() or OPENROUTER_MAX_TOKENS
-    started_at_learned_budget = budget < OPENROUTER_MAX_TOKENS
+    budget = (_learned_budget() or max_tokens) if affordability_retry else max_tokens
+    started_at_learned_budget = affordability_retry and budget < max_tokens
     if started_at_learned_budget:
         append_event({
             "type": "notice",
@@ -457,10 +535,10 @@ def _run_chat_job_openrouter(
     for _ in range(6):  # a tool-calling turn cannot loop forever on a bad tool result
         try:
             response = client.chat.completions.create(
-                model=OPENROUTER_MODEL, max_tokens=budget, messages=messages, tools=_OPENAI_TOOL_SPECS,
+                model=model, max_tokens=budget, messages=messages, tools=_OPENAI_TOOL_SPECS,
             )
         except Exception as exc:  # noqa: BLE001 - re-raised unless it is an affordability refusal
-            affordable = affordable_max_tokens(exc)
+            affordable = affordable_max_tokens(exc) if affordability_retry else None
             if affordable is None or affordable >= budget or affordable < MIN_USEFUL_MAX_TOKENS:
                 raise
             append_event({
@@ -473,7 +551,7 @@ def _run_chat_job_openrouter(
             budget = affordable
             _remember_budget(affordable)
             response = client.chat.completions.create(
-                model=OPENROUTER_MODEL, max_tokens=budget, messages=messages, tools=_OPENAI_TOOL_SPECS,
+                model=model, max_tokens=budget, messages=messages, tools=_OPENAI_TOOL_SPECS,
             )
         if not response.choices:
             raise AskCipherError("Ask Cipher's provider returned no response choice.")
@@ -521,22 +599,35 @@ def run_chat_job(message: str, history: list[dict], tool_impls: dict[str, Callab
     """Runs one chat turn, streaming events back via `append_event`. Never
     raises to the caller -- every failure path (no provider configured, an
     API error, a refused request) is reported as an `error` event so the job
-    registry always reaches a terminal state. Prefers a direct ANTHROPIC_API_KEY;
-    falls back to OpenRouter (OpenAI-compatible gateway, routes to the same
-    claude-opus-5) when only that is configured.
+    registry always reaches a terminal state.
+
+    Tries each configured provider in PROVIDER_ORDER until one answers, so an exhausted
+    balance on one is not a dead end. A provider is only skipped past if it failed *before*
+    emitting anything -- once a partial answer has streamed, splicing a second model's turn
+    onto it would be worse than the error. CIPHER_ASK_PROVIDER pins one explicitly.
     """
     try:
         message, history = normalize_conversation(message, history)
     except AskCipherError as exc:
         append_event({"type": "error", "error": str(exc)})
         return
-    anthropic_key = _anthropic_api_key()
-    openrouter_key = _openrouter_api_key()
-    if not anthropic_key and not openrouter_key:
+    runners = {
+        "anthropic": (_anthropic_api_key(), _run_chat_job_anthropic),
+        "groq": (_groq_api_key(), _run_chat_job_groq),
+        "openrouter": (_openrouter_api_key(), _run_chat_job_openrouter),
+    }
+    pinned = (_env_key("CIPHER_ASK_PROVIDER") or "").strip().lower()
+    if pinned and pinned not in runners:
         append_event({
             "type": "error",
-            "error": "No LLM provider configured: set ANTHROPIC_API_KEY or OPENROUTER_API_KEY in .env",
+            "error": f"CIPHER_ASK_PROVIDER={pinned!r} is not one of {', '.join(sorted(runners))}",
         })
+        return
+    order = (pinned,) if pinned else PROVIDER_ORDER
+    available = [(name, *runners[name]) for name in order if runners[name][0]]
+    if not available:
+        wanted = pinned.upper() + "_API_KEY" if pinned else "ANTHROPIC_API_KEY, GROQ_API_KEY or OPENROUTER_API_KEY"
+        append_event({"type": "error", "error": f"No LLM provider configured: set {wanted} in .env"})
         return
 
     emitted = False
@@ -544,19 +635,20 @@ def run_chat_job(message: str, history: list[dict], tool_impls: dict[str, Callab
         nonlocal emitted
         emitted = True
         append_event(event)
-    try:
-        if anthropic_key:
-            _run_chat_job_anthropic(message, history, tool_impls, tracked, anthropic_key)
-        else:
-            _run_chat_job_openrouter(message, history, tool_impls, tracked, openrouter_key)
-    except Exception as exc:  # noqa: BLE001 - surface every failure as a terminal chat event
-        # A second configured provider is a safe fallback only before any partial
-        # answer was emitted; otherwise mixing two model turns would be misleading.
-        if anthropic_key and openrouter_key and not emitted:
-            try:
-                _run_chat_job_openrouter(message, history, tool_impls, tracked, openrouter_key)
-                return
-            except Exception as fallback_exc:  # noqa: BLE001
-                append_event({"type": "error", "error": describe_provider_error(fallback_exc)})
-                return
-        append_event({"type": "error", "error": describe_provider_error(exc)})
+
+    failures: list[str] = []
+    for index, (name, key, runner) in enumerate(available):
+        try:
+            runner(message, history, tool_impls, tracked, key)
+            return
+        except Exception as exc:  # noqa: BLE001 - surface every failure as a terminal chat event
+            failures.append(f"{name}: {describe_provider_error(exc)}")
+            # Falling through to another provider is only safe before any partial answer was
+            # emitted; otherwise the reader would see two model turns spliced together.
+            if emitted or index == len(available) - 1:
+                break
+            tracked({
+                "type": "notice",
+                "text": f"{name} failed; trying {available[index + 1][0]}.",
+            })
+    append_event({"type": "error", "error": " | ".join(failures) or "Ask Cipher failed with no detail"})

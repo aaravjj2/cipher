@@ -172,3 +172,127 @@ def test_truncation_at_the_full_ceiling_does_not_set_a_budget(monkeypatch):
     with pytest.raises(ask_cipher.AskCipherError, match="token limit"):
         ask_cipher._run_chat_job_openrouter("hi", [], {}, [].append, "key")
     assert ask_cipher._learned_budget() is None
+
+
+def _provider_keys(monkeypatch, **present):
+    """Control which provider keys appear configured."""
+    monkeypatch.setattr(ask_cipher, "_anthropic_api_key", lambda: present.get("anthropic"))
+    monkeypatch.setattr(ask_cipher, "_groq_api_key", lambda: present.get("groq"))
+    monkeypatch.setattr(ask_cipher, "_openrouter_api_key", lambda: present.get("openrouter"))
+    monkeypatch.setattr(ask_cipher, "_env_key", lambda name: present.get("pin") if name == "CIPHER_ASK_PROVIDER" else None)
+
+
+def _spy_runners(monkeypatch, failing=()):
+    """Replace each provider runner with a recorder that optionally raises."""
+    called: list[str] = []
+
+    def make(name):
+        def runner(message, history, tools, append_event, key):
+            called.append(name)
+            if name in failing:
+                raise _ProviderRefusal(402, f"{name} is out of credits")
+            append_event({"type": "done", "text": f"answered by {name}"})
+        return runner
+
+    for name, attr in (("anthropic", "_run_chat_job_anthropic"),
+                       ("groq", "_run_chat_job_groq"),
+                       ("openrouter", "_run_chat_job_openrouter")):
+        monkeypatch.setattr(ask_cipher, attr, make(name))
+    return called
+
+
+def test_groq_is_tried_before_openrouter(monkeypatch):
+    """OpenRouter's balance is the thing that failed, so it is the last resort."""
+    _provider_keys(monkeypatch, groq="g", openrouter="o")
+    called = _spy_runners(monkeypatch)
+    events = []
+    ask_cipher.run_chat_job("hi", [], {}, events.append)
+    assert called == ["groq"]
+    assert events[-1]["text"] == "answered by groq"
+
+
+def test_anthropic_wins_when_configured(monkeypatch):
+    _provider_keys(monkeypatch, anthropic="a", groq="g", openrouter="o")
+    called = _spy_runners(monkeypatch)
+    ask_cipher.run_chat_job("hi", [], {}, [].append)
+    assert called == ["anthropic"]
+
+
+def test_a_failed_provider_falls_through_to_the_next(monkeypatch):
+    _provider_keys(monkeypatch, groq="g", openrouter="o")
+    called = _spy_runners(monkeypatch, failing={"groq"})
+    events = []
+    ask_cipher.run_chat_job("hi", [], {}, events.append)
+    assert called == ["groq", "openrouter"]
+    assert any(e["type"] == "notice" and "trying openrouter" in e["text"] for e in events)
+    assert events[-1]["text"] == "answered by openrouter"
+
+
+def test_a_provider_that_already_streamed_text_is_not_replaced(monkeypatch):
+    """Splicing a second model's turn onto a partial answer is worse than the error."""
+    _provider_keys(monkeypatch, groq="g", openrouter="o")
+    called: list[str] = []
+
+    def half_then_fail(message, history, tools, append_event, key):
+        called.append("groq")
+        append_event({"type": "text_delta", "text": "partial "})
+        raise _ProviderRefusal(500, "died mid-answer")
+
+    monkeypatch.setattr(ask_cipher, "_run_chat_job_groq", half_then_fail)
+    monkeypatch.setattr(ask_cipher, "_run_chat_job_openrouter",
+                        lambda *a, **k: called.append("openrouter"))
+    events = []
+    ask_cipher.run_chat_job("hi", [], {}, events.append)
+    assert called == ["groq"], "must not continue into a second provider after streaming"
+    assert events[-1]["type"] == "error"
+
+
+def test_every_provider_failing_reports_all_of_them(monkeypatch):
+    _provider_keys(monkeypatch, groq="g", openrouter="o")
+    _spy_runners(monkeypatch, failing={"groq", "openrouter"})
+    events = []
+    ask_cipher.run_chat_job("hi", [], {}, events.append)
+    error = events[-1]
+    assert error["type"] == "error"
+    assert "groq" in error["error"] and "openrouter" in error["error"]
+
+
+def test_a_pinned_provider_is_the_only_one_tried(monkeypatch):
+    _provider_keys(monkeypatch, groq="g", openrouter="o", pin="openrouter")
+    called = _spy_runners(monkeypatch)
+    ask_cipher.run_chat_job("hi", [], {}, [].append)
+    assert called == ["openrouter"]
+
+
+def test_an_unknown_pinned_provider_is_refused_rather_than_ignored(monkeypatch):
+    _provider_keys(monkeypatch, groq="g", pin="grok")
+    called = _spy_runners(monkeypatch)
+    events = []
+    ask_cipher.run_chat_job("hi", [], {}, events.append)
+    assert called == []
+    # Grok (xAI) is not Groq; silently falling back would hide the typo.
+    assert "grok" in events[-1]["error"] and "groq" in events[-1]["error"]
+
+
+def test_no_configured_provider_names_all_three_keys(monkeypatch):
+    _provider_keys(monkeypatch)
+    events = []
+    ask_cipher.run_chat_job("hi", [], {}, events.append)
+    for key in ("ANTHROPIC_API_KEY", "GROQ_API_KEY", "OPENROUTER_API_KEY"):
+        assert key in events[-1]["error"]
+
+
+def test_groq_does_not_inherit_openrouters_shrunken_budget(monkeypatch):
+    """The learned budget is an OpenRouter affordability figure and must not leak."""
+    ask_cipher._remember_budget(300)
+    seen = {}
+    reply = SimpleNamespace(choices=[SimpleNamespace(
+        message=SimpleNamespace(content="ok", tool_calls=[]), finish_reason="stop")])
+
+    def create(**kwargs):
+        seen.update(kwargs); return reply
+
+    _install(monkeypatch, SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create))))
+    ask_cipher._run_chat_job_groq("hi", [], {}, [].append, "key")
+    assert seen["max_tokens"] == ask_cipher.GROQ_MAX_TOKENS
+    assert seen["model"] == ask_cipher.GROQ_MODEL
