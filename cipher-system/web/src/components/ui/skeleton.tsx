@@ -38,7 +38,10 @@ export function Skeleton({ className = "", style }: { className?: string; style?
  */
 export function SkeletonRegion({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div role="status" aria-live="polite" className="flex flex-col gap-2">
+    // `cipher-skeleton-region` keeps this hidden for the first 250ms so a fetch that
+    // resolves quickly never flashes a placeholder. That also means a screen reader is not
+    // told "loading" for a load the user would not have noticed.
+    <div role="status" aria-live="polite" className="cipher-skeleton-region flex flex-col gap-2">
       <span className="sr-only">{label}</span>
       {children}
     </div>
@@ -80,6 +83,47 @@ export function SkeletonGrid({
               // and keeps the eye at the top where the first real data will appear.
               style={{ opacity: Math.max(0.25, 1 - Math.floor(cell / (columns + 1)) / rows) }}
             />
+          ))}
+        </div>
+      </div>
+    </SkeletonRegion>
+  );
+}
+
+/**
+ * A placeholder shaped like a chart beside its level rail, which is what Night Vision
+ * resolves into. Deliberately not `SkeletonGrid`: a grid-shaped placeholder followed by a
+ * candlestick chart moves the layout instead of holding it, which is most of the reason to
+ * show a skeleton rather than a line of text.
+ *
+ * The bars step in height so the block reads as a chart rather than a solid panel. The
+ * pattern is fixed rather than random so the placeholder does not reshuffle on re-render.
+ */
+export function SkeletonChart({ label, bars = 28, rows = 8 }: { label: string; bars?: number; rows?: number }) {
+  return (
+    <SkeletonRegion label={label}>
+      <div className="flex flex-col lg:flex-row gap-3 items-stretch">
+        <div
+          className="flex flex-1 min-w-0 items-end gap-[3px] rounded-[10px] p-3"
+          style={{ border: "1px solid var(--line)", background: "var(--panel)", minHeight: 260 }}
+        >
+          {Array.from({ length: bars }, (_, bar) => (
+            <Skeleton
+              key={bar}
+              className="flex-1"
+              // A smooth wave keyed off the index: recognisably chart-shaped without
+              // implying any particular price action.
+              style={{ height: `${38 + 42 * Math.abs(Math.sin(bar / 3.4))}%`, opacity: 0.55 }}
+            />
+          ))}
+        </div>
+        <div
+          className="flex w-full lg:w-[240px] shrink-0 flex-col gap-2 rounded-[10px] p-3"
+          style={{ border: "1px solid var(--line)", background: "var(--panel)" }}
+        >
+          <Skeleton className="h-[12px] w-[52%]" />
+          {Array.from({ length: rows }, (_, row) => (
+            <Skeleton key={row} className="h-[16px]" style={{ opacity: Math.max(0.28, 1 - row / rows) }} />
           ))}
         </div>
       </div>

@@ -17,6 +17,9 @@ const STANDING = read("components/panels/Standing.tsx");
 const SPYGLASS = read("components/panels/Spyglass.tsx");
 const STRATEGY_CATALOG = read("components/panels/StrategyCatalog.tsx");
 const SKELETON = read("components/ui/skeleton.tsx");
+const NIGHT_VISION = read("components/panels/NightVision.tsx");
+const HOLDINGS = read("components/panels/Holdings.tsx");
+const GLOBALS = read("app/globals.css");
 
 test("shared heatmap primitives retain the signed-exposure legend contract", () => {
   assert.match(HEATMAP, /export function ExposureLegend/);
@@ -78,6 +81,34 @@ test("loading primitives preserve an announced status region", () => {
   assert.match(SKELETON, /export function SkeletonGrid/);
   assert.match(MATRIX, /<SkeletonGrid/);
   assert.match(TRIDENT, /<SkeletonGrid label="Loading live Trident exposure…"/);
+});
+
+test("the placeholder is suppressed for fast loads rather than flashing", () => {
+  // Standing resolves in ~144ms and Holdings in ~3ms. A skeleton shown for that long is a
+  // flash, so the region starts hidden and reveals only if the fetch is still running.
+  assert.match(SKELETON, /cipher-skeleton-region/);
+  assert.match(GLOBALS, /@keyframes cipher-skeleton-reveal/);
+  assert.match(GLOBALS, /animation: cipher-skeleton-reveal 0\.25s step-end/);
+  // step-end is what makes this a delay rather than a fade; a linear/ease curve would make
+  // the placeholder visible immediately at partial opacity and defeat the point.
+  assert.match(GLOBALS, /from \{ visibility: hidden; \}/);
+  // The pulse still has to be dropped under reduced motion, and the reveal still has to
+  // apply, so the exemption must name only the pulse.
+  const reduced = GLOBALS.slice(GLOBALS.indexOf("prefers-reduced-motion"));
+  assert.match(reduced, /\.cipher-skeleton \{\s*animation: none;/);
+  assert.doesNotMatch(reduced, /cipher-skeleton-region/);
+});
+
+test("Night Vision uses a chart-shaped placeholder, and fast panels use none", () => {
+  // The night-vision payload measured 742 KB / 4.2s warm, which earns a placeholder.
+  assert.match(NIGHT_VISION, /import \{ SkeletonChart \} from "@\/components\/ui\/skeleton"/);
+  assert.match(NIGHT_VISION, /<SkeletonChart label=\{`Loading live \$\{ticker\} chart and gamma levels…`\}/);
+  assert.match(SKELETON, /export function SkeletonChart/);
+  // A grid-shaped placeholder in front of a candlestick chart moves the layout instead of
+  // holding it, which is most of the reason to prefer a skeleton over a line of text.
+  assert.doesNotMatch(NIGHT_VISION, /<SkeletonGrid/);
+  // Holdings is a 3ms fetch: it must keep its text rather than gain a placeholder.
+  assert.doesNotMatch(HOLDINGS, /Skeleton/);
 });
 
 test("Plan 2 panels use shaped loading states instead of bare loading labels", () => {

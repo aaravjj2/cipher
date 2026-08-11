@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react
 import { createPortal } from "react-dom";
 import { RefreshIcon } from "@/components/icons";
 import FlowTape from "@/components/panels/FlowTape";
+import { SkeletonChart } from "@/components/ui/skeleton";
 import {
   ApiError,
   fetchBars,
@@ -828,12 +829,11 @@ export function NightVision({
       </div>
 
       {status === "loading" && (
-        <div
-          className="flex items-center justify-center rounded-[10px] py-16 text-[13px]"
-          style={{ border: "1px solid var(--line)", color: "var(--text-mute)" }}
-        >
-          Loading live chart for {ticker}…
-        </div>
+        // The night-vision payload measured 742 KB and 4.2 seconds warm, so this state is
+        // held long enough that a centred line of text reads as a stall. Holdings and
+        // Standing deliberately keep their text instead: at 3 ms and 144 ms a placeholder
+        // would only flash, which is worse than the sentence it replaced.
+        <SkeletonChart label={`Loading live ${ticker} chart and gamma levels…`} />
       )}
 
       {status === "error" && (
