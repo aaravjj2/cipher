@@ -70,8 +70,23 @@ def load_env() -> dict[str, str]:
 
 
 def get_credentials(env: dict[str, str]) -> tuple[str, str, str]:
-    key = env.get("ALPACA_ALGO_KEY") or env.get("ALPACA_ALGO_PLUS_KEY") or env.get("ALPACA_API_KEY")
-    secret = env.get("ALPACA_ALGO_SECRET") or env.get("ALPACA_ALGO_PLUS_SECRET") or env.get("ALPACA_API_SECRET")
+    # Plus first, then base. This function returns the OPRA options feed below, which needs
+    # the higher-tier subscription, so preferring the base credential while asking for OPRA
+    # is the wrong way round. Every other module already resolves plus-then-base
+    # (core/data_fetcher.py:53, research_platform/market_data_providers.py:29,
+    # historical_options_download.py:101); this one was reversed with no comment saying why.
+    #
+    # It currently makes no difference because both Secret Manager entries hold the same
+    # value -- verified by hashing them. That is exactly what makes it worth fixing now: the
+    # day a genuinely higher-tier plus key is configured, chain capture would quietly request
+    # OPRA with the lower-tier credential and the symptom would be wrong data or a 403, not
+    # an obvious misconfiguration.
+    key = env.get("ALPACA_ALGO_PLUS_KEY") or env.get("ALPACA_ALGO_KEY") or env.get("ALPACA_API_KEY")
+    secret = (
+        env.get("ALPACA_ALGO_PLUS_SECRET")
+        or env.get("ALPACA_ALGO_SECRET")
+        or env.get("ALPACA_API_SECRET")
+    )
     if not key or not secret:
         raise ValueError("Alpaca market-data credentials not configured. Check .env or environment.")
     options_feed = env.get("ALPACA_DATA_FEED", "opra").lower()
