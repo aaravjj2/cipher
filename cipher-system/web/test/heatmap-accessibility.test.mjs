@@ -83,6 +83,22 @@ test("loading primitives preserve an announced status region", () => {
   assert.match(TRIDENT, /<SkeletonGrid label="Loading live Trident exposure…"/);
 });
 
+test("every sticky scrollport declares both overflow axes", () => {
+  // The trap this guards is precise. CSS forces one axis to `auto` whenever the other is
+  // `auto`/`scroll` and it is `visible`, so a container meant to scroll only horizontally
+  // silently becomes the *vertical* scrollport as well -- and a `top: 0` header inside it
+  // then sticks to that container rather than the intended one, scrolling out of view with
+  // no error anywhere. It is how the Strike Matrix expiration headers ended up roughly
+  // 1040px off-screen.
+  //
+  // A browser sweep over all 14 panels found only these two containers holding sticky
+  // descendants, and zero mixed visible/auto pairs. These assertions keep it that way by
+  // requiring the axes to stay explicit: `overflow-auto` sets both, and Trident names each.
+  assert.match(MATRIX, /grid-scroll[^"]*\boverflow-auto\b/);
+  assert.doesNotMatch(MATRIX, /grid-scroll[^"]*overflow-x-auto(?![-\w])/);
+  assert.match(TRIDENT, /overflow-y-auto overflow-x-hidden/);
+});
+
 test("the placeholder is suppressed for fast loads rather than flashing", () => {
   // Standing resolves in ~144ms and Holdings in ~3ms. A skeleton shown for that long is a
   // flash, so the region starts hidden and reveals only if the fetch is still running.
