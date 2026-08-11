@@ -66,7 +66,12 @@ export function Alerts({ ticker }: { ticker: string }) {
 
   return <div className="flex flex-col gap-4" style={{ color: "var(--text)" }}>
     <section className="rounded-[var(--radius)] p-5" style={{ background: "var(--panel)", border: "1px solid var(--line)" }}>
-      <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-[15px] font-semibold">Local market alerts</h2><p className="mt-1 text-[11px]" style={{ color: "var(--text-dim)" }}>Evaluated every 30 seconds while Cipher is open. Rules stay on this private server.</p></div><button type="button" onClick={enableNotifications} disabled={permission === "unsupported"} className="rounded px-3 py-2 text-[10.5px]" style={{ background: "var(--panel-2)", border: "1px solid var(--line)" }}>Notifications: {permission}</button></div>
+      {/* This copy used to promise a 30-second in-tab poll and nothing else, which stopped
+          being true when cipher-market-alert.timer started evaluating rules server-side and
+          pushing crossings to Telegram. A panel that misdescribes when its own alerts fire is
+          worse than one that says nothing: it is the difference between closing the tab
+          confidently and missing a crossing. web/test asserts the current wording. */}
+      <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-[15px] font-semibold">Market alerts</h2><p className="mt-1 text-[11px]" style={{ color: "var(--text-dim)" }}>Checked on the server every 5 minutes and delivered to Telegram, whether or not this tab is open. Also evaluated live here while it is. Rules stay on this private server.</p><p className="mt-1 text-[11px]" style={{ color: "var(--text-mute)" }}>A rule notifies on the crossing, not repeatedly while it holds, and re-arms once it returns to clear. A quote older than 10 minutes is treated as unknown, so a stale price never fires one.</p></div><button type="button" onClick={enableNotifications} disabled={permission === "unsupported"} className="rounded px-3 py-2 text-[10.5px]" style={{ background: "var(--panel-2)", border: "1px solid var(--line)" }} title="Browser notifications for this tab. Telegram delivery is independent and always on.">Browser notifications: {permission}</button></div>
       <p className="mt-3 text-[10px]" style={{ color: "var(--text-mute)" }}>Research notification only. Alerts cannot place, stage, or transmit orders.</p>
     </section>
     <section className="rounded-[var(--radius)] p-5" style={{ background: "var(--panel)", border: "1px solid var(--line)" }}>

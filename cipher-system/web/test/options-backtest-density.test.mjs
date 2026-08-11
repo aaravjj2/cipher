@@ -66,3 +66,36 @@ test("the panel renders the density line and says the range is a span", () => {
   // It must be driven by the manifest, never hardcoded.
   assert.match(SOURCE, /samplingDensity\(dataset\.coverage\)/);
 });
+
+// --- Alerts panel copy ---------------------------------------------------------------
+// The panel claimed "Evaluated every 30 seconds while Cipher is open", which stopped being
+// true when cipher-market-alert.timer began evaluating rules server-side and pushing to
+// Telegram. A panel that misdescribes when its own alerts fire is the difference between
+// closing the tab confidently and missing a crossing, so the claim is pinned here.
+const ALERTS = readFileSync(
+  join(import.meta.dirname, "..", "src", "components", "panels", "Alerts.tsx"),
+  "utf8",
+);
+
+test("the alerts panel no longer claims it only works while the tab is open", () => {
+  assert.doesNotMatch(ALERTS, /every 30 seconds while Cipher is open/);
+  assert.match(ALERTS, /whether or not this tab is open/);
+  assert.match(ALERTS, /Telegram/);
+});
+
+test("the alerts panel states the crossing and staleness semantics", () => {
+  // Both are load-bearing promises of the evaluator, so the UI has to say them.
+  assert.match(ALERTS, /on the crossing, not repeatedly/);
+  assert.match(ALERTS, /re-arms once it returns to clear/);
+  assert.match(ALERTS, /older than 10 minutes/);
+});
+
+test("the browser-notification button is not presented as the delivery mechanism", () => {
+  // "Notifications: default" read as though alerts depended on granting it; they do not.
+  assert.match(ALERTS, /Browser notifications:/);
+  assert.match(ALERTS, /Telegram delivery is independent/);
+});
+
+test("the alerts panel keeps its no-execution statement", () => {
+  assert.match(ALERTS, /cannot place, stage, or transmit orders/);
+});
