@@ -164,6 +164,8 @@ def _candidate_indices(
     min_signal_lead: int,
     rls_lookback: int,
     rls_relation: str,
+    evaluation_end: date | None = None,
+    bar_minutes: int = 1,
 ) -> list[tuple[int, str, str]]:
     """Reproduce Pine's gated candidate/arming phase.
 
@@ -172,12 +174,15 @@ def _candidate_indices(
     """
     needs_rls = strategy_mode in {"RLS -> CLPS", "A-Grade RLS -> CLPS"}
     a_only = strategy_mode in {"A-Grade CLPS", "A-Grade RLS -> CLPS"}
-    required_lead = max(min_signal_lead, entry_delay + 2)
+    required_lead = max(min_signal_lead, (entry_delay + 2) * bar_minutes)
     out: list[tuple[int, str, str]] = []
     for i, state in enumerate(states):
         if i >= len(bars) or not state.in_window:
             continue
-        if evaluation_start is not None and _et(str(bars[i]["time"])).date() < evaluation_start:
+        bar_day = _et(str(bars[i]["time"])).date()
+        if evaluation_start is not None and bar_day < evaluation_start:
+            continue
+        if evaluation_end is not None and bar_day > evaluation_end:
             continue
         # Pine's ``signalTimeOk`` includes the delayed-entry lead guard. With
         # normal 1-minute bars this excludes 15:57+ signals for delay=2.
@@ -219,6 +224,7 @@ def _trade_for_signal(
     *,
     entry_delay: int,
     tick_size: float,
+    eod_exit_minute: int = 59,
 ) -> PineTrade | None:
     entry_index = signal_index + entry_delay
     if entry_index >= len(bars):
@@ -228,7 +234,7 @@ def _trade_for_signal(
     exit_index = None
     for index in range(entry_index, len(bars)):
         local = _et(bars[index]["time"])
-        if local.hour == 15 and local.minute == 59:
+        if local.hour == 15 and local.minute == eod_exit_minute:
             exit_index = index
             break
         if _is_new_york_day(bars[entry_index]["time"], bars[index]["time"]):
@@ -318,15 +324,22 @@ def backtest_symbol(
     rls_relation: str,
     tick_size: float,
     evaluation_start: date | None,
+    detector_params: dict[str, Any] | None = None,
+    evaluation_end: date | None = None,
+    eod_exit_minute: int = 59,
+    bar_minutes: int = 1,
 ) -> dict[str, Any]:
     bars = _rth(rows)
     if not bars:
         return {"symbol": symbol, "coverage": {"bars": 0}, "summary": {"trades": 0}, "trades": []}
-    states, detector_summary = obsidian_eod.compute(bars, PINE_DEFAULTS)
+    params = {**PINE_DEFAULTS, **(detector_params or {})}
+    states, detector_summary = obsidian_eod.compute(bars, params)
     candidates = _candidate_indices(
         bars,
         states,
         evaluation_start=evaluation_start,
+        evaluation_end=evaluation_end,
+        bar_minutes=bar_minutes,
         strategy_mode=strategy_mode,
         entry_delay=entry_delay,
         min_signal_lead=min_signal_lead,
@@ -349,6 +362,7 @@ def backtest_symbol(
             kind,
             entry_delay=entry_delay,
             tick_size=tick_size,
+            eod_exit_minute=eod_exit_minute,
         )
         # Pine arms the signal even if an abnormal missing-bar sequence later
         # prevents an executable delayed entry; one-trade-per-day remains consumed
