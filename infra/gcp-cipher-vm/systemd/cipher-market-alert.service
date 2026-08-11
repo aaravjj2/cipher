@@ -1,0 +1,33 @@
+[Unit]
+# Evaluates the alert rules stored by core/alerts.py and pushes crossings to Telegram.
+#
+# Those rules were previously evaluated "in the authenticated browser", which means an alert
+# fired only while someone was already watching the screen -- the opposite of what an alert is
+# for. The rules, the Telegram channel and the timer pattern all existed separately; this runs
+# the evaluator that joins them.
+#
+# Safe to run around the clock. Outside the session the quote goes stale and the evaluator
+# reports every rule as "unknown" and leaves its state untouched, so an off-hours run is a
+# no-op rather than a source of false crossings.
+Description=Cipher stored market alert rule evaluation pass
+Wants=network-online.target
+After=network-online.target cipher-core.service
+
+[Service]
+Type=oneshot
+User=aarav
+Group=aarav
+WorkingDirectory=/home/aarav/Aarav/cipher/cipher-system
+EnvironmentFile=-/etc/cipher/cipher.env
+Environment=CIPHER_HERMES_TARGET=telegram
+Environment=HERMES_BIN=/home/aarav/.local/bin/hermes
+# Quotes are read from the local core over loopback, so this process never holds a provider
+# credential of its own.
+ExecStart=/home/aarav/.venvs/cipher/bin/python /home/aarav/Aarav/cipher/cipher-system/scripts/evaluate_market_alerts.py
+Nice=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=cipher-market-alert
+
+[Install]
+WantedBy=multi-user.target

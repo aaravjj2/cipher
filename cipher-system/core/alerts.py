@@ -1,7 +1,17 @@
 """Local-only market alert rule storage.
 
-Rules are evaluated in the authenticated browser against read-only quote data.
 This module stores configuration only and has no broker or order capability.
+
+Rules are evaluated in two places, and the difference matters:
+
+* `scripts/evaluate_market_alerts.py`, run every five minutes by
+  `cipher-market-alert.timer`, evaluates them server-side and pushes crossings to Telegram.
+  That is what makes an alert useful when nobody is watching. It is edge-triggered, so a
+  crossing notifies once rather than every pass, and it treats a stale quote as unknown
+  rather than as clear so a gap in data cannot manufacture a crossing.
+* The authenticated browser also evaluates them for live in-panel display. That path is a
+  convenience; it is not the delivery mechanism, and it was the only one until the evaluator
+  above existed, which meant an alert fired only while someone already had the tab open.
 """
 from __future__ import annotations
 

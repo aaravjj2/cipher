@@ -1,0 +1,17 @@
+[Unit]
+Description=Evaluate Cipher market alert rules every five minutes
+
+[Timer]
+# Five minutes is the useful resolution for a threshold crossing without turning one quote
+# request per distinct ticker into a meaningful share of the provider budget. Off-hours runs
+# cost one stale quote and change nothing.
+OnCalendar=*:0/5
+# Persistent=false on purpose. A crossing that happened while the VM was down is not news
+# worth pushing on boot, and replaying old market state is the failure this evaluator is
+# built to avoid.
+Persistent=false
+RandomizedDelaySec=20
+Unit=cipher-market-alert.service
+
+[Install]
+WantedBy=timers.target
