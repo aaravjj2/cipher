@@ -484,3 +484,40 @@ Correction to an earlier note in this session: `parameter_lab_2026/report.json` 
 as malformed because a survey script looked for a `summary` key. It is not malformed -- it
 is a sweep artifact keyed by `variants`/`pop_floor_summary`/`variant_count`. No quarantine
 is needed.
+
+## Leveraged-ETF wheel: the entire corpus is 69 decision dates, not 2.3 years
+
+2026-08-11, following the control work above. Joining `decision_selections` to `contracts`
+across every dataset in `data/historical_options/`, the option-chain coverage for the wheel
+universe is:
+
+```
+  NVDL:  16 dates   2026-01-20 .. 2026-07-13
+  TSLL:  45 dates   2025-01-02 .. 2026-06-26
+  SOXL:  34 dates   2026-01-08 .. 2026-07-24
+  TQQQ:  16 dates   2026-01-20 .. 2026-07-23
+  union: 69 distinct dates
+```
+
+Against that, the signal probe over 2024-02-01..2026-06-01 found **584 eligible days per
+symbol** and **274 signal fires**. The real arm produced 8 events and 4 closed trades from
+those 274 fires — not because the strategy declined, but because chains exist for a small
+fraction of the days it selected.
+
+**This means the real arm is starved too, not only the control.** The earlier note framed the
+refused comparison as the control lacking data; that was half the picture. Every wheel run
+in `data/leveraged_etf_wheel/` is sampling on the order of 69 decision dates spread across
+four symbols, so describing any of them as covering 2024-2026, or a "2.3-year window", is
+misleading. The window is the *span* of the sample, not its density.
+
+Combined with the cash-hurdle result above, the defensible summary of the wheel work is:
+a strategy sampled at ~69 decision points, whose median parameterization returns +1.20%
+annualized against a 4% risk-free rate the engine itself assumes, with entry filters that
+have never been compared to random entry. None of those three problems is fixed by running
+more variants on the same archive.
+
+What a valid control needs, quantified: chains on a random sample of the ~515 eligible days
+per symbol that the signal did *not* pick. That is a download of the same order as the
+existing corpus, via `core/historical_options_download.py`, and it is the only way to make
+`MIN_CONTROL_ACTIVITY_RATIO` reachable. Until then `wheel_entry_control_study.py` will
+correctly keep refusing to publish a percentile.

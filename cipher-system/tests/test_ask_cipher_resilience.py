@@ -119,3 +119,56 @@ def test_the_reduced_budget_still_refuses_a_truncated_answer(monkeypatch):
 
     assert budgets == [ask_cipher.OPENROUTER_MAX_TOKENS, 679]
     assert not any(row["type"] == "done" for row in events)
+
+
+@pytest.fixture(autouse=True)
+def _forget_learned_budget():
+    """The learned budget is module state; leaking it between tests hides ordering bugs."""
+    ask_cipher._remember_budget(None)
+    yield
+    ask_cipher._remember_budget(None)
+
+
+def test_the_affordable_budget_is_remembered_for_the_next_question(monkeypatch):
+    """Otherwise every question spends a failed call rediscovering the same number."""
+    client, budgets = _client_that_refuses_once(_ProviderRefusal(402, _LIVE_402))
+    _install(monkeypatch, client)
+    ask_cipher._run_chat_job_openrouter("hi", [], {}, [].append, "key")
+    assert budgets == [ask_cipher.OPENROUTER_MAX_TOKENS, 679]
+    assert ask_cipher._learned_budget() == 679
+
+    # A second question starts at the learned budget: one call, no 402.
+    calls = []
+    reply = SimpleNamespace(choices=[SimpleNamespace(
+        message=SimpleNamespace(content="second", tool_calls=[]), finish_reason="stop")])
+    def create(**kwargs):
+        calls.append(kwargs["max_tokens"]); return reply
+    _install(monkeypatch, SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create))))
+    events = []
+    ask_cipher._run_chat_job_openrouter("again", [], {}, events.append, "key")
+    assert calls == [679], "second question did not start at the remembered budget"
+    assert any("679" in str(e.get("text","")) for e in events if e["type"] == "notice")
+
+
+def test_truncation_at_the_remembered_budget_forgets_it(monkeypatch):
+    """So added credits are discovered on the next question instead of needing a restart."""
+    ask_cipher._remember_budget(300)
+    truncated = SimpleNamespace(choices=[SimpleNamespace(
+        message=SimpleNamespace(content="cut off", tool_calls=[]), finish_reason="length")])
+    _install(monkeypatch, SimpleNamespace(
+        chat=SimpleNamespace(completions=SimpleNamespace(create=lambda **k: truncated))))
+
+    with pytest.raises(ask_cipher.AskCipherError, match="token limit"):
+        ask_cipher._run_chat_job_openrouter("hi", [], {}, [].append, "key")
+    assert ask_cipher._learned_budget() is None, "a too-small remembered budget must not stick"
+
+
+def test_truncation_at_the_full_ceiling_does_not_set_a_budget(monkeypatch):
+    """Truncation at 1024 is not an affordability signal, so nothing should be remembered."""
+    truncated = SimpleNamespace(choices=[SimpleNamespace(
+        message=SimpleNamespace(content="cut off", tool_calls=[]), finish_reason="length")])
+    _install(monkeypatch, SimpleNamespace(
+        chat=SimpleNamespace(completions=SimpleNamespace(create=lambda **k: truncated))))
+    with pytest.raises(ask_cipher.AskCipherError, match="token limit"):
+        ask_cipher._run_chat_job_openrouter("hi", [], {}, [].append, "key")
+    assert ask_cipher._learned_budget() is None

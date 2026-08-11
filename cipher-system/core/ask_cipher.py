@@ -90,6 +90,27 @@ OPENROUTER_MAX_TOKENS = 1024
 # not worth returning: it would be a stub, and the truncation guard would reject it
 # anyway, so saying "add credits" is both faster and more honest.
 MIN_USEFUL_MAX_TOKENS = 256
+# The budget a 402 last told us the balance could afford, remembered so the next question
+# does not spend another failed call rediscovering the same number. A pre-flight balance
+# request was the alternative and is worse: it adds a round trip to every question,
+# including the ones that would have succeeded.
+#
+# Cleared when an answer is truncated at the remembered budget (see `_run_chat_job_openrouter`),
+# so topping up credits is discovered on the next question rather than needing a restart.
+# Guarded by a lock because chat jobs run on their own threads.
+_LEARNED_MAX_TOKENS: int | None = None
+_LEARNED_LOCK = threading.Lock()
+
+
+def _learned_budget() -> int | None:
+    with _LEARNED_LOCK:
+        return _LEARNED_MAX_TOKENS
+
+
+def _remember_budget(value: int | None) -> None:
+    global _LEARNED_MAX_TOKENS
+    with _LEARNED_LOCK:
+        _LEARNED_MAX_TOKENS = value
 MAX_HISTORY_MESSAGES = 20
 MAX_MESSAGE_CHARS = 8_000
 MAX_TOOL_RESULT_CHARS = 120_000
@@ -423,7 +444,16 @@ def _run_chat_job_openrouter(
     # low-balance account working without hardcoding a figure that goes stale as the
     # balance moves. It is only safe because `finish_reason == "length"` below rejects a
     # truncated answer -- a smaller budget must fail loudly, never silently shorten.
-    budget = OPENROUTER_MAX_TOKENS
+    budget = _learned_budget() or OPENROUTER_MAX_TOKENS
+    started_at_learned_budget = budget < OPENROUTER_MAX_TOKENS
+    if started_at_learned_budget:
+        append_event({
+            "type": "notice",
+            "text": (
+                f"Starting at {budget} tokens, the budget the provider last reported as "
+                "affordable. Add OpenRouter credits for longer answers."
+            ),
+        })
     for _ in range(6):  # a tool-calling turn cannot loop forever on a bad tool result
         try:
             response = client.chat.completions.create(
@@ -441,6 +471,7 @@ def _run_chat_job_openrouter(
                 ),
             })
             budget = affordable
+            _remember_budget(affordable)
             response = client.chat.completions.create(
                 model=OPENROUTER_MODEL, max_tokens=budget, messages=messages, tools=_OPENAI_TOOL_SPECS,
             )
@@ -454,6 +485,11 @@ def _run_chat_job_openrouter(
                 append_event({"type": "text_delta", "text": chunk})
         if not msg.tool_calls:
             if getattr(choice, "finish_reason", None) == "length":
+                if started_at_learned_budget:
+                    # The remembered budget was too small for this question. Forget it so the
+                    # next question tries the full ceiling: if credits were added since, that
+                    # succeeds, and if not it costs one 402 to relearn the same number.
+                    _remember_budget(None)
                 raise AskCipherError("Ask Cipher's response reached its token limit and was not returned as complete.")
             completed_answer = bool(final_text.strip())
             break
