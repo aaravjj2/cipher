@@ -105,8 +105,13 @@ test("server exposes health but no market data without a session", async (t) => 
   assert.equal(loginPage.status, 200);
   assert.match(loginPage.headers.get("content-security-policy"), /connect-src 'self'/);
 
+  // Health stays open for uptime checks, so its anonymous body is public once the port
+  // is published. It must prove liveness without naming the deployment or its feeds —
+  // verify-cloudflare-access.py flags "market_data_configured" in an unauthenticated
+  // response as disclosure.
   const health = await fetch(`http://127.0.0.1:${appPort}/api/health`);
   assert.equal(health.status, 200);
+  assert.deepEqual(await health.json(), { status: "ok" });
 
   const rejected = await fetch(`http://127.0.0.1:${appPort}/api/login`, {
     method: "POST",
@@ -134,4 +139,12 @@ test("server exposes health but no market data without a session", async (t) => 
   });
   assert.equal(tampered.status, 401);
   assert.equal(quoteRequests, 1);
+
+  // The same path returns the core's detail once a session exists, so the redaction
+  // above is scoped to anonymous callers rather than a blanket loss of information.
+  const detailed = await fetch(`http://127.0.0.1:${appPort}/api/health`, {
+    headers: { cookie },
+  });
+  assert.equal(detailed.status, 200);
+  assert.equal((await detailed.json()).path, "/health");
 });

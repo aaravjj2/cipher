@@ -29,8 +29,58 @@ def test_cloudflare_token_is_written_atomically_and_privately(tmp_path: Path):
 
 
 def test_secret_sync_makes_local_auth_mode_explicit():
-    source = (REPO / "infra/gcp-cipher-vm/bin/sync-secrets.py").read_text(encoding="utf-8")
-    assert "f\"CIPHER_APP_AUTH={'on' if password_hash_configured else 'off'}\"" in source
+    sync = load(REPO / "infra/gcp-cipher-vm/bin/sync-secrets.py", "sync_secrets")
+    with_password = sync.render_env({"CIPHER_APP_PASSWORD_HASH": "scrypt$16384$8$1$aa$bb"}, {})
+    assert "CIPHER_APP_AUTH=on" in with_password
+    assert "CIPHER_APP_AUTH=off" not in with_password
+    assert "CIPHER_APP_AUTH=off" in sync.render_env({}, {})
+
+
+def test_secret_sync_preserves_keys_it_does_not_manage(tmp_path: Path):
+    """The regression that narrowed the Tradier capture from 23 underlyings to 3.
+
+    The env file is rebuilt from scratch each run, so a hand-set TRADIER_STREAM_SYMBOLS
+    was deleted and run-tradier-loop.sh silently fell back to `SPY,QQQ,IWM`.
+    """
+    sync = load(REPO / "infra/gcp-cipher-vm/bin/sync-secrets.py", "sync_secrets")
+    symbols = "SPY,QQQ,IWM,NFLX,COST,JPM,XOM,WMT,UNH,LLY,V,MA,NVDA"
+    existing = {"TRADIER_STREAM_SYMBOLS": symbols, "PORT": "9999"}
+
+    rendered = sync.render_env({"TRADIER_ACCESS_TOKEN": "tok"}, existing)
+
+    assert f"TRADIER_STREAM_SYMBOLS='{symbols}'" in rendered
+    # A managed key is still owned by this script, not inherited from the old file.
+    assert "PORT=8283" in rendered
+    assert "PORT=9999" not in rendered
+    # Round-trips: what we write parses back to what we meant.
+    target = tmp_path / "cipher.env"
+    sync.write_private_file(target, rendered)
+    assert sync.parse_env_file(target)["TRADIER_STREAM_SYMBOLS"] == symbols
+
+
+def test_secret_sync_never_downgrades_a_configured_password(monkeypatch):
+    """An unreachable Secret Manager must not switch the login gate off."""
+    sync = load(REPO / "infra/gcp-cipher-vm/bin/sync-secrets.py", "sync_secrets")
+    monkeypatch.setattr(sync, "PROJECT_ID", "test-project")
+
+    class Unreachable:
+        def access_secret_version(self, request):  # noqa: ANN001, ANN202
+            raise RuntimeError("secret manager unavailable")
+
+    existing = {"CIPHER_APP_PASSWORD_HASH": "scrypt$16384$8$1$aa$bb", "LSE_API_KEY": "key"}
+    resolved = sync.resolve_secrets(Unreachable(), existing)
+
+    assert resolved["CIPHER_APP_PASSWORD_HASH"] == existing["CIPHER_APP_PASSWORD_HASH"]
+    assert resolved["LSE_API_KEY"] == "key"
+    assert "CIPHER_APP_AUTH=on" in sync.render_env(resolved, existing)
+
+
+def test_secret_sync_quotes_values_that_would_break_the_env_file():
+    sync = load(REPO / "infra/gcp-cipher-vm/bin/sync-secrets.py", "sync_secrets")
+    nasty = "it's a $(value) with spaces"
+    rendered = sync.render_env({}, {"CIPHER_NOTE": nasty})
+    line = next(l for l in rendered.splitlines() if l.startswith("CIPHER_NOTE="))
+    assert sync.unquote(line.partition("=")[2]) == nasty
 
 
 def test_access_verifier_accepts_only_access_redirects_or_denials():

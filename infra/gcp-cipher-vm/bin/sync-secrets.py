@@ -28,6 +28,15 @@ SECRETS = {
     "TRADIER_ACCESS_TOKEN": "tradier-access-token",
     "CIPHER_APP_PASSWORD_HASH": "cipher-app-password-hash",
 }
+# Non-secret settings this script owns outright and rewrites on every run.
+MANAGED_STATIC = {
+    "ALPACA_DATA_FEED": "opra",
+    "ALPACA_STOCK_FEED": "sip",
+    "CIPHER_CORE_PORT": "8282",
+    "PORT": "8283",
+    "CIPHER_CORE_URL": "http://127.0.0.1:8282",
+}
+MANAGED_NAMES = frozenset(SECRETS) | frozenset(MANAGED_STATIC) | {"CIPHER_APP_AUTH"}
 
 
 def access(client: Any, secret: str) -> str | None:
@@ -45,6 +54,70 @@ def quote(value: str) -> str:
     return "'" + value.replace("'", "'\"'\"'") + "'"
 
 
+def unquote(raw: str) -> str:
+    """Invert `quote` so a value this script wrote can be read back unchanged."""
+    if len(raw) >= 2 and raw[0] == "'" and raw[-1] == "'":
+        return raw[1:-1].replace("'\"'\"'", "'")
+    return raw
+
+
+def parse_env_file(path: Path) -> dict[str, str]:
+    """Read the current environment file into a mapping, ignoring comments."""
+    if not path.exists():
+        return {}
+    values: dict[str, str] = {}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+        key, _, raw = stripped.partition("=")
+        key = key.strip()
+        if key:
+            values[key] = unquote(raw.strip())
+    return values
+
+
+def resolve_secrets(client: Any, existing: dict[str, str]) -> dict[str, str]:
+    """Fetch each managed secret, retaining the configured value if a fetch fails.
+
+    A Secret Manager outage used to blank every credential in the output file, and for
+    CIPHER_APP_PASSWORD_HASH that meant the login gate turned itself off while the app
+    stayed reachable. Falling back to the value already on disk makes an unreachable
+    Secret Manager a no-op instead of a downgrade.
+    """
+    resolved: dict[str, str] = {}
+    for env_name, secret_name in SECRETS.items():
+        value = access(client, secret_name)
+        if value:
+            resolved[env_name] = value
+        elif existing.get(env_name):
+            print(f"  keeping configured {env_name} (secret '{secret_name}' unavailable)")
+            resolved[env_name] = existing[env_name]
+        else:
+            print(f"  skipping {env_name} (secret '{secret_name}' not available)")
+    return resolved
+
+
+def render_env(resolved: dict[str, str], existing: dict[str, str]) -> str:
+    """Render the environment file, preserving keys this script does not own.
+
+    The output is rebuilt from scratch on every run, so anything absent from SECRETS or
+    MANAGED_STATIC used to be deleted. TRADIER_STREAM_SYMBOLS was set by hand and vanished
+    that way, narrowing the Tradier capture from 23 underlyings to the wrapper's 3-symbol
+    fallback with nothing in the logs to say so. Unmanaged keys are now carried forward.
+    """
+    lines = [f"{name}={quote(value)}" for name, value in resolved.items()]
+    lines += [f"{name}={value}" for name, value in MANAGED_STATIC.items()]
+    # Auth follows the password, in both directions: configured means on, absent means the
+    # server refuses to start rather than quietly serving market data to anyone.
+    lines.append(f"CIPHER_APP_AUTH={'on' if resolved.get('CIPHER_APP_PASSWORD_HASH') else 'off'}")
+    carried = {name: value for name, value in existing.items() if name not in MANAGED_NAMES}
+    if carried:
+        lines.append("# Preserved across syncs; set outside this script.")
+        lines += [f"{name}={quote(value)}" for name, value in sorted(carried.items())]
+    return "\n".join(lines) + "\n"
+
+
 def write_private_file(path: Path, value: str) -> None:
     """Atomically replace a secret file without opening a permissive mode window."""
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -60,30 +133,14 @@ def main() -> int:
     if not PROJECT_ID:
         raise SystemExit("GOOGLE_CLOUD_PROJECT or GCP_PROJECT is required")
     client = secretmanager.SecretManagerServiceClient()
-    values: list[str] = []
-    password_hash_configured = False
-    for env_name, secret_name in SECRETS.items():
-        value = access(client, secret_name)
-        if value:
-            values.append(f"{env_name}={quote(value)}")
-            if env_name == "CIPHER_APP_PASSWORD_HASH":
-                password_hash_configured = True
-        else:
-            print(f"  skipping {env_name} (secret '{secret_name}' not available)")
-    values.extend(
-        [
-            "ALPACA_DATA_FEED=opra",
-            "ALPACA_STOCK_FEED=sip",
-            "CIPHER_CORE_PORT=8282",
-            "PORT=8283",
-            "CIPHER_CORE_URL=http://127.0.0.1:8282",
-            # The VM remains loopback-bound and tailnet-only until a password is
-            # configured. A password secret automatically restores fail-closed auth.
-            f"CIPHER_APP_AUTH={'on' if password_hash_configured else 'off'}",
-        ]
-    )
-    write_private_file(OUTPUT, "\n".join(values) + "\n")
-    print(f"  wrote {len(values)} variables to {OUTPUT}")
+    existing = parse_env_file(OUTPUT)
+    resolved = resolve_secrets(client, existing)
+    rendered = render_env(resolved, existing)
+    write_private_file(OUTPUT, rendered)
+    preserved = sorted(name for name in existing if name not in MANAGED_NAMES)
+    print(f"  wrote {len(rendered.splitlines())} lines to {OUTPUT}")
+    if preserved:
+        print(f"  preserved unmanaged keys: {', '.join(preserved)}")
 
     tunnel_token = access(client, "cipher-cloudflare-tunnel-token")
     if tunnel_token:

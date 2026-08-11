@@ -229,6 +229,14 @@ createServer(async (req, res) => {
     }
   }
   if (url.pathname === "/api/health") {
+    // Deliberately reachable without a session so an uptime check does not need one —
+    // which means this exact response is public the moment the port is published.
+    // The core's /health reports service name, market_data_configured, and the
+    // configured feeds; verify-cloudflare-access.py treats "market_data_configured" in
+    // an unauthenticated body as disclosure, and it is right to. So an anonymous caller
+    // gets liveness and nothing that identifies the deployment or its data sources.
+    // Authenticated callers still get the full core health below.
+    if (!authGate.isAuthenticated(req)) return sendJson(res, 200, { status: "ok" });
     try {
       return await proxyCore(res, "/health", new URLSearchParams(), {
         acceptEncoding: req.headers["accept-encoding"] || "",
