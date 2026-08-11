@@ -56,6 +56,36 @@ writes and has no broker or live-order capability.
 The scanner browser is not enabled automatically because AccessObsidian requires
 a fresh authenticated browser session and its local WebBridge/extension.
 
+### Tradier stream subscription is now at its cap
+
+`/etc/cipher/cipher.env` sets `TRADIER_OPTION_UNDERLYINGS` explicitly. Before
+2026-08-11 it was unset, so `core/tradier_stream_capture.py` fell back to
+`DEFAULT_UNDERLYINGS` — fourteen mega-caps, none of which the leveraged-ETF wheel
+trades. `data/execution_costs/spread_profile.json` therefore had no measured spread
+for NVDL, TSLL, SOXL, or TQQQ, and `equity_half_spread_bps` returned
+`assumed:symbol-not-captured` for the entire wheel universe. Those four are now
+appended so a measured spread accrues for the symbols the strategy actually trades.
+See the corresponding section in `docs/backtest-findings.md`.
+
+The capacity arithmetic matters before anything else is added:
+
+| | base symbols | option slots | contracts taken | total |
+|---|---|---|---|---|
+| before (14 underlyings) | 23 | 137 | 112 | **135** of 160 |
+| after (18 underlyings) | 27 | 133 | 133 | **160** of 160 |
+
+`TRADIER_MAX_STREAM_SYMBOLS` defaults to 160, so the subscription is now exactly at
+the cap with no headroom. Nothing is dropped: `_round_robin_contracts` allocates by
+depth across underlyings, so the cost is that seven of the existing underlyings hold
+seven contracts instead of eight, and every underlying is still captured. Adding a
+nineteenth underlying will start reducing depth further, so raise
+`TRADIER_MAX_STREAM_SYMBOLS` at the same time — and check the vendor's per-session
+symbol limit before doing so, which is not documented here because it has not been
+established.
+
+`TRADIER_OPTION_UNDERLYINGS` is not in `MANAGED_NAMES`, so `sync-secrets.py` carries
+it forward untouched rather than rewriting it.
+
 ## Public access over Tailscale Funnel
 
 Cipher is published at `https://cipher-main.tail39504f.ts.net:8443`, reachable from any

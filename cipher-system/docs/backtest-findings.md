@@ -565,3 +565,61 @@ its cost and the random dates should be drawn only over that surviving configura
 
 This is a recommendation to sequence the work, not a verdict on the strategy. The control
 harness stays in place and will keep refusing to publish a percentile until the data exists.
+
+## Wheel hurdle question: unanswerable, because nothing can cost the universe
+
+2026-08-11, later the same day. The section above proposed the cheap experiment — does *any*
+parameterization clear the 4% hurdle? — as the thing to do before buying control data. It has
+now been run against every stored run, and the answer is neither yes nor no. It is that the
+question cannot currently be answered, which resolves the sequencing decision anyway.
+
+**The stored runs cannot answer it directly.** `annualized_return_pct` and
+`beats_risk_free` are `None` in all 32 `report.json` files: those fields postdate every run
+in the directory. So the figures below were recomputed from `total_return_pct`, `start`, and
+`end` using the identical formula the engine applies (`(1 + r)^(1/years) - 1`), which makes
+them comparable to a re-run but does not make them a re-run.
+
+Of 32 reports, 17 placed a trade at all, 16 of those returned above zero, and 7 clear the 4%
+hurdle. That last number is smaller than it looks:
+
+* The 7 collapse to **3 distinct configurations** by config fingerprint. The rest are
+  re-runs of the same parameters under different names.
+* Five of the 7 clear by **0.10 to 0.35 percentage points** annualized.
+* One fingerprint produced **two different results from the same configuration**:
+  +3.53% over 66 events and +2.90% over 81 events. The same parameters returning different
+  numbers is the unreproducibility problem recorded above, showing up inside the set of runs
+  that would otherwise be the best evidence for the strategy.
+
+**And the margins cannot be tested against measured costs.** Every one of the 7 was written
+2026-07-28, thirteen days before `data/execution_costs/spread_profile.json` existed
+(2026-08-10 22:40), so all of them used the assumed cost. The obvious next move is to re-cost
+them — and that is not possible:
+
+    wheel universe:                     NVDL, TSLL, SOXL, TQQQ
+    measured option spreads cover:      23 symbols, all mega-caps and index ETFs
+    overlap:                            0 of 4
+
+The capture never subscribed to the wheel's universe. `TRADIER_OPTION_UNDERLYINGS` is unset,
+so it falls back to `DEFAULT_UNDERLYINGS` in `core/tradier_stream_capture.py:44` — fourteen
+mega-caps. `equity_half_spread_bps` therefore returns `assumed:symbol-not-captured` for all
+four, exactly as it is designed to.
+
+For scale on what is being assumed away: for symbols that *were* captured, the measured
+option half-spread at 1-7 DTE runs a **median of 0.875% to 4.125% of premium**, and at 0DTE
+2.6% to 7.1%. Leveraged single-stock and 3x sector ETFs are not plausibly tighter than
+mega-caps. A margin of 0.10-0.35 percentage points of annualized return does not survive
+that range being unknown, in either direction.
+
+**So the conclusion holds and hardens.** Do not buy the control chains. The blocker is no
+longer only that the control arm has no data on non-signal dates; it is that the strategy's
+own return cannot be costed at all, so neither arm can be priced. Buying data to compare two
+uncostable arms produces a percentile that means nothing.
+
+The enabling step is cheap and forward-looking rather than a purchase: add NVDL, TSLL, SOXL,
+and TQQQ to `TRADIER_OPTION_UNDERLYINGS` so a measured spread accrues for the universe the
+strategy actually trades. That does nothing for the 2026 backtest window — the profile's own
+caveat is explicit that it cannot cost historical periods outside its capture — but it is the
+only path to ever answering the hurdle question with a measured number instead of an assumed
+one. Until then the honest statement is: **three configurations clear a 4% hurdle under an
+assumed cost that has never been checked against this universe, two of them by less than
+half a percentage point.**
