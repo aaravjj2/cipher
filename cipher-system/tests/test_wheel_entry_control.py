@@ -203,3 +203,57 @@ def test_a_starved_control_is_reported_invalid_not_as_a_100_percent_win():
     assert live["control_starved"] is False
     assert live["comparison_valid"] is True
     assert live["beat_control_pct"] == pytest.approx(66.667, abs=0.01)
+
+
+def test_a_fully_rejected_universe_says_so_instead_of_reporting_zero_percent():
+    """0.0% must not be readable as "broke even" when nothing was ever eligible.
+
+    `default_universe()` is unapproved by design -- 0 of 4 assets pass quality_check -- so
+    this is the default outcome of running the engine without --universe-json, which makes
+    it the case most likely to be misread.
+    """
+    from leveraged_etf_csp_wheel import default_universe
+
+    data, days = _data_with_down_days({5, 12})
+    engine = SignalRateProbe(data, default_universe(), _config(), initial_cash=200_000.0)
+    summary = engine.run(days[0], days[-1]).summary
+
+    assert summary["total_return_pct"] == pytest.approx(0.0)
+    assert summary["universe_eligible"] == []
+    assert len(summary["universe_quality_rejected"]) == 4
+    blocker = summary["research_grade_blockers"][0]
+    assert "NO ASSET PASSED THE QUALITY WHITELIST" in blocker
+    assert "measures nothing" in blocker
+
+
+def test_a_partially_rejected_universe_is_flagged_without_the_hard_blocker():
+    data, days = _data_with_down_days({5, 12})
+    from leveraged_etf_csp_wheel import UniverseAsset
+
+    bad = UniverseAsset(symbol="ZZZZ", reference="ZZZ", quality_kind="single_company",
+                        quality_approved=False, quality_as_of="unverified", leverage_multiple=2.0)
+    summary = SignalRateProbe(
+        data, (quality_asset(), bad), _config(), initial_cash=200_000.0
+    ).run(days[0], days[-1]).summary
+
+    assert summary["universe_eligible"] == ["NVDL"]
+    assert "ZZZZ" in summary["universe_quality_rejected"]
+    joined = " ".join(summary["research_grade_blockers"])
+    assert "NO ASSET PASSED" not in joined
+    assert "1 of 2 universe assets failed" in joined
+
+
+def test_returns_are_reported_against_the_rate_the_engine_prices_with():
+    """Selling puts into a drift clears zero easily; the hurdle is what separates results."""
+    data, days = _data_with_down_days({5, 12, 20, 31})
+    summary = SignalRateProbe(
+        data, (quality_asset(),), _config(), initial_cash=200_000.0
+    ).run(days[0], days[-1]).summary
+
+    assert summary["risk_free_rate_pct"] == pytest.approx(4.0)
+    assert "annualized_return_pct" in summary
+    expected = summary["annualized_return_pct"] - summary["risk_free_rate_pct"]
+    assert summary["excess_annualized_vs_risk_free_pct"] == pytest.approx(expected)
+    assert summary["beats_risk_free"] is (summary["annualized_return_pct"] > 4.0)
+    # total_return_pct is untouched, so existing readers are unaffected.
+    assert "total_return_pct" in summary

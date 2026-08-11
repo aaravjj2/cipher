@@ -1886,12 +1886,39 @@ class LeveragedEtfWheelBacktester:
                 "buy_to_close_for_roll",
             }
         ]
+        total_return_pct = (ending_equity / self.state.initial_cash - 1.0) * 100.0
+        # Which universe members could ever have traded. A run whose whole universe fails
+        # the quality whitelist returns 0.0% -- indistinguishable from a strategy that
+        # traded and broke even, when in fact nothing was evaluated. `default_universe()`
+        # is deliberately unapproved (0 of 4 pass), so that is the *default* outcome of
+        # running this engine without --universe-json, and it has to be visible in the
+        # summary rather than inferred from a skips count.
+        quality = {asset.symbol: asset.quality_check() for asset in self.universe.values()}
+        rejected = {symbol: list(reasons) for symbol, (ok, reasons) in quality.items() if not ok}
+        eligible_symbols = [symbol for symbol, (ok, _) in quality.items() if ok]
+        # Excess return over the rate this engine already assumes when it prices the options
+        # it sells (`risk_free_rate`, used in the Black-Scholes calls below). Reporting only
+        # total return invites reading "positive" as "worthwhile": selling puts into an
+        # upward drift clears zero almost regardless of parameters, and 66 swept variants
+        # showed 64 above zero but only 12 above a 4% hurdle. Added alongside
+        # total_return_pct rather than replacing it, so existing readers are unaffected.
+        years = max((end - start).days, 1) / 365.0
+        annualized_pct = ((1.0 + total_return_pct / 100.0) ** (1.0 / years) - 1.0) * 100.0
+        hurdle_pct = self.config.risk_free_rate * 100.0
+
         summary = {
             "start": start.isoformat(),
             "end": end.isoformat(),
             "initial_cash": self.state.initial_cash,
             "ending_equity": ending_equity,
-            "total_return_pct": (ending_equity / self.state.initial_cash - 1.0) * 100.0,
+            "total_return_pct": total_return_pct,
+            "annualized_return_pct": annualized_pct,
+            "risk_free_rate_pct": hurdle_pct,
+            "excess_annualized_vs_risk_free_pct": annualized_pct - hurdle_pct,
+            "beats_risk_free": annualized_pct > hurdle_pct,
+            "universe_size": len(self.universe),
+            "universe_eligible": eligible_symbols,
+            "universe_quality_rejected": rejected,
             "max_drawdown_pct": max_drawdown * 100.0,
             "events": len(self.state.events),
             "closed_option_events": len(closed_events),
@@ -1907,12 +1934,32 @@ class LeveragedEtfWheelBacktester:
             "data_requests": len(self.state.data_requests),
             "skips": len(self.state.skips),
             "research_grade": False,
-            "research_grade_blockers": [
+            # Universe rejection leads the list when it is total, because it invalidates the
+            # result outright rather than qualifying it: 0.0% is then the absence of a test,
+            # not its outcome. A partial rejection is a qualifier and sits with the others.
+            "research_grade_blockers": (
+                [
+                    f"NO ASSET PASSED THE QUALITY WHITELIST ({len(rejected)} of "
+                    f"{len(self.universe)} rejected), so no entry was ever possible and "
+                    "this result measures nothing; supply an approved --universe-json"
+                ]
+                if self.universe and not eligible_symbols
+                else []
+            )
+            + [
                 "historical option NBBO is unavailable; trade-bar proxies are used",
                 "curated quality whitelist is not point-in-time fundamentals data",
                 "historical borrow, taxes, dividends, distributions, and contract adjustments are incomplete",
                 "risk-neutral POP is a model estimate, not an observed probability",
-            ],
+            ]
+            + (
+                [
+                    f"{len(rejected)} of {len(self.universe)} universe assets failed the "
+                    "quality whitelist and were never traded"
+                ]
+                if rejected and eligible_symbols
+                else []
+            ),
         }
         return BacktestResult(
             config={
