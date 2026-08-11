@@ -161,6 +161,37 @@ generations matter, so deleting at 30 days is the point. `cold/` is the only cop
 live option chains — it must never carry a Delete rule. Transitioning it to NEARLINE cuts
 storage cost while keeping the data, which is why the two prefixes get different actions.
 
+## Accepted weaknesses on the public URL
+
+Reviewed 2026-08-11 after publishing. These are decisions, not oversights.
+
+**Login rate limiting is in-memory and resets on restart.** `app/auth.mjs` tracks failed
+attempts per IP with a doubling lockout, but the map lives in the process. Persisting it was
+considered and rejected: the password is 23 characters from a 31-character alphabet, about
+99 bits, so online guessing is not the threat model — no feasible number of attempts finds
+it. The limiter's real job is capping the scrypt CPU an unauthenticated caller can spend
+(~60 ms per attempt) and keeping the journal readable, and it does both within a process
+lifetime. Restarts are rare and reset nothing an attacker could have made progress on.
+If the password is ever shortened, this reasoning stops holding and the limiter must
+become persistent.
+
+**`/accessobsidian-browser-logger.js` is served ungated with `access-control-allow-origin: *`.**
+Necessary: it is injected into a third-party page, so it cannot sit behind the session
+cookie. Audited for disclosure — it contains one host reference,
+`http://127.0.0.1:8787/api/scanner-ingest`, which is loopback and not reachable from
+outside. No credentials, tailnet hostname, bucket, or project identifier. It stays public.
+
+**`/api/health` answers anonymously with `{"status":"ok"}` and nothing else.** The core's
+full health (service name, `market_data_configured`, both feed names) is served only to an
+authenticated session, because `verify-cloudflare-access.py` correctly treats
+`market_data_configured` in an unauthenticated body as disclosure.
+
+**Served-build drift is possible.** `npm run build` writes `web/out`; only
+`scripts/sync_web_build.sh` copies it into `app/public`, which is what the server reads.
+Building without syncing leaves a newer bundle unserved, and because the symptom looks like
+a browser cache problem it is expensive to diagnose. There is no automated guard: run the
+sync script rather than `npm run build` directly.
+
 ## Operational commands
 
 ```bash

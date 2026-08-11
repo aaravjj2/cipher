@@ -15,6 +15,20 @@ Universe: 34 liquid optionable names across sectors. Costs 2 bps per side.
 Entries fill on the next bar's open; when a bar spans both stop and target the
 stop is assumed to fill first.
 
+> **Cost provenance, read this before any number below.** Every verdict from here down to
+> "The execution cost was a guess" uses `DEFAULT_COST_BPS = 2.0` — an assumption, not a
+> measurement. That section replaces it with per-symbol half-spreads measured from the
+> captured quote corpus (median **1.025 bps** per side, so the assumption was pessimistic)
+> and re-runs the decisive comparison. The 2026-08-10 refresh below then shows the disjoint
+> verdict no longer replicating, for reasons unrelated to cost. `core/execution_cost.py`
+> reports provenance per lookup (`measured:median`, `assumed:no-profile`,
+> `assumed:symbol-not-captured`, `assumed:insufficient-samples(N)`) and deliberately will
+> not auto-load a profile, because a cost lookup that changes answer depending on whether a
+> file exists on disk is not something a backtest can be built on.
+>
+> Sections dated 2026-08-11 concern the leveraged-ETF wheel and are governed by their own
+> limits — a 69-date corpus and a 4% cash hurdle — not by this equity cost model.
+
 ## Headline
 
 **The detector's setups, traded mechanically as directional entries, do not
