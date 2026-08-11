@@ -13,6 +13,7 @@ import json
 import shutil
 import sqlite3
 import subprocess
+import sys
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
@@ -45,8 +46,17 @@ TAR_INCLUDES = [
     "cipher-system/data/governance/latest_system_inventory.json",
     "cipher-system/data/research_snapshots",
     "cipher-system/data/warehouse_exports",
+    # 772 KB of download-run configs that make the deliberately-excluded 9.8 GB of
+    # data/historical_options rebuildable. Excluding the bars is only economical if the
+    # recipe survives, and the recipe is not in download_manifest.json -- that carries
+    # latest_run_config, one run of the 205 that built a single dataset. The full set lives
+    # in download_runs.config_json inside each dataset database, i.e. inside the directory
+    # this backup skips. Refreshed by refresh_options_rebuild_recipes() below.
+    "cipher-system/data/options_rebuild_recipes",
     "reports",
 ]
+
+RECIPE_EXPORTER = ROOT / "cipher-system" / "scripts" / "export_options_rebuild_recipes.py"
 
 
 def sqlite_safe_copy(src: Path, dst: Path) -> bool:
@@ -108,6 +118,27 @@ def require_backup_headroom(paths: list[Path], directory: Path) -> None:
             f"insufficient backup headroom: free={free}, required={required}, "
             f"largest_database={largest}, reserve={MIN_FREE_RESERVE_BYTES}"
         )
+
+
+def refresh_options_rebuild_recipes() -> str | None:
+    """Regenerate the rebuild recipes so the tar carries current ones.
+
+    Deliberately non-fatal. A stale or missing recipe weakens a documented recovery path for
+    reproducible data; a failed backup loses irreplaceable data. Those are not the same
+    severity, so this warns and continues rather than aborting the run that protects the
+    quote corpus. Returns the warning text, or None on success.
+    """
+    if not RECIPE_EXPORTER.is_file():
+        return f"recipe exporter missing at {RECIPE_EXPORTER}"
+    try:
+        subprocess.run(
+            [sys.executable, str(RECIPE_EXPORTER)],
+            check=True, capture_output=True, text=True, timeout=300,
+        )
+    except Exception as exc:  # noqa: BLE001 - never fail the backup for this
+        detail = getattr(exc, "stderr", None) or str(exc)
+        return f"rebuild-recipe export failed: {str(detail).strip()[:300]}"
+    return None
 
 
 def create_operational_archive(archive: Path, root: Path, includes: list[str]) -> bool:
@@ -192,6 +223,11 @@ def main() -> int:
         )
 
         # ── Operational tar (non-SQLite data) ────────────────────────
+        # Refreshed before the tar is built, so the archive carries recipes matching the
+        # datasets as they are now rather than as they were at the last manual export.
+        recipe_warning = refresh_options_rebuild_recipes()
+        if recipe_warning:
+            print(f"WARN: {recipe_warning}")
         archive = tmp / f"cipher-operational-{stamp}.tar.zst"
         create_operational_archive(archive, ROOT, TAR_INCLUDES)
 

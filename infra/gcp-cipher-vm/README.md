@@ -114,10 +114,22 @@ Parquet copies of completed `tradier_stream_events` days and never prunes the so
 
 Deliberately **not** backed up:
 
-- **`data/historical_options` (9.8 GB)** — excluded because it is reproducible. It was built
-  by `core/historical_options_download.py` from Alpaca and can be rebuilt from the
-  `download_manifest.json` in each dataset directory. Rebuilding costs API quota and hours,
-  not data.
+- **`data/historical_options` (9.8 GB)** — excluded because it is reproducible from Alpaca via
+  `core/historical_options_download.py`. Rebuilding costs API quota and hours, not data.
+
+  **The recipe is not in the manifest.** `download_manifest.json` carries
+  `latest_run_config`, which is the *last* run only — for `leveraged_etf_wheel` that is a
+  single day for a single underlying, out of the 205 runs that built it. The full recipe is
+  `download_runs.config_json` inside each dataset's own `historical_options.sqlite`, i.e.
+  inside the directory this backup skips, so losing the directory would lose the data *and*
+  the instructions for rebuilding it.
+
+  `scripts/export_options_rebuild_recipes.py` closes that gap: it exports every recorded run
+  config to `data/options_rebuild_recipes/`, which **is** in `TAR_INCLUDES`. 772 KB covering
+  678 runs across 28 datasets. `backup-to-gcs.py` refreshes it before building the tar, and
+  treats a failure there as a warning rather than an error — a stale recipe weakens a
+  recovery path for reproducible data, while a failed backup loses irreplaceable data, and
+  those are not the same severity.
 - **`web/node_modules`, `.venv*`, `app/public`, `web/out`** — build artifacts.
 
 The distinction that matters: the live chains are *captured observations* that no vendor
