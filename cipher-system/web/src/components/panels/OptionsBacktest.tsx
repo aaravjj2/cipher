@@ -32,6 +32,34 @@ function displayValue(value: unknown): string {
   return String(value);
 }
 
+/**
+ * How densely a dataset samples its own date range.
+ *
+ * The coverage list already carries `decision_date_count` alongside `decision_date_min`
+ * and `decision_date_max`, but as one row among eighteen equal-weight rows. A reader sees
+ * the min and max and reads a continuous span — the leveraged-ETF wheel datasets show
+ * 2025-01-02 to 2026-07-24 while holding 48 sampled decision dates, and that gap is what
+ * makes a result look like eighteen months of evidence when it is 48 observations.
+ *
+ * Returns null when the manifest lacks the fields, so nothing is inferred.
+ */
+function samplingDensity(coverage: Record<string, unknown>): {
+  dates: number;
+  spanDays: number;
+  pctOfSessions: number;
+} | null {
+  const dates = coverage.decision_date_count;
+  const min = coverage.decision_date_min;
+  const max = coverage.decision_date_max;
+  if (typeof dates !== "number" || typeof min !== "string" || typeof max !== "string") return null;
+  const spanDays = Math.round((Date.parse(max) - Date.parse(min)) / 86_400_000);
+  if (!Number.isFinite(spanDays) || spanDays <= 0) return null;
+  // ~252 trading days a year is the standard approximation; this is a scale indicator, not
+  // a calendar, so it is labelled "approx" rather than pretending to count real sessions.
+  const sessions = (spanDays * 252) / 365;
+  return { dates, spanDays, pctOfSessions: sessions > 0 ? (dates / sessions) * 100 : 0 };
+}
+
 function bytes(value: number | null): string {
   if (value == null) return "—";
   if (value >= 1024 ** 3) return `${(value / 1024 ** 3).toFixed(2)} GB`;
@@ -224,6 +252,28 @@ export function OptionsBacktest() {
             </div>
 
             <h4 className="mb-2 mt-5 text-[10px] font-semibold uppercase" style={{ letterSpacing: "0.12em", color: "var(--text-mute)" }}>Coverage</h4>
+            {(() => {
+              const density = samplingDensity(dataset.coverage);
+              if (!density) return null;
+              return (
+                <p
+                  className="mb-3 rounded-[8px] px-3 py-2 text-[11px] leading-relaxed"
+                  style={{
+                    background: "color-mix(in srgb, var(--neg) 9%, var(--panel-2))",
+                    border: "1px solid var(--line)",
+                    color: "var(--text-dim)",
+                  }}
+                >
+                  Sampled, not continuous:{" "}
+                  <b style={{ color: "var(--text)" }}>{density.dates.toLocaleString("en-US")}</b>{" "}
+                  decision {density.dates === 1 ? "date" : "dates"} across a{" "}
+                  {density.spanDays.toLocaleString("en-US")}-day span — approximately{" "}
+                  <b style={{ color: "var(--text)" }}>{density.pctOfSessions.toFixed(1)}%</b>{" "}
+                  of trading sessions in that range. The date range below is the span of the
+                  sample, not its density.
+                </p>
+              );
+            })()}
             <dl className="grid gap-x-5 gap-y-2 sm:grid-cols-2 xl:grid-cols-3">
               {Object.entries(dataset.coverage).filter(([, value]) => value != null).map(([name, value]) => (
                 <div key={name} className="flex justify-between gap-3 border-b py-1 text-[11px]" style={{ borderColor: "var(--line)" }}>
