@@ -172,11 +172,16 @@ export function Standing() {
   const [error, setError] = useState(false);
 
   useEffect(() => {
-    const now = new Date();
-    setToday({ year: now.getFullYear(), month: now.getMonth(), day: now.getDate() });
-    setView({ year: now.getFullYear(), month: now.getMonth() });
-    setFormDate(now.toISOString().slice(0, 10));
-    setNotes(readLocal<DayNote[]>(NOTES_STORAGE_KEY, []));
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      const now = new Date();
+      setToday({ year: now.getFullYear(), month: now.getMonth(), day: now.getDate() });
+      setView({ year: now.getFullYear(), month: now.getMonth() });
+      setFormDate(now.toISOString().slice(0, 10));
+      setNotes(readLocal<DayNote[]>(NOTES_STORAGE_KEY, []));
+    });
+    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {

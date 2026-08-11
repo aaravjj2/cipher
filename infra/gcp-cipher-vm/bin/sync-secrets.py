@@ -61,10 +61,13 @@ def main() -> int:
         raise SystemExit("GOOGLE_CLOUD_PROJECT or GCP_PROJECT is required")
     client = secretmanager.SecretManagerServiceClient()
     values: list[str] = []
+    password_hash_configured = False
     for env_name, secret_name in SECRETS.items():
         value = access(client, secret_name)
         if value:
             values.append(f"{env_name}={quote(value)}")
+            if env_name == "CIPHER_APP_PASSWORD_HASH":
+                password_hash_configured = True
         else:
             print(f"  skipping {env_name} (secret '{secret_name}' not available)")
     values.extend(
@@ -74,6 +77,9 @@ def main() -> int:
             "CIPHER_CORE_PORT=8282",
             "PORT=8283",
             "CIPHER_CORE_URL=http://127.0.0.1:8282",
+            # The VM remains loopback-bound and tailnet-only until a password is
+            # configured. A password secret automatically restores fail-closed auth.
+            f"CIPHER_APP_AUTH={'on' if password_hash_configured else 'off'}",
         ]
     )
     write_private_file(OUTPUT, "\n".join(values) + "\n")

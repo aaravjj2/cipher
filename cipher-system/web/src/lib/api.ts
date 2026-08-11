@@ -1089,6 +1089,96 @@ export function fetchOptionsBacktestReport(
   );
 }
 
+export type OptionsLabProtocol = { id: string; script: string; research_only: true };
+export type OptionsLabJob = {
+  id: string; protocol: string; status: "queued" | "running" | "done" | "error";
+  pct: number; message: string; result: Record<string, unknown> | null; error: string | null;
+  created_at: string; updated_at: string; research_only: true; execution_capability: false;
+};
+export function fetchOptionsLabJobs(signal?: AbortSignal): Promise<{ jobs: OptionsLabJob[]; protocols: OptionsLabProtocol[] }> {
+  return getJson("/api/options-backtest?action=jobs", signal);
+}
+export function fetchOptionsLabJob(id: string, signal?: AbortSignal): Promise<OptionsLabJob> {
+  return getJson(`/api/options-backtest?action=job&id=${encodeURIComponent(id)}`, signal);
+}
+export function startOptionsLab(protocol: string, signal?: AbortSignal): Promise<{ job_id: string; status: string; research_only: true }> {
+  return postJson("/api/options-backtest?action=start", { protocol }, signal);
+}
+
+export type GexReplaySnapshotMeta = {
+  id: number;
+  ticker: string;
+  captured_at: string;
+  feed: string | null;
+  spot: number | null;
+  day_change_pct: number | null;
+  contracts: number | null;
+  calculated_cells: number | null;
+  listed_cells: number | null;
+  global_max_strike: number | null;
+  call_wall_strike: number | null;
+  put_wall_strike: number | null;
+  gamma_flip_level: number | null;
+  caveat: string;
+};
+
+export type GexReplayCatalog = {
+  tickers: Array<{ ticker: string; snapshots: number; first_capture: string; last_capture: string }>;
+  snapshots: GexReplaySnapshotMeta[];
+  counts: { tickers: number; snapshots: number };
+  selected_ticker: string | null;
+  read_only: true;
+  caveat: string;
+};
+
+export type GexReplayStrike = {
+  strike: number;
+  call_gex: number | null;
+  put_gex: number | null;
+  net_gex: number | null;
+  call_oi: number | null;
+  put_oi: number | null;
+  volume: number | null;
+  available_cells: number;
+  listed_cells: number;
+  available: boolean;
+  incomplete: boolean;
+};
+
+export type GexReplayPayload = {
+  snapshot: GexReplaySnapshotMeta;
+  previous: { id: number; captured_at: string; spot: number | null } | null;
+  next: { id: number; captured_at: string; spot: number | null } | null;
+  strikes: GexReplayStrike[];
+  read_only: true;
+  aggregation: string;
+  caveat: string;
+};
+
+export function fetchGexReplayCatalog(ticker: string, signal?: AbortSignal): Promise<GexReplayCatalog> {
+  return getJson<GexReplayCatalog>(
+    `/api/gex-replay?action=catalog&ticker=${encodeURIComponent(ticker)}&limit=1000`, signal
+  );
+}
+
+export function fetchGexReplaySnapshot(id: number, signal?: AbortSignal): Promise<GexReplayPayload> {
+  return getJson<GexReplayPayload>(`/api/gex-replay?action=snapshot&id=${id}`, signal);
+}
+
+export type AlertKind = "price_above" | "price_below" | "day_change_above" | "day_change_below";
+export type AlertRule = { id: string; ticker: string; kind: AlertKind; threshold: number; enabled: boolean; created_at: string };
+export type AlertsPayload = { rules: AlertRule[]; kinds: AlertKind[]; local_only: true; execution_capability: false };
+
+export function fetchAlerts(signal?: AbortSignal): Promise<AlertsPayload> {
+  return getJson<AlertsPayload>("/api/alerts", signal);
+}
+export function addAlert(rule: { ticker: string; kind: AlertKind; threshold: number }, signal?: AbortSignal): Promise<AlertRule> {
+  return postJson<AlertRule>("/api/alerts?action=add", rule, signal);
+}
+export function deleteAlert(id: string, signal?: AbortSignal): Promise<{ deleted: string }> {
+  return postJson("/api/alerts?action=delete", { id }, signal);
+}
+
 // Workspace layouts — core/workspace_layouts.py. The grid blob is dockview's own
 // serialized state and is stored opaquely: the backend validates the envelope (name,
 // size) and never interprets the grid, so the shape below stays deliberately loose.

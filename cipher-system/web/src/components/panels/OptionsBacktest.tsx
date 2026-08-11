@@ -7,6 +7,11 @@ import {
   type OptionsBacktestCatalog,
   type OptionsBacktestDataset,
   type OptionsBacktestReportPayload,
+  fetchOptionsLabJobs,
+  fetchOptionsLabJob,
+  startOptionsLab,
+  type OptionsLabProtocol,
+  type OptionsLabJob,
 } from "@/lib/api";
 
 type LoadedReport = {
@@ -94,6 +99,9 @@ export function OptionsBacktest() {
   const [selected, setSelected] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loadedReport, setLoadedReport] = useState<LoadedReport | null>(null);
+  const [protocols, setProtocols] = useState<OptionsLabProtocol[]>([]);
+  const [job, setJob] = useState<OptionsLabJob | null>(null);
+  const [starting, setStarting] = useState<string | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -104,8 +112,32 @@ export function OptionsBacktest() {
           setError(err instanceof Error ? err.message : "Could not load the options catalog.");
         }
       });
+    fetchOptionsLabJobs(controller.signal).then((value) => {
+      setProtocols(value.protocols);
+      setJob(value.jobs[0] ?? null);
+    }).catch(() => {});
     return () => controller.abort();
   }, []);
+
+  useEffect(() => {
+    if (!job || !["queued", "running"].includes(job.status)) return;
+    const timer = window.setInterval(() => {
+      fetchOptionsLabJob(job.id).then(setJob).catch(() => {});
+    }, 1500);
+    return () => window.clearInterval(timer);
+  }, [job]);
+
+  async function runProtocol(protocol: string) {
+    setStarting(protocol);
+    try {
+      const started = await startOptionsLab(protocol);
+      setJob(await fetchOptionsLabJob(started.job_id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not start the options lab.");
+    } finally {
+      setStarting(null);
+    }
+  }
 
   const dataset = useMemo(() => {
     if (!catalog?.datasets.length) return null;
@@ -145,7 +177,7 @@ export function OptionsBacktest() {
           <div>
             <h2 className="text-[15px] font-semibold">Historical options research</h2>
             <p className="mt-1 text-[11.5px]" style={{ color: "var(--text-dim)" }}>
-              Stored datasets and completed lab reports. This page never launches a backtest job.
+              Stored datasets, completed reports, and serialized research-only lab jobs.
             </p>
           </div>
           <div className="flex gap-3 text-[10.5px]" style={{ fontFamily: "var(--font-mono)", color: "var(--text-dim)" }}>
@@ -157,6 +189,12 @@ export function OptionsBacktest() {
         <p className="mt-3 text-[11px] leading-relaxed" style={{ color: "var(--text-mute)" }}>
           {catalog.caveat}
         </p>
+      </section>
+
+      <section className="rounded-[var(--radius)] p-5" style={{ background: "var(--panel)", border: "1px solid var(--line)" }}>
+        <div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="text-[12px] font-semibold">Run a fixed research protocol</h3><p className="mt-1 text-[10.5px]" style={{ color: "var(--text-mute)" }}>Jobs run one at a time and can take hours. Inputs and scripts are allow-listed; no arbitrary command or broker access is available.</p></div>{job && <span className="text-[10px] uppercase" style={{ color: job.status === "error" ? "var(--neg)" : "var(--accent)" }}>{job.protocol}: {job.status} · {job.pct}%</span>}</div>
+        <div className="mt-3 flex flex-wrap gap-2">{protocols.map((protocol) => <button key={protocol.id} type="button" disabled={starting != null || job?.status === "running" || job?.status === "queued"} onClick={() => runProtocol(protocol.id)} className="rounded px-3 py-2 text-[10.5px] disabled:opacity-40" style={{ background: "var(--panel-2)", border: "1px solid var(--line)" }}>{labelOf(protocol.id)}</button>)}</div>
+        {job?.error && <pre className="mt-3 max-h-32 overflow-auto whitespace-pre-wrap text-[9.5px]" style={{ color: "var(--neg)" }}>{job.error}</pre>}
       </section>
 
       <div className="grid min-w-0 gap-4 lg:grid-cols-[280px_minmax(0,1fr)]">

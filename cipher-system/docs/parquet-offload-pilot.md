@@ -22,4 +22,15 @@ The SQLite partition size is an explicitly labeled estimate based on the day's s
 
 Round-trip verification covered every stored column, including `raw_json`, and matched row count, ID bounds, capture-time bounds, a 64-bit XOR hash, and a summed 128-bit hash. The local audit artifact is `data/parquet_pilots/tradier_stream_events_20260810.audit.json`; generated data remains ignored by Git.
 
-This proves that local Parquet is a viable cold-query format. It does not authorize deletion of SQLite rows. A production retention job still needs content-addressed private backup, restore testing, an atomic partition ledger, and a policy for late-arriving events before pruning can be considered.
+This proves that local Parquet is a viable cold-query format. It does not authorize deletion of SQLite rows.
+
+## Append-only retention workflow
+
+`scripts/parquet_retention.py` promotes the pilot mechanics into a resumable daily mirror. It accepts only completed UTC days, writes into `data/parquet_archive/tradier_stream_events/date=YYYY-MM-DD/`, atomically publishes the Parquet and audit files, and commits their strong source fingerprint to `retention.sqlite`. A repeated date is idempotent; missing or unledgered artifacts fail closed for manual inspection.
+
+```bash
+python3 scripts/parquet_retention.py --date 2026-08-10
+python3 scripts/parquet_retention.py --status
+```
+
+This workflow intentionally has no pruning command. SQLite stays canonical and untouched, so late-arriving events can be detected before any future policy change. The existing private backup job remains responsible for irreplaceable-data backup and restore verification.

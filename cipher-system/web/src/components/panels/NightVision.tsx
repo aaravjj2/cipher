@@ -480,9 +480,12 @@ export function NightVision({
   const domainPad = (rawMax - rawMin) * 0.08 || 1;
   const domainMax = rawMax + domainPad;
   const domainMin = rawMin - domainPad;
-  const priceToY = (p: number) => MARGIN.top + ((domainMax - p) / (domainMax - domainMin)) * plotH;
+  const priceToY = useCallback(
+    (p: number) => MARGIN.top + ((domainMax - p) / (domainMax - domainMin)) * plotH,
+    [MARGIN.top, domainMax, domainMin, plotH]
+  );
   const slot = plotW / Math.max(bars.length, 1);
-  const xAt = (i: number) => MARGIN.left + i * slot + slot / 2;
+  const xAt = useCallback((i: number) => MARGIN.left + i * slot + slot / 2, [MARGIN.left, slot]);
 
   const yTicks = 6;
   const yAxisLabels = Array.from({ length: yTicks }, (_, i) => {
@@ -540,7 +543,7 @@ export function NightVision({
         };
       })
       .filter(Boolean) as { key: string; color: string; d: string }[];
-  }, [spyQqqOn, benchBars, bars, plotW, domainMin, domainMax]);
+  }, [spyQqqOn, benchBars, bars, priceToY, xAt]);
 
   const gammaFlip = nightVision?.summary?.gamma_flip_level ?? null;
 
@@ -555,7 +558,7 @@ export function NightVision({
     return g
       .filter((pt) => pt.price > domainMin && pt.price < domainMax)
       .map((pt) => ({ x: startX + (pt.step / maxStep) * span, y: priceToY(pt.price) }));
-  }, [nightVision, bars, plotW, domainMin, domainMax]);
+  }, [nightVision, bars, plotW, domainMin, domainMax, MARGIN.right, priceToY, xAt]);
 
 
   /**

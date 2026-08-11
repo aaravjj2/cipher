@@ -199,8 +199,11 @@ export function ChartSaves() {
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    setCards(loadChartSaves());
-    setLoaded(true);
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (!cancelled) { setCards(loadChartSaves()); setLoaded(true); }
+    });
+    return () => { cancelled = true; };
   }, []);
 
   const handleDelete = (id: string) => {

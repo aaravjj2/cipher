@@ -496,7 +496,7 @@ function SpyglassView({ ticker }: { ticker: string }) {
 
   useEffect(() => {
     const controller = new AbortController();
-    load(controller.signal);
+    void Promise.resolve().then(() => load(controller.signal));
     const interval = setInterval(() => load(), FLOW_REFRESH_MS);
     return () => {
       controller.abort();

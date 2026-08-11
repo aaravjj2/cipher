@@ -101,6 +101,8 @@ const routes = {
   "/api/ask": "/api/ask",
   "/api/research-status": "/api/research-status",
   "/api/options-backtest": "/api/options-backtest",
+  "/api/gex-replay": "/api/gex-replay",
+  "/api/alerts": "/api/alerts",
   "/api/evidence-status": "/api/evidence-status",
   "/api/signal-backtest": "/api/signal-backtest",
   "/api/strategies": "/api/strategies",

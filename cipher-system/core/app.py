@@ -42,6 +42,9 @@ import ask_cipher
 import chat_jobs
 import workspace_layouts
 import options_backtest_catalog
+import gex_replay
+import alerts
+import options_backtest_jobs
 from company_research_engine import yahoo_rss_headlines
 from zoneinfo import ZoneInfo
 
@@ -1685,9 +1688,36 @@ class Handler(BaseHTTPRequestHandler):
                     if data is None:
                         self.send_json(404, {"error": "Unknown options report"})
                         return
+                elif action == "jobs":
+                    data = {"jobs": options_backtest_jobs.list_jobs(), "protocols": options_backtest_jobs.protocols()}
+                elif action == "job":
+                    data = options_backtest_jobs.get_job(pget("id") or "")
+                    if data is None:
+                        self.send_json(404, {"error": "Unknown options backtest job"})
+                        return
                 else:
                     self.send_json(400, {"error": f"Unknown options-backtest action: {action}"})
                     return
+            elif parsed.path == "/api/gex-replay":
+                action = (pget("action") or "catalog").lower()
+                if action == "catalog":
+                    data = gex_replay.replay_catalog(
+                        ticker=pget("ticker"), limit=int(pget("limit", "250") or 250)
+                    )
+                elif action == "snapshot":
+                    snapshot_id = pget("id")
+                    if not snapshot_id or not snapshot_id.isdigit():
+                        self.send_json(400, {"error": "A numeric snapshot id is required"})
+                        return
+                    data = gex_replay.replay_snapshot(gex_replay.DEFAULT_DB, int(snapshot_id))
+                    if data is None:
+                        self.send_json(404, {"error": "Unknown GEX snapshot"})
+                        return
+                else:
+                    self.send_json(400, {"error": f"Unknown gex-replay action: {action}"})
+                    return
+            elif parsed.path == "/api/alerts":
+                data = alerts.list_rules()
             elif parsed.path == "/api/quote":
                 data = quote(ticker)
             elif parsed.path == "/debug/caches":
@@ -2321,6 +2351,31 @@ class Handler(BaseHTTPRequestHandler):
                 job_id = chat_jobs.start_chat_job(message, history, tool_impls)
                 self.send_json(202, {"job_id": job_id, "status": "queued"})
                 return
+            if parsed.path == "/api/alerts":
+                action = (pget("action") or "add").lower()
+                body = self._read_json_body()
+                if not isinstance(body, dict):
+                    raise ValueError("request body must be a JSON object")
+                if action == "add":
+                    self.send_json(201, alerts.add_rule(
+                        ticker=body.get("ticker", ""), kind=body.get("kind", ""),
+                        threshold=body.get("threshold"),
+                    ))
+                    return
+                if action == "delete":
+                    self.send_json(200, alerts.delete_rule(body.get("id", "")))
+                    return
+                self.send_json(400, {"error": f"Unknown alerts action: {action}"})
+                return
+            if parsed.path == "/api/options-backtest":
+                action = (pget("action") or "").lower()
+                body = self._read_json_body()
+                if action != "start" or not isinstance(body, dict):
+                    self.send_json(400, {"error": "Use action=start with a JSON object"})
+                    return
+                job_id = options_backtest_jobs.start_job(str(body.get("protocol") or ""))
+                self.send_json(202, {"job_id": job_id, "status": "queued", "research_only": True})
+                return
             self.send_json(
                 404,
                 {
@@ -2330,6 +2385,7 @@ class Handler(BaseHTTPRequestHandler):
                         "/api/holdings?action=add|close|delete",
                         "/api/workspace-layouts?action=save|delete",
                         "/api/ask",
+                        "/api/alerts?action=add|delete",
                     ],
                 },
             )

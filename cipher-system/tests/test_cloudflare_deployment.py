@@ -28,6 +28,11 @@ def test_cloudflare_token_is_written_atomically_and_privately(tmp_path: Path):
     assert not (tmp_path / ".token.tmp").exists()
 
 
+def test_secret_sync_makes_local_auth_mode_explicit():
+    source = (REPO / "infra/gcp-cipher-vm/bin/sync-secrets.py").read_text(encoding="utf-8")
+    assert "f\"CIPHER_APP_AUTH={'on' if password_hash_configured else 'off'}\"" in source
+
+
 def test_access_verifier_accepts_only_access_redirects_or_denials():
     verifier = load(
         REPO / "infra/gcp-cipher-vm/bin/verify-cloudflare-access.py", "cf_verify"

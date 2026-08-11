@@ -15,6 +15,8 @@ import { SetupScanner as SetupScannerBase } from "@/components/panels/SetupScann
 import { Backtest as BacktestBase } from "@/components/panels/Backtest";
 import { StrategyCatalogPanel as StrategyCatalogBase } from "@/components/panels/StrategyCatalog";
 import { OptionsBacktest as OptionsBacktestBase } from "@/components/panels/OptionsBacktest";
+import { GexReplay as GexReplayBase } from "@/components/panels/GexReplay";
+import { Alerts as AlertsBase } from "@/components/panels/Alerts";
 import { Settings as SettingsBase } from "@/components/panels/Settings";
 
 /**
@@ -44,6 +46,8 @@ const AskCipher = memo(AskCipherBase);
 const Backtest = memo(BacktestBase);
 const StrategyCatalog = memo(StrategyCatalogBase);
 const OptionsBacktest = memo(OptionsBacktestBase);
+const GexReplay = memo(GexReplayBase);
+const Alerts = memo(AlertsBase);
 const Trident = memo(TridentBase);
 const ChartSaves = memo(ChartSavesBase);
 const SetupScanner = memo(SetupScannerBase);
@@ -64,6 +68,8 @@ export const PANEL_TITLES: Record<string, string> = {
   "Setup Scanner": "SETUP SCANNER",
   Backtest: "SIGNAL BACKTEST",
   "Options Backtest": "OPTIONS BACKTEST",
+  "GEX Replay": "GEX REPLAY",
+  Alerts: "LOCAL ALERTS",
   Strategies: "STRATEGY CATALOG",
   Settings: "SETTINGS",
 };
@@ -124,6 +130,10 @@ export function PanelHost({
       return <StrategyCatalog />;
     case "Options Backtest":
       return <OptionsBacktest />;
+    case "GEX Replay":
+      return <GexReplay key={ticker} ticker={ticker} />;
+    case "Alerts":
+      return <Alerts ticker={ticker} />;
     case "Trident":
       return <Trident toolbarSlot={toolbarSlot} />;
     case "Chart Saves":

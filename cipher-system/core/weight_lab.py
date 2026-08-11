@@ -1187,11 +1187,11 @@ def _active_payload() -> dict:
 
 
 def is_active() -> bool:
-    return bool(_active_payload().get("active"))
+    return bool(_active_payload().get("active")) and not activation_blockers(load_weights())
 
 
 def is_flash_active() -> bool:
-    return bool(_active_payload().get("flash_active"))
+    return bool(_active_payload().get("flash_active")) and not activation_blockers(load_flash_weights())
 
 
 def _clear_scanner_cache():
@@ -1209,6 +1209,17 @@ def _clear_scanner_cache():
 def set_active(active: bool) -> dict:
     ensure_dirs()
     payload = _active_payload()
+    if active:
+        blockers = activation_blockers(load_weights())
+        if blockers:
+            was_active = bool(payload.get("active"))
+            payload.update({"active": False, "as_of": _utcnow(), "activated": False,
+                            "blocked_by": blockers})
+            if was_active:
+                payload["deactivated_by_gate"] = True
+            ACTIVE_PATH.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+            _clear_scanner_cache()
+            return payload
     payload.update(
         {
             "active": bool(active),

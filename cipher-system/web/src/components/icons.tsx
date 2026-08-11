@@ -273,3 +273,16 @@ export function OptionsBacktestIcon(props: SVGProps<SVGSVGElement>) {
     </svg>
   );
 }
+
+/** Timeline/profile glyph for captured GEX replay. */
+export function ReplayIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" width="16" height="16" {...props}>
+      <path fill="currentColor" d="M12 3a9 9 0 1 1-8.2 5.3l-1.8-1V3h4.3L4.8 4.5A11 11 0 1 0 12 1zm-1 4h2v5.4l4 2.3-1 1.7-5-2.9z" />
+    </svg>
+  );
+}
+
+export function AlertIcon(props: SVGProps<SVGSVGElement>) {
+  return <svg viewBox="0 0 24 24" width="16" height="16" {...props}><path fill="currentColor" d="M12 22a2.5 2.5 0 0 0 2.4-2h-4.8a2.5 2.5 0 0 0 2.4 2m7-6-2-2v-4a5 5 0 0 0-4-4.9V3h-2v2.1A5 5 0 0 0 7 10v4l-2 2v2h14z" /></svg>;
+}

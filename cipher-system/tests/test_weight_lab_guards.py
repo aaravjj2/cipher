@@ -176,6 +176,28 @@ def test_a_failing_head_that_is_already_live_gets_switched_off(tmp_path, monkeyp
     assert _json.loads(active.read_text())["flash_active"] is False
 
 
+def test_active_readers_fail_closed_when_stale_flags_bypass_gate(tmp_path, monkeypatch):
+    active = tmp_path / "active.json"
+    active.write_text('{"active": true, "flash_active": true}')
+    monkeypatch.setattr(wl, "ACTIVE_PATH", active)
+    monkeypatch.setattr(wl, "load_weights", lambda: {"r_squared": 0.9})
+    monkeypatch.setattr(wl, "load_flash_weights", lambda: {"r_squared": 0.9})
+    assert wl.is_active() is False
+    assert wl.is_flash_active() is False
+
+
+def test_cipher_activation_uses_same_evidence_gate(tmp_path, monkeypatch):
+    active = tmp_path / "active.json"
+    active.write_text('{"active": true, "flash_active": false}')
+    monkeypatch.setattr(wl, "ACTIVE_PATH", active)
+    monkeypatch.setattr(wl, "ensure_dirs", lambda: None)
+    monkeypatch.setattr(wl, "_clear_scanner_cache", lambda: None)
+    monkeypatch.setattr(wl, "load_weights", lambda: {"r_squared": 0.9})
+    result = wl.set_active(True)
+    assert result["active"] is False
+    assert result["deactivated_by_gate"] is True
+
+
 def test_deactivation_is_never_blocked(tmp_path, monkeypatch):
     """Turning a head OFF must always work, whatever the fit looks like."""
     active = tmp_path / "active.json"

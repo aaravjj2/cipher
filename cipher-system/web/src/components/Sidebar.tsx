@@ -18,6 +18,8 @@ import {
   MenuIcon,
   NewsIcon,
   OptionsBacktestIcon,
+  ReplayIcon,
+  AlertIcon,
 } from "@/components/icons";
 
 type IconComponent = ComponentType<SVGProps<SVGSVGElement>>;
@@ -57,6 +59,8 @@ export const NAV_SECTIONS: NavSection[] = [
       { label: "Setup Scanner", icon: ScannerIcon, cipherX: true },
       { label: "Backtest", icon: ScannerIcon, cipherX: true },
       { label: "Options Backtest", icon: OptionsBacktestIcon, cipherX: true },
+      { label: "GEX Replay", icon: ReplayIcon, cipherX: true },
+      { label: "Alerts", icon: AlertIcon, cipherX: true },
       { label: "Strategies", icon: ScannerIcon, cipherX: true },
     ],
   },

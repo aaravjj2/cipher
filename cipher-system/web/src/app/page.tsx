@@ -61,9 +61,8 @@ export default function Home() {
   }, [ticker]);
 
   useEffect(() => {
-    setQuote(null);
     const controller = new AbortController();
-    loadQuote(controller.signal);
+    void Promise.resolve().then(() => loadQuote(controller.signal));
     const interval = setInterval(() => loadQuote(), QUOTE_REFRESH_MS);
     return () => {
       controller.abort();

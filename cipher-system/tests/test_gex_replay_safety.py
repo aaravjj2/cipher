@@ -115,6 +115,24 @@ def test_delta_gex_ignores_unavailable_placeholder_values(tmp_path: Path):
     assert [row["strike"] for row in deltas[0]["strikes"]] == [100.0]
 
 
+def test_replay_payload_labels_incomplete_strikes_and_navigates(tmp_path: Path):
+    db_path = tmp_path / "gex.sqlite"
+    first, second = _seed_history(db_path)
+
+    catalog = gex_replay.replay_catalog(db_path, ticker="spy", limit=99_999)
+    payload = gex_replay.replay_snapshot(db_path, first)
+
+    assert catalog["counts"] == {"tickers": 1, "snapshots": 2}
+    assert [row["id"] for row in catalog["snapshots"]] == [second, first]
+    assert payload is not None
+    assert payload["previous"] is None
+    assert payload["next"]["id"] == second
+    assert payload["strikes"][0]["incomplete"] is False
+    assert payload["strikes"][1]["available"] is False
+    assert payload["strikes"][1]["incomplete"] is True
+    assert payload["strikes"][1]["net_gex"] is None
+
+
 def test_historical_profile_uses_captured_spot_and_snapshot_levels(
     tmp_path: Path,
     monkeypatch,

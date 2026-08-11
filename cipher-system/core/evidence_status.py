@@ -102,9 +102,13 @@ def flash_corpus_status() -> dict:
 
         gate = weight_lab.ACTIVATION_GATE
         active = weight_lab.is_flash_active()
+        requested_active = bool(weight_lab._active_payload().get("flash_active"))
+        blockers = weight_lab.activation_blockers(weight_lab.load_flash_weights())
     except Exception:  # noqa: BLE001 - status must never fail on an import
         gate = {"min_groups": 30, "min_tickers": 12, "min_days": 10}
         active = None
+        requested_active = None
+        blockers = ["weight lab status unavailable"]
 
     return {
         "name": "Paired flash labels",
@@ -117,6 +121,8 @@ def flash_corpus_status() -> dict:
         "tickers": {"have": len(tickers), "need": gate.get("min_tickers")},
         "days": {"have": len(days), "need": gate.get("min_days")},
         "fitted_head_active": active,
+        "activation_requested": requested_active,
+        "activation_blockers": blockers,
         "note": (
             "Rows are not samples: intraday re-capture of the same card is "
             "pseudo-replication, so the gate counts independent (day, ticker) groups."

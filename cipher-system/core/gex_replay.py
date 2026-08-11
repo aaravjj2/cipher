@@ -56,6 +56,111 @@ def list_snapshots(
     return [dict(r) for r in rows]
 
 
+def replay_catalog(db_path: Path = DEFAULT_DB, *, ticker: str | None = None, limit: int = 250) -> dict:
+    """Return bounded replay navigation metadata without loading strike cells."""
+    safe_limit = max(1, min(int(limit), 1000))
+    if not db_path.is_file():
+        return {
+            "tickers": [], "snapshots": [], "counts": {"tickers": 0, "snapshots": 0},
+            "read_only": True, "caveat": "GEX history database is not available.",
+        }
+    selected = ticker.upper().strip() if ticker else None
+    with _connect(db_path) as db:
+        ticker_rows = db.execute(
+            """
+            SELECT ticker, COUNT(*) AS snapshots, MIN(captured_at) AS first_capture,
+                   MAX(captured_at) AS last_capture
+            FROM gex_snapshots GROUP BY ticker ORDER BY ticker
+            """
+        ).fetchall()
+        total = int(db.execute("SELECT COUNT(*) FROM gex_snapshots").fetchone()[0])
+        snapshots = []
+        if selected:
+            snapshots = [dict(row) for row in db.execute(
+                """
+                SELECT id, ticker, captured_at, feed, spot, day_change_pct, contracts,
+                       calculated_cells, listed_cells, global_max_strike,
+                       call_wall_strike, put_wall_strike, gamma_flip_level, caveat
+                FROM gex_snapshots WHERE ticker = ?
+                ORDER BY captured_at DESC LIMIT ?
+                """,
+                (selected, safe_limit),
+            ).fetchall()]
+    return {
+        "tickers": [dict(row) for row in ticker_rows],
+        "snapshots": snapshots,
+        "counts": {"tickers": len(ticker_rows), "snapshots": total},
+        "selected_ticker": selected,
+        "read_only": True,
+        "caveat": "GEX is a public-OI heuristic, not verified dealer positioning.",
+    }
+
+
+def replay_snapshot(db_path: Path, snapshot_id: int, *, strike_limit: int = 400) -> dict | None:
+    """Load one captured profile plus adjacent-snapshot navigation.
+
+    Aggregates only observed cells. A strike with any unavailable constituent is
+    explicitly marked incomplete; missing gamma or OI is never converted to zero.
+    """
+    if not db_path.is_file():
+        return None
+    safe_limit = max(1, min(int(strike_limit), 1000))
+    with _connect(db_path) as db:
+        snapshot = db.execute(
+            """
+            SELECT id, ticker, captured_at, feed, spot, day_change_pct, contracts,
+                   calculated_cells, listed_cells, global_max_strike,
+                   call_wall_strike, put_wall_strike, gamma_flip_level, caveat
+            FROM gex_snapshots WHERE id = ?
+            """,
+            (int(snapshot_id),),
+        ).fetchone()
+        if snapshot is None:
+            return None
+        snap = dict(snapshot)
+        previous = db.execute(
+            """SELECT id, captured_at, spot FROM gex_snapshots
+               WHERE ticker = ? AND captured_at < ? ORDER BY captured_at DESC LIMIT 1""",
+            (snap["ticker"], snap["captured_at"]),
+        ).fetchone()
+        following = db.execute(
+            """SELECT id, captured_at, spot FROM gex_snapshots
+               WHERE ticker = ? AND captured_at > ? ORDER BY captured_at ASC LIMIT 1""",
+            (snap["ticker"], snap["captured_at"]),
+        ).fetchone()
+        rows = db.execute(
+            """
+            SELECT strike,
+                   SUM(CASE WHEN available = 1 THEN call_gex END) AS call_gex,
+                   SUM(CASE WHEN available = 1 THEN put_gex END) AS put_gex,
+                   SUM(CASE WHEN available = 1 THEN net_gex END) AS net_gex,
+                   SUM(CASE WHEN available = 1 THEN call_oi END) AS call_oi,
+                   SUM(CASE WHEN available = 1 THEN put_oi END) AS put_oi,
+                   SUM(CASE WHEN available = 1 THEN volume END) AS volume,
+                   SUM(CASE WHEN available = 1 THEN 1 ELSE 0 END) AS available_cells,
+                   COUNT(*) AS listed_cells
+            FROM gex_strike_cells WHERE snapshot_id = ?
+            GROUP BY strike ORDER BY strike LIMIT ?
+            """,
+            (int(snapshot_id), safe_limit),
+        ).fetchall()
+    strikes = []
+    for row in rows:
+        item = dict(row)
+        item["available"] = item["available_cells"] > 0
+        item["incomplete"] = item["available_cells"] < item["listed_cells"]
+        strikes.append(item)
+    return {
+        "snapshot": snap,
+        "previous": dict(previous) if previous else None,
+        "next": dict(following) if following else None,
+        "strikes": strikes,
+        "read_only": True,
+        "aggregation": "Observed cells summed across captured expirations; incomplete strikes are labeled.",
+        "caveat": "GEX is a public-OI heuristic, not verified dealer positioning.",
+    }
+
+
 def get_snapshot_cells(
     db_path: Path,
     snapshot_id: int,

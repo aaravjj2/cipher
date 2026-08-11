@@ -57,8 +57,11 @@ export function Watchlists() {
   // whatever's already in localStorage, and picks up anything added via Header's
   // "+ Watchlist" button on a different panel).
   useEffect(() => {
-    setTickers(loadWatchlistTickers());
-    setLoaded(true);
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (!cancelled) { setTickers(loadWatchlistTickers()); setLoaded(true); }
+    });
+    return () => { cancelled = true; };
   }, []);
 
   const refreshQuotes = useCallback(async (list: string[]) => {

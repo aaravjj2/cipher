@@ -85,6 +85,9 @@ OPENROUTER_MODEL = "anthropic/claude-opus-5"
 # a small OpenRouter balance, where a 4096-token ceiling can exceed what's
 # affordable per-request even though the account has credit for many requests.
 OPENROUTER_MAX_TOKENS = 1024
+MAX_HISTORY_MESSAGES = 20
+MAX_MESSAGE_CHARS = 8_000
+MAX_TOOL_RESULT_CHARS = 120_000
 
 
 class AskCipherError(ValueError):
@@ -92,6 +95,26 @@ class AskCipherError(ValueError):
     exceeded). Subclasses ValueError so app.py's existing
     `except ValueError as exc: send_json(422, ...)` handles it with no new
     plumbing, matching the convention core/holdings.py already established."""
+
+
+def normalize_conversation(message: str, history: list[dict]) -> tuple[str, list[dict]]:
+    """Bound and validate browser-supplied context before sending it to a provider."""
+    prompt = str(message).strip()
+    if not prompt:
+        raise AskCipherError("message is required")
+    if len(prompt) > MAX_MESSAGE_CHARS:
+        raise AskCipherError(f"message exceeds {MAX_MESSAGE_CHARS} characters")
+    if not isinstance(history, list):
+        raise AskCipherError("history must be a list")
+    normalized = []
+    for row in history[-MAX_HISTORY_MESSAGES:]:
+        if not isinstance(row, dict) or row.get("role") not in {"user", "assistant"}:
+            raise AskCipherError("history contains an invalid role")
+        content = row.get("content")
+        if not isinstance(content, str):
+            raise AskCipherError("history content must be text")
+        normalized.append({"role": row["role"], "content": content[:MAX_MESSAGE_CHARS]})
+    return prompt, normalized
 
 
 def check_and_record_usage() -> None:
@@ -184,6 +207,7 @@ def _run_chat_job_anthropic(
     )
 
     final_text = ""
+    stop_reason = None
     for stream in runner:
         for event in stream:
             if event.type == "content_block_start" and event.content_block.type == "tool_use":
@@ -192,6 +216,13 @@ def _run_chat_job_anthropic(
                 final_text += event.delta.text
                 append_event({"type": "text_delta", "text": event.delta.text})
 
+            elif event.type == "message_delta":
+                stop_reason = getattr(event.delta, "stop_reason", None) or stop_reason
+
+    if stop_reason == "max_tokens":
+        raise AskCipherError("Ask Cipher's response reached its token limit and was not returned as complete.")
+    if not final_text.strip():
+        raise AskCipherError("Ask Cipher's provider completed without a text answer.")
     append_event({"type": "done", "text": final_text})
 
 
@@ -270,10 +301,14 @@ _OPENAI_TOOL_SPECS = [
 
 def _dispatch_openai_tool(name: str, args: dict, tool_impls: dict[str, Callable]) -> str:
     if name == "get_quote":
-        return json.dumps(tool_impls["get_quote"](args.get("ticker", "")), default=str)
+        result = json.dumps(tool_impls["get_quote"](args.get("ticker", "")), default=str)
+        return result[:MAX_TOOL_RESULT_CHARS]
     if name == "list_strategies":
-        return json.dumps(tool_impls["list_strategies"](args.get("family")), default=str)
-    return json.dumps(tool_impls[name](), default=str)
+        result = json.dumps(tool_impls["list_strategies"](args.get("family")), default=str)
+        return result[:MAX_TOOL_RESULT_CHARS]
+    if name not in tool_impls:
+        raise AskCipherError(f"provider requested unknown tool: {name}")
+    return json.dumps(tool_impls[name](), default=str)[:MAX_TOOL_RESULT_CHARS]
 
 
 def _chunk_text(text: str, size: int = 40) -> list[str]:
@@ -347,16 +382,23 @@ def _run_chat_job_openrouter(
     messages = [{"role": "system", "content": SYSTEM_PROMPT}] + list(history) + [{"role": "user", "content": message}]
 
     final_text = ""
+    completed_answer = False
     for _ in range(6):  # a tool-calling turn cannot loop forever on a bad tool result
         response = client.chat.completions.create(
             model=OPENROUTER_MODEL, max_tokens=OPENROUTER_MAX_TOKENS, messages=messages, tools=_OPENAI_TOOL_SPECS,
         )
-        msg = response.choices[0].message
+        if not response.choices:
+            raise AskCipherError("Ask Cipher's provider returned no response choice.")
+        choice = response.choices[0]
+        msg = choice.message
         if msg.content:
             final_text += msg.content
             for chunk in _chunk_text(msg.content):
                 append_event({"type": "text_delta", "text": chunk})
         if not msg.tool_calls:
+            if getattr(choice, "finish_reason", None) == "length":
+                raise AskCipherError("Ask Cipher's response reached its token limit and was not returned as complete.")
+            completed_answer = bool(final_text.strip())
             break
         messages.append(
             {
@@ -377,6 +419,8 @@ def _run_chat_job_openrouter(
                 result = json.dumps({"error": f"{type(exc).__name__}: {exc}"})
             messages.append({"role": "tool", "tool_call_id": tool_call.id, "content": result})
 
+    if not completed_answer:
+        raise AskCipherError("Ask Cipher did not produce a complete text answer within the tool-call limit.")
     append_event({"type": "done", "text": final_text})
 
 
@@ -388,8 +432,13 @@ def run_chat_job(message: str, history: list[dict], tool_impls: dict[str, Callab
     falls back to OpenRouter (OpenAI-compatible gateway, routes to the same
     claude-opus-5) when only that is configured.
     """
+    try:
+        message, history = normalize_conversation(message, history)
+    except AskCipherError as exc:
+        append_event({"type": "error", "error": str(exc)})
+        return
     anthropic_key = _anthropic_api_key()
-    openrouter_key = None if anthropic_key else _openrouter_api_key()
+    openrouter_key = _openrouter_api_key()
     if not anthropic_key and not openrouter_key:
         append_event({
             "type": "error",
@@ -397,10 +446,24 @@ def run_chat_job(message: str, history: list[dict], tool_impls: dict[str, Callab
         })
         return
 
+    emitted = False
+    def tracked(event: dict) -> None:
+        nonlocal emitted
+        emitted = True
+        append_event(event)
     try:
         if anthropic_key:
-            _run_chat_job_anthropic(message, history, tool_impls, append_event, anthropic_key)
+            _run_chat_job_anthropic(message, history, tool_impls, tracked, anthropic_key)
         else:
-            _run_chat_job_openrouter(message, history, tool_impls, append_event, openrouter_key)
+            _run_chat_job_openrouter(message, history, tool_impls, tracked, openrouter_key)
     except Exception as exc:  # noqa: BLE001 - surface every failure as a terminal chat event
+        # A second configured provider is a safe fallback only before any partial
+        # answer was emitted; otherwise mixing two model turns would be misleading.
+        if anthropic_key and openrouter_key and not emitted:
+            try:
+                _run_chat_job_openrouter(message, history, tool_impls, tracked, openrouter_key)
+                return
+            except Exception as fallback_exc:  # noqa: BLE001
+                append_event({"type": "error", "error": describe_provider_error(fallback_exc)})
+                return
         append_event({"type": "error", "error": describe_provider_error(exc)})

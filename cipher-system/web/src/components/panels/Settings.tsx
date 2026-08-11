@@ -158,7 +158,7 @@ function PreferencesCard() {
   const [refreshInterval, setRefreshInterval] = useState<IntervalOption>("15");
 
   useEffect(() => {
-    setRefreshInterval(readLocal<IntervalOption>(REFRESH_INTERVAL_KEY, "15"));
+    queueMicrotask(() => setRefreshInterval(readLocal<IntervalOption>(REFRESH_INTERVAL_KEY, "15")));
   }, []);
 
   const handleChange = (v: IntervalOption) => {
