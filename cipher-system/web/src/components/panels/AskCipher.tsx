@@ -56,6 +56,7 @@ export function AskCipher() {
   const [sending, setSending] = useState(false);
   const [streamingText, setStreamingText] = useState("");
   const [toolCall, setToolCall] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const esRef = useRef<EventSource | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
@@ -76,6 +77,7 @@ export function AskCipher() {
     setSending(true);
     setStreamingText("");
     setToolCall(null);
+    setNotice(null);
     const history = messages;
     setMessages((prev) => [...prev, { role: "user", content: message }]);
 
@@ -95,6 +97,13 @@ export function AskCipher() {
     es.addEventListener("tool_call", (evt) => {
       const data = JSON.parse((evt as MessageEvent).data);
       setToolCall(TOOL_LABELS[data.name] || `using ${data.name}…`);
+    });
+    // The backend reduces its token budget when the provider says the balance cannot
+    // afford the requested ceiling. That changes how long an answer can be, so it is
+    // stated rather than left for the reader to infer from a short reply.
+    es.addEventListener("notice", (evt) => {
+      const data = JSON.parse((evt as MessageEvent).data);
+      if (data.text) setNotice(data.text);
     });
     es.addEventListener("text_delta", (evt) => {
       const data = JSON.parse((evt as MessageEvent).data);
@@ -177,6 +186,12 @@ export function AskCipher() {
         {streamingText && <MessageBubble role="assistant" content={streamingText} />}
         <div ref={bottomRef} />
       </div>
+
+      {notice && (
+        <p className="text-[12px]" style={{ color: "var(--text-mute)" }}>
+          {notice}
+        </p>
+      )}
 
       {error && (
         <p className="text-[12px]" style={{ color: "var(--neg)" }}>

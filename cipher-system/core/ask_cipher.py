@@ -15,6 +15,7 @@ Research only. No broker/account/order APIs are imported or called.
 from __future__ import annotations
 
 import json
+import re
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
@@ -85,6 +86,10 @@ OPENROUTER_MODEL = "anthropic/claude-opus-5"
 # a small OpenRouter balance, where a 4096-token ceiling can exceed what's
 # affordable per-request even though the account has credit for many requests.
 OPENROUTER_MAX_TOKENS = 1024
+# Floor for the affordability retry below. Under this, an answer that fits the budget is
+# not worth returning: it would be a stub, and the truncation guard would reject it
+# anyway, so saying "add credits" is both faster and more honest.
+MIN_USEFUL_MAX_TOKENS = 256
 MAX_HISTORY_MESSAGES = 20
 MAX_MESSAGE_CHARS = 8_000
 MAX_TOOL_RESULT_CHARS = 120_000
@@ -328,6 +333,51 @@ def _chunk_text(text: str, size: int = 40) -> list[str]:
     return chunks or [text]
 
 
+def _provider_error_detail(exc: BaseException) -> str:
+    """The provider's own message, or the exception's string form if it gave none."""
+    body = getattr(exc, "body", None)
+    if isinstance(body, dict):
+        # Two shapes seen in practice: the OpenAI SDK hands back the *inner* error
+        # object already unwrapped (`{"message": ..., "code": ...}`), while a raw
+        # gateway response still has it nested under "error". Verified against a live
+        # 402 from OpenRouter, which takes the first branch.
+        inner = body.get("error")
+        if isinstance(inner, dict):
+            detail = str(inner.get("message") or "")
+        elif isinstance(inner, str):
+            detail = inner
+        elif isinstance(body.get("message"), str):
+            detail = body["message"]
+        else:
+            detail = ""
+        if detail:
+            return detail
+    return f"{type(exc).__name__}: {exc}"
+
+
+# OpenRouter's 402 states the budget the remaining balance allows, e.g. "requires more
+# credits, or fewer max_tokens. You requested up to 1024 tokens, but can only afford 679".
+_AFFORDABLE_TOKENS_RE = re.compile(r"can only afford (\d+)")
+
+
+def affordable_max_tokens(exc: BaseException) -> int | None:
+    """The token budget the provider says the balance allows, if it named one.
+
+    Returns None when the error is not an affordability refusal or names no number, so
+    the caller re-raises rather than guessing a budget.
+    """
+    if getattr(exc, "status_code", None) != 402:
+        return None
+    match = _AFFORDABLE_TOKENS_RE.search(_provider_error_detail(exc))
+    if not match:
+        return None
+    try:
+        affordable = int(match.group(1))
+    except ValueError:
+        return None
+    return affordable if affordable > 0 else None
+
+
 def describe_provider_error(exc: BaseException) -> str:
     """Turns a provider exception into one sentence a reader can act on.
 
@@ -342,22 +392,7 @@ def describe_provider_error(exc: BaseException) -> str:
     `Type: message` form rather than being smoothed over into something reassuring.
     """
     status = getattr(exc, "status_code", None)
-    detail = ""
-    body = getattr(exc, "body", None)
-    if isinstance(body, dict):
-        # Two shapes seen in practice: the OpenAI SDK hands back the *inner* error
-        # object already unwrapped (`{"message": ..., "code": ...}`), while a raw
-        # gateway response still has it nested under "error". Verified against a live
-        # 402 from OpenRouter, which takes the first branch.
-        inner = body.get("error")
-        if isinstance(inner, dict):
-            detail = str(inner.get("message") or "")
-        elif isinstance(inner, str):
-            detail = inner
-        elif isinstance(body.get("message"), str):
-            detail = body["message"]
-    if not detail:
-        detail = f"{type(exc).__name__}: {exc}"
+    detail = _provider_error_detail(exc)
 
     causes = {
         402: "Ask Cipher's LLM provider is out of credits, so this answer could not be generated.",
@@ -383,10 +418,32 @@ def _run_chat_job_openrouter(
 
     final_text = ""
     completed_answer = False
+    # Starts at the configured ceiling and drops only if the provider refuses that budget
+    # as unaffordable. Retrying at the number OpenRouter itself names is what keeps a
+    # low-balance account working without hardcoding a figure that goes stale as the
+    # balance moves. It is only safe because `finish_reason == "length"` below rejects a
+    # truncated answer -- a smaller budget must fail loudly, never silently shorten.
+    budget = OPENROUTER_MAX_TOKENS
     for _ in range(6):  # a tool-calling turn cannot loop forever on a bad tool result
-        response = client.chat.completions.create(
-            model=OPENROUTER_MODEL, max_tokens=OPENROUTER_MAX_TOKENS, messages=messages, tools=_OPENAI_TOOL_SPECS,
-        )
+        try:
+            response = client.chat.completions.create(
+                model=OPENROUTER_MODEL, max_tokens=budget, messages=messages, tools=_OPENAI_TOOL_SPECS,
+            )
+        except Exception as exc:  # noqa: BLE001 - re-raised unless it is an affordability refusal
+            affordable = affordable_max_tokens(exc)
+            if affordable is None or affordable >= budget or affordable < MIN_USEFUL_MAX_TOKENS:
+                raise
+            append_event({
+                "type": "notice",
+                "text": (
+                    f"Provider budget reduced to {affordable} tokens to fit the remaining "
+                    "OpenRouter balance; a longer answer needs more credits."
+                ),
+            })
+            budget = affordable
+            response = client.chat.completions.create(
+                model=OPENROUTER_MODEL, max_tokens=budget, messages=messages, tools=_OPENAI_TOOL_SPECS,
+            )
         if not response.choices:
             raise AskCipherError("Ask Cipher's provider returned no response choice.")
         choice = response.choices[0]
