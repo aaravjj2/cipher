@@ -36,3 +36,20 @@ def test_retention_is_atomic_resumable_and_never_prunes_source(tmp_path: Path):
 def test_retention_rejects_current_or_future_day(tmp_path: Path):
     with pytest.raises(ValueError, match="completed UTC"):
         parquet_retention.archive_day(tmp_path / "source", tmp_path / "archive", date(2026, 8, 3), today=date(2026, 8, 3))
+
+
+def test_default_day_is_the_newest_one_the_archiver_will_accept():
+    """The timer runs with no --date, so the default must never be a live day.
+
+    `archive_day` rejects anything >= today; this pairs with it so an unattended run
+    archives yesterday rather than failing or, worse, capturing a partial day.
+    """
+    assert parquet_retention.most_recent_completed_day(date(2026, 8, 11)) == date(2026, 8, 10)
+    # Month and year boundaries are where a hand-rolled "yesterday" usually breaks.
+    assert parquet_retention.most_recent_completed_day(date(2026, 8, 1)) == date(2026, 7, 31)
+    assert parquet_retention.most_recent_completed_day(date(2026, 1, 1)) == date(2025, 12, 31)
+
+    today = date(2026, 8, 11)
+    default_day = parquet_retention.most_recent_completed_day(today)
+    # Whatever the default is, archive_day must accept it: no ValueError.
+    assert default_day < today

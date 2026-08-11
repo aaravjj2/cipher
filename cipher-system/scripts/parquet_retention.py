@@ -11,7 +11,7 @@ import argparse
 import json
 import os
 import sqlite3
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 try:
@@ -38,6 +38,17 @@ def _ledger(path: Path) -> sqlite3.Connection:
         )
     """)
     return db
+
+
+def most_recent_completed_day(today: date | None = None) -> date:
+    """The newest UTC day `archive_day` will accept.
+
+    Exists so a timer can run this with no arguments: the alternative is computing
+    yesterday's date in a shell wrapper, which puts the one rule that matters -- never
+    archive a day still being written -- outside the module that enforces it.
+    """
+    current = today or datetime.now(timezone.utc).date()
+    return current - timedelta(days=1)
 
 
 def archive_day(database: Path, archive_root: Path, day: date, *, today: date | None = None) -> dict:
@@ -96,11 +107,15 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--database", type=Path, default=parquet_offload.DEFAULT_DATABASE)
     parser.add_argument("--archive-root", type=Path, default=DEFAULT_ARCHIVE)
-    parser.add_argument("--date", type=date.fromisoformat)
+    parser.add_argument(
+        "--date",
+        type=date.fromisoformat,
+        help="UTC day to archive; defaults to the most recent completed day.",
+    )
     parser.add_argument("--status", action="store_true")
     args = parser.parse_args()
     result = status(args.archive_root) if args.status else archive_day(
-        args.database, args.archive_root, args.date or (_ for _ in ()).throw(ValueError("--date is required"))
+        args.database, args.archive_root, args.date or most_recent_completed_day()
     )
     print(json.dumps(result, indent=2, default=str))
     return 0

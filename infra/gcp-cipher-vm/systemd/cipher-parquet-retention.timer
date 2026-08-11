@@ -1,0 +1,15 @@
+[Unit]
+Description=Daily verified Parquet mirror of completed Tradier stream days
+
+[Timer]
+# 05:15 ET is 09:15/10:15 UTC, so the previous UTC day is always complete and this lands
+# after the 03:15 ET backup rather than contending with it for disk and IO.
+OnCalendar=*-*-* 05:15:00 America/New_York
+# A powered-off or busy VM must not silently skip a day: the mirror is append-only and
+# every gap has to be filled by hand later.
+Persistent=true
+RandomizedDelaySec=600
+Unit=cipher-parquet-retention.service
+
+[Install]
+WantedBy=timers.target

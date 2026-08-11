@@ -1,0 +1,25 @@
+[Unit]
+# Mirrors each completed UTC day of tradier_stream_events into verified Parquet.
+# Append-only: the script has no pruning command and SQLite stays canonical, so this
+# builds the evidence that would let rows be dropped later without deciding to drop any.
+# Measured on 2026-08-10: 5.56 GB of SQLite becomes 351 MB of Parquet (15.8x) and the
+# fingerprint query runs 60x faster.
+Description=Mirror the previous UTC day of Tradier stream events to verified Parquet
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=aarav
+Group=aarav
+WorkingDirectory=/home/aarav/Aarav/cipher/cipher-system
+# No --date: the script defaults to the most recent completed UTC day and refuses a day
+# that is still being written, so the guard lives in the module rather than in a wrapper.
+ExecStart=/home/aarav/.venvs/cipher/bin/python /home/aarav/Aarav/cipher/cipher-system/scripts/parquet_retention.py
+# The source database is opened read-only, but this still competes with the live
+# collector for IO, so it yields rather than slowing capture.
+Nice=15
+IOSchedulingClass=idle
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=cipher-parquet-retention
