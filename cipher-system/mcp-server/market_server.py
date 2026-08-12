@@ -300,6 +300,25 @@ def tool_specs() -> list[dict[str, Any]]:
     ]
 
 
+# Every tool on this server reads. OpenAI's MCP guidance asks for `readOnlyHint` on
+# read-only tools alongside the standard search/fetch schemas, and a host that trusts the
+# hint can skip a confirmation prompt it would otherwise show. The hints are set from one
+# place so a tool added later cannot quietly claim to be read-only when it is not: they are
+# derived from the fact that `handle_tool` has no write path at all.
+TOOL_ANNOTATIONS = {
+    "readOnlyHint": True,
+    "destructiveHint": False,
+    "idempotentHint": True,
+    # The data comes from live market feeds outside this process, so results for identical
+    # arguments change over time.
+    "openWorldHint": True,
+}
+
+
+def annotated_tool_specs() -> list[dict[str, Any]]:
+    return [{**spec, "annotations": dict(TOOL_ANNOTATIONS)} for spec in tool_specs()]
+
+
 # Symbols the research surface covers. Kept explicit so `search` never invents a ticker
 # that cipher-core would then fail on.
 SEARCHABLE = (
@@ -478,7 +497,7 @@ def handle(method: str, params: dict[str, Any]) -> Any:
             "instructions": RESEARCH_NOTICE,
         }
     if method == "tools/list":
-        return {"tools": tool_specs()}
+        return {"tools": annotated_tool_specs()}
     if method == "tools/call":
         name = params.get("name", "")
         args = params.get("arguments") or {}

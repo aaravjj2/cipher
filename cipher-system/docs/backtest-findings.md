@@ -717,3 +717,64 @@ for contracts that have not traded and a stale quote would manufacture a return.
 limit orders inside the spread would lower the hurdle, but the strategy exits on a clock at
 15:59, so a limit that does not fill leaves an unhedged position into the close — which is a
 different strategy and needs its own test with fill assumptions that can be defended.
+
+## Where option execution is actually cheapest: cheap contracts are the expensive ones
+
+**Date:** 2026-08-12. **Data:** 57,987 fresh quotes from the 15:30–15:35 ET snapshots in
+`data/live_option_chains/`, both sessions with a complete window, 12 tickers. Quotes required
+to be timestamped within 15 minutes of the snapshot.
+
+The intuition worth testing is that a cheaper contract is a cheaper trade — that reaching for
+0DTE or a low-premium strike lowers the cost of taking the signal. Dollar cost and relative
+cost move in opposite directions, and relative cost is what compounds.
+
+**By premium, the hypothesis inverts completely:**
+
+| premium | n | median bid/ask | as % of premium |
+|---|---|---|---|
+| < $0.25 | 8,412 | 6,667 bp | **66.7%** |
+| $0.25–1 | 4,805 | 1,463 bp | 14.6% |
+| $1–3 | 3,756 | 741 bp | 7.4% |
+| $3–10 | 5,085 | 460 bp | 4.6% |
+| > $10 | 35,929 | 331 bp | 3.3% |
+
+A 20-cent option costs two thirds of its own price to round-trip, because the minimum quote
+increment is a fixed number of cents and a fixed increment is enormous relative to a small
+premium. Buying the cheap contract buys the worst execution on the board.
+
+**The comparable unit is the underlying move needed to pay the round trip**, since delta
+leverage scales the edge and the cost together. `spread / (|delta| × spot / premium)`:
+
+| moneyness (all expiries) | n | median spread | breakeven move |
+|---|---|---|---|
+| ATM ±0.5% | 1,045 | 233 bp | **0.0716%** |
+| OTM 0.5–3% | 2,761 | 313 bp | 0.1034% |
+| ITM 0.5–3% | 2,851 | 411 bp | 0.2038% |
+| OTM >3% | 20,073 | 1,935 bp | 0.6424% |
+| ITM >3% | 31,257 | 318 bp | 0.6882% |
+
+Shorter expiry helps, because leverage rises faster than the spread widens: 1DTE 0.1814%,
+2–7 DTE 0.4214%, 8–30 DTE 0.5683%, 31–60 DTE 0.7130%. 0DTE has the lowest nominal spread of
+any bucket (350 bp) but the feed supplied no delta for a single 0DTE contract, so its
+breakeven is not computed here — and delta moves violently enough on expiry day that a
+static leverage figure would not mean much anyway.
+
+**The cheapest corner of the entire surface is ATM at 1DTE**: median spread 263 bp, median
+leverage 93.2×, **median breakeven underlying move 0.0240%**.
+
+Set against the strategy:
+
+| | underlying move required |
+|---|---|
+| equity round trip | 0.0100–0.0150% |
+| **best possible option round trip** (ATM, 1DTE) | **0.0240%** |
+| strategy's average signed gross edge | **0.0062% per trade** |
+
+So even choosing optimally — at the money, one day to expiry, the tightest quotes available —
+options cost roughly **1.6 to 2.4 times** the equity round trip and **3.9 times the entire
+edge**. Shares cost 1.6–2.4× the edge. Both lose; options lose by more, and no choice of
+strike or expiry closes the gap, because the cheapest contracts carry the widest relative
+spreads and the widest-leverage contracts are the ones whose quotes are tightest anyway.
+
+This is why the spread, not the premium, is the binding constraint. The premium is what you
+risk; the spread is what you pay, every round trip, win or lose.
