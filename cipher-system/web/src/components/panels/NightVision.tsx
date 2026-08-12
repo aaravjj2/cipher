@@ -553,6 +553,43 @@ export function NightVision({
 
   const gammaFlip = nightVision?.summary?.gamma_flip_level ?? null;
 
+  /**
+   * How much the single gamma-flip line is worth.
+   *
+   * `gamma_flip_level` is the crossing nearest spot, but a net GEX profile often crosses
+   * zero many times — SPY had 13 crossings on 2026-08-12 against 1 for NVDA. Drawing both
+   * cases as the same confident dashed line overstates the noisy one, so the label carries
+   * the count and the line fades when the profile oscillates.
+   */
+  const flipCrossings = nightVision?.summary?.gamma_flip_candidates?.length ?? 0;
+  const flipIsNoisy = flipCrossings > 3;
+
+  /**
+   * Provenance for the exposure surface.
+   *
+   * GEX is gamma x open interest, so OI dated before today means the whole surface is that
+   * stale, and cells without calculable exposure are blank rather than zero. Both were in
+   * the payload and neither was ever shown, so a half-empty grid built on two-day-old OI
+   * looked identical to a complete one.
+   */
+  const provenance = useMemo(() => {
+    const cov = nightVision?.coverage;
+    if (!cov) return null;
+    const listed = cov.listed_cells || 0;
+    const calculated = cov.calculated_cells || 0;
+    const coveragePct = listed > 0 ? Math.round((100 * calculated) / listed) : null;
+    const oiDate = cov.open_interest_as_of ?? null;
+    let oiAgeDays: number | null = null;
+    if (oiDate && nightVision?.as_of) {
+      const oi = Date.parse(`${oiDate}T00:00:00Z`);
+      const now = Date.parse(nightVision.as_of);
+      if (Number.isFinite(oi) && Number.isFinite(now)) {
+        oiAgeDays = Math.max(0, Math.floor((now - oi) / 86_400_000));
+      }
+    }
+    return { coveragePct, calculated, listed, oiDate, oiAgeDays };
+  }, [nightVision]);
+
   /** Ghost path projected forward of the last bar, clamped to the visible domain. */
   const ghostPath = useMemo(() => {
     const g = nightVision?.ghost ?? [];
@@ -788,6 +825,25 @@ export function NightVision({
           {ticker} · {timeframe} · sniper {expLabel}
         </span>
 
+        {/* Exposure provenance. Stale open interest and a sparsely calculable grid both
+            change what the levels mean, and neither was visible before. */}
+        {provenance && (
+          <span
+            className="text-[10px] font-mono"
+            style={{ color: (provenance.oiAgeDays ?? 0) >= 1 ? "var(--neg)" : "var(--text-mute)" }}
+            title={
+              `Exposure is gamma x open interest. OI from ${provenance.oiDate ?? "unknown"}` +
+              `${provenance.oiAgeDays != null ? ` (${provenance.oiAgeDays}d old)` : ""}. ` +
+              `${provenance.calculated} of ${provenance.listed} listed cells have calculable ` +
+              `exposure; the rest are unknown, not zero.`
+            }
+          >
+            OI {provenance.oiDate ?? "n/a"}
+            {provenance.oiAgeDays != null && provenance.oiAgeDays >= 1 ? ` · ${provenance.oiAgeDays}d stale` : ""}
+            {provenance.coveragePct != null ? ` · ${provenance.coveragePct}% cells` : ""}
+          </span>
+        )}
+
         <div className="flex flex-row flex-wrap items-center gap-3 lg:ml-auto">
           <LegendDot color="var(--gold)" label="Top pull" />
           <LegendDot color="var(--accent)" label="Above spot" />
@@ -988,9 +1044,9 @@ export function NightVision({
                     y1={priceToY(gammaFlip)}
                     y2={priceToY(gammaFlip)}
                     stroke="var(--text-dim)"
-                    strokeWidth={1.5}
-                    strokeDasharray="7 5"
-                    opacity={0.9}
+                    strokeWidth={flipIsNoisy ? 1 : 1.5}
+                    strokeDasharray={flipIsNoisy ? "3 6" : "7 5"}
+                    opacity={flipIsNoisy ? 0.5 : 0.9}
                   />
                   <text
                     x={MARGIN.left + 6}
@@ -999,8 +1055,10 @@ export function NightVision({
                     fontWeight={700}
                     fill="var(--text-dim)"
                     fontFamily="var(--font-mono)"
+                    opacity={flipIsNoisy ? 0.75 : 1}
                   >
                     GAMMA FLIP {gammaFlip.toFixed(2)}
+                    {flipCrossings > 1 ? ` · 1 of ${flipCrossings} crossings` : ""}
                   </text>
                 </g>
               )}

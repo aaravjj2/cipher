@@ -247,44 +247,109 @@ def vex(contract, spot, strike_iv=None):
     return magnitude if contract["type"] == "call" else -magnitude
 
 
-def profile_summary(rows):
+def _side_cells(cells, side):
+    """Cells whose `side` exposure is genuinely measured.
+
+    `cell["available"]` is the AND of both sides, so it is false for a strike/expiration
+    where calls are unlisted but puts are measured -- 363 of SPY's 1,044 cells on
+    2026-08-12. Row inclusion used that strict flag while the sums added any non-null
+    value, so those one-sided measurements counted for rows that survived the test and
+    were discarded entirely for rows that did not. Each side is now selected on its own
+    availability flag, with a fallback for callers that build rows without the per-side
+    flags.
+    """
+    field = f"{side}_gex"
+    flag = f"{side}_gex_available"
+    out = []
+    for cell in cells:
+        value = cell.get(field)
+        if value is None:
+            continue
+        if flag in cell:
+            if not cell[flag]:
+                continue
+        elif not cell.get("available", True):
+            continue
+        out.append(value)
+    return out
+
+
+def profile_summary(rows, spot=None):
     """Derive key GEX profile levels from matrix rows.
 
-    Returns global_max_strike, call_wall_strike, put_wall_strike, gamma_flip_level.
+    Returns global_max_strike, call_wall_strike, put_wall_strike, gamma_flip_level, plus
+    the full set of sign changes behind that flip level.
+
+    The flip is the crossing **nearest spot**. It used to be whichever crossing came first
+    scanning up from the lowest strike, which is arbitrary whenever the net profile changes
+    sign more than once -- and it usually does. SPY on 2026-08-12 had 13 crossings spanning
+    740.99 to 773.63 against a spot of 772.68: the reported level was 740.99, the lowest,
+    4.1% away from spot, while the crossing that describes dealer positioning around the
+    current price was 773.63. Nearest-spot is also the stable choice; recomputing over
+    different subsets of well-covered expirations moved it only between 772.26 and 773.63,
+    while first-from-the-bottom moved with the noise.
+
+    `spot` is optional so existing callers keep working. Without it the crossing nearest the
+    dominant (largest absolute net) strike is used, which is the best available proxy, and
+    `gamma_flip_reference` records which rule was applied.
     """
     profile = []
     for row in rows:
-        observed = any(cell["available"] for cell in row["cells"])
-        if not observed:
+        calls = _side_cells(row["cells"], "call")
+        puts = _side_cells(row["cells"], "put")
+        if not calls and not puts:
             continue
-        call = sum((cell.get("call_gex") or 0.0) for cell in row["cells"])
-        put = sum((cell.get("put_gex") or 0.0) for cell in row["cells"])
-        profile.append({"strike": row["strike"], "call": call, "put": put, "net": call + put})
+        call = sum(calls)
+        put = sum(puts)
+        profile.append({
+            "strike": row["strike"],
+            "call": call,
+            "put": put,
+            "net": call + put,
+            "cells": len(calls) + len(puts),
+        })
     if not profile:
         return {
             "global_max_strike": None,
             "call_wall_strike": None,
             "put_wall_strike": None,
             "gamma_flip_level": None,
+            "gamma_flip_candidates": [],
+            "gamma_flip_reference": None,
         }
     profile.sort(key=lambda item: item["strike"])
     global_max = max(profile, key=lambda item: abs(item["net"]))
     call_wall = max(profile, key=lambda item: item["call"])
     put_wall = min(profile, key=lambda item: item["put"])
-    flip = None
+
+    crossings = []
     for left, right in zip(profile, profile[1:]):
-        if left["net"] == 0:
-            flip = left["strike"]
-            break
+        if left["net"] == 0.0:
+            crossings.append(left["strike"])
+            continue
         if left["net"] * right["net"] < 0:
             span = right["net"] - left["net"]
-            flip = left["strike"] + (-left["net"] / span) * (right["strike"] - left["strike"])
-            break
+            crossings.append(left["strike"] + (-left["net"] / span) * (right["strike"] - left["strike"]))
+    if profile[-1]["net"] == 0.0:
+        crossings.append(profile[-1]["strike"])
+
+    reference = number(spot)
+    rule = "nearest_spot"
+    if reference is None:
+        reference = global_max["strike"]
+        rule = "nearest_dominant_strike"
+    flip = min(crossings, key=lambda value: abs(value - reference)) if crossings else None
+
     return {
         "global_max_strike": global_max["strike"],
         "call_wall_strike": call_wall["strike"] if call_wall["call"] > 0 else None,
         "put_wall_strike": put_wall["strike"] if put_wall["put"] < 0 else None,
         "gamma_flip_level": flip,
+        # Every sign change, so a reader can see whether the profile has one clean flip or
+        # oscillates. A long list means the net profile is noisy and the single level is
+        # weak evidence.
+        "gamma_flip_candidates": [round(value, 4) for value in sorted(crossings)],
+        "gamma_flip_reference": rule,
     }
 
 

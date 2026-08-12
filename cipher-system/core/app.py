@@ -974,7 +974,7 @@ def matrix(ticker, feed, depth, expiration_count, force=False, chain_pages=None)
                 for e in expirations
             },
         },
-        "summary": profile_summary(rows),
+        "summary": profile_summary(rows, spot=spot),
     }
     with _CACHE_LOCK:
         MATRIX_CACHE[cache_key] = (time.time(), result)

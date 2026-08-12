@@ -71,6 +71,10 @@ export type RealMatrixCoverage = {
   contracts_oi_from_volume?: number;
   calculated_cells: number;
   listed_cells: number;
+  /** Where open interest came from, and the session it is dated to. GEX is gamma x OI,
+   *  so an OI date older than today means the exposure surface is that stale. */
+  open_interest_source?: string;
+  open_interest_as_of?: string | null;
 };
 
 export type RealMatrixResponse = {
@@ -195,11 +199,21 @@ export type RealLevel = {
   kind: RealLevelKind;
 };
 
+/** All four levels are null when nothing supports them: an empty or fully unavailable
+ *  profile, a chain with no positive call gamma, or a net profile that never crosses zero.
+ *  They were typed as `number`, which asserted a value the API does not promise. */
 export type RealNightVisionSummary = {
-  global_max_strike: number;
-  call_wall_strike: number;
-  put_wall_strike: number;
-  gamma_flip_level: number;
+  global_max_strike: number | null;
+  call_wall_strike: number | null;
+  put_wall_strike: number | null;
+  gamma_flip_level: number | null;
+  /** Every zero crossing in the net profile, ascending. `gamma_flip_level` is the one
+   *  nearest spot; a long list means the profile oscillates and the single level is weak
+   *  evidence rather than a clean regime boundary. */
+  gamma_flip_candidates?: number[];
+  /** Which rule chose the flip: "nearest_spot", or "nearest_dominant_strike" when the
+   *  caller supplied no spot. */
+  gamma_flip_reference?: string | null;
 };
 
 /** One rung of the X-Ray strike ladder (core/app.py night_vision -> "xray"). */

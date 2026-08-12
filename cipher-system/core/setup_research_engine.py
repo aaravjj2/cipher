@@ -161,6 +161,34 @@ def option_structure(direction: str, score: float, distance: float | None, index
     return "watch only"
 
 
+CLUSTER_STRENGTH_MAX = 400.0
+CLUSTER_STRENGTH_POINTS = 25.0
+
+
+def cluster_strength_points(strength: float) -> float:
+    """Score cluster strength across the range it actually occupies.
+
+    `scanner._cluster_strength` returns `strength_norm`: the sum of per-strike normalized
+    |GEX| weights, where each strike contributes at most 100. So a triple tops out near
+    300 and a quad near 400, and observed values run roughly 72-340.
+
+    This used to be `min(strength / 6.0, 25.0)`, which saturates at 150. Every row of a
+    real 40-row scan cleared that — strength spanned 192-340 and all 40 scored exactly
+    25.00 — so the scanner's central measure contributed no ordering at all. Seven tickers
+    tied at 69.0 with strengths from 192 to 255, and CAT (the strongest cluster in the
+    scan at 340) ranked below BABA at 265 purely on the rank and quad bonuses.
+
+    Dividing by the real ceiling instead of 6 restores the discrimination the scanner was
+    rebuilt on 2026-08-06 to provide. Cluster *kind* is deliberately not folded in here;
+    it is scored separately as the quad/triple bonus, which keeps the real product's
+    ordering of quads first and then descending strength.
+    """
+    if strength <= 0:
+        return 0.0
+    capped = min(float(strength), CLUSTER_STRENGTH_MAX)
+    return round(CLUSTER_STRENGTH_POINTS * capped / CLUSTER_STRENGTH_MAX, 2)
+
+
 def grade(score: float) -> str:
     if score >= 85:
         return "A"
@@ -199,7 +227,7 @@ def build_scores(scan_dir: Path, context_dir: Path) -> dict[str, Any]:
 
         score = 25.0
         reasons = []
-        score += max(0.0, min(strength / 6.0, 25.0))
+        score += cluster_strength_points(strength)
         reasons.append(f"cluster_strength={strength:g}")
         if rank <= 5:
             score += 10.0
@@ -216,20 +244,29 @@ def build_scores(scan_dir: Path, context_dir: Path) -> dict[str, Any]:
 
         ledger_key = f"{ticker}|{'UPSIDE' if direction == 'up' else 'DOWNSIDE' if direction == 'down' else ''}"
         seen_count = int((ledger_entries.get(ledger_key) or {}).get("seen_count") or 0)
+        # The persistence bonus applies to any cluster kind, so the reason names the kind
+        # it actually saw. It previously read "repeated_quad_seen_3" for a triple.
+        kind_label = "quad" if "QUAD" in setup.upper() else "triple" if "TRIPLE" in setup.upper() else "cluster"
         if seen_count >= 3:
             score += 12.0
-            reasons.append(f"repeated_quad_seen_{seen_count}")
+            reasons.append(f"repeated_{kind_label}_seen_{seen_count}")
         elif seen_count == 2:
             score += 7.0
-            reasons.append("repeated_quad_seen_2")
+            reasons.append(f"repeated_{kind_label}_seen_2")
         elif seen_count == 1 and "QUAD" in setup.upper():
             score += 2.0
             reasons.append("new_or_single_quad")
 
+        # `liq_agrees` / `model_agrees` record agreement, which is what the score used.
+        # The response previously published `liq_overlap: bool(liq)`, true whenever a row
+        # existed for the ticker — so a row that had just been penalised 8 points for
+        # pointing the opposite way was still presented as confirming evidence.
         liq = liq_by_ticker.get(ticker)
+        liq_agrees = None
         if liq:
             liq_dir = direction_from_text(liq.get("setup"))
-            if liq_dir == direction:
+            liq_agrees = liq_dir == direction
+            if liq_agrees:
                 clarity = to_float(liq.get("runway_clarity_pct")) or 0.0
                 score += 10.0 + min(clarity / 20.0, 5.0)
                 reasons.append(f"liq_overlap_{clarity:g}%")
@@ -238,9 +275,11 @@ def build_scores(scan_dir: Path, context_dir: Path) -> dict[str, Any]:
                 reasons.append("liq_direction_conflict")
 
         model = model_by_ticker.get(ticker)
+        model_agrees = None
         if model:
             model_dir = direction_from_text(model.get("bias"))
-            if model_dir == direction:
+            model_agrees = model_dir == direction
+            if model_agrees:
                 model_score = to_float(model.get("score")) or 0.0
                 score += 8.0 + min(model_score / 25.0, 4.0)
                 reasons.append(f"cipher_model_overlap_{model_score:g}")
@@ -279,8 +318,12 @@ def build_scores(scan_dir: Path, context_dir: Path) -> dict[str, Any]:
             "strength": strength,
             "seen_count": seen_count,
             "index_bucket": bucket,
-            "liq_overlap": bool(liq),
-            "cipher_model_overlap": bool(model),
+            "liq_present": bool(liq),
+            "liq_overlap": liq_agrees is True,
+            "liq_conflict": liq_agrees is False,
+            "cipher_model_present": bool(model),
+            "cipher_model_overlap": model_agrees is True,
+            "cipher_model_conflict": model_agrees is False,
             "option_structure": option_structure(direction, score, distance, index_note),
             "reasons": reasons,
             "cluster_levels": row.get("levels") or [],
