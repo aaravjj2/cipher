@@ -662,3 +662,58 @@ summary: the old field's value reproduces exactly as `net_sum_return_pct`, which
 mislabel rather than inferring it. Anyone re-reading the surviving JSON should note its
 `gross_sum_return_pct` is net, and that its `aggregate` block reports pooled sums that are not
 a portfolio return — the file says so itself, but the field name worked against it.
+
+## Obsidian EOD on options: leverage is neutral to the edge, and the spread is worse
+
+**Date:** 2026-08-12. **Data:** `data/live_option_chains/` — captured OPRA snapshots, 5-minute
+cadence, the two sessions with a complete 15:30–16:00 window (2026-08-10, 2026-08-11) across
+the 12 captured tickers. **Signals:** the 18 trades the equity backtest actually took on those
+sessions under the pasted defaults (1m bars, last-30-minute window).
+
+The equity conclusion was that the gross edge (+0.62 bp per trade) is smaller than the measured
+equity spread (1.0–1.5 bp). The obvious hope is that options fix this: same signal, convex
+payoff, far more percentage move per point of underlying. They do not, and the reason is
+structural.
+
+**Leverage multiplies the edge and the cost by the same factor.** What matters is the spread
+expressed in the underlying move needed to pay it. For the seven contracts whose delta the feed
+supplied (all 1DTE, near the money, delta 0.43–0.52), delta leverage ran 33–101× (median 63.6×),
+and the round-trip spread came to a breakeven underlying move of:
+
+| ticker | premium | delta | leverage | spread (% of premium) | breakeven move | signal's move | covered |
+|---|---|---|---|---|---|---|---|
+| TSLA | 2.66 | 0.48 | 60.1× | 1.13% | 0.019% | 0.262% | yes |
+| GOOGL | 1.98 | 0.43 | 75.4× | 1.51% | 0.020% | 0.128% | yes |
+| NVDA | 1.59 | 0.47 | 63.6× | 1.26% | 0.020% | 0.190% | yes |
+| AAPL | 1.38 | 0.46 | 101.2× | 2.90% | 0.029% | 0.079% | yes |
+| MU | 12.62 | −0.49 | 33.3× | 2.77% | 0.083% | 0.559% | yes |
+| MSFT | 3.17 | 0.52 | 82.4× | 11.02% | 0.134% | 0.156% | yes |
+| AMD | 6.20 | 0.50 | 38.4× | 8.06% | 0.210% | 0.102% | **no** |
+
+Median breakeven underlying move: **0.029% (2.9 bp)**. The equity round trip on the same names
+costs **1.0–1.5 bp**. So in the only units that allow a comparison, taking the signal through
+options costs roughly **two to three times** what taking it through shares costs. The convexity
+does not buy an edge; it rescales both sides and leaves a wider spread behind.
+
+**0DTE makes it materially worse, not better.** Eleven of the eighteen trades landed on a 0DTE
+contract because that is the front expiration in the final half hour. Median result after
+crossing the spread: **−81.8%**, with **6 of 11 losing more than 70% of premium**. The mean is
++53% per trade, which is the trap: it is carried by four lottery outcomes (MSFT $0.16 → $1.59,
+AMZN $0.11 → $0.82). On a distribution running from −98.8% to +541.7%, the mean describes
+nothing. Median spread on those contracts was 896 bp of premium — 9%.
+
+Across all 18 trades the median return was **+2.53% mid-to-mid and −3.62% after crossing the
+spread**, and only 7 of 18 were winners once the spread was paid. The same 18 signals in shares
+returned −1.28% in total.
+
+**Caveats, which are large.** Two sessions and 18 trades decide nothing about the signal; this
+measures execution cost, not edge, and the cost measurement is the part that generalises. Delta
+was available for only 7 of 18 contracts, all 1DTE — the 0DTE rows carried null greeks, so their
+leverage is not computed here rather than estimated. Contracts were required to have a quote
+timestamped within 15 minutes of the snapshot, because the capture retains the last known quote
+for contracts that have not traded and a stale quote would manufacture a return.
+
+**What would change the answer:** paying the spread is the assumption doing the damage. Resting
+limit orders inside the spread would lower the hurdle, but the strategy exits on a clock at
+15:59, so a limit that does not fill leaves an unhedged position into the close — which is a
+different strategy and needs its own test with fill assumptions that can be defended.
