@@ -71,12 +71,76 @@ listed or calculable exposure", not zero — it is skipped rather than summed, a
 22 tests, driving the real stdio protocol in a subprocess. The read-only assertions run
 without a network; live-data tests skip when cipher-core is stopped.
 
-## ChatGPT
+## ChatGPT — the remote bridge
 
-ChatGPT connectors need a remote MCP endpoint over HTTPS (streamable HTTP/SSE) — they
-cannot launch a local stdio process, so this config works with Claude Desktop but not with
-ChatGPT as written. Serving it remotely means exposing market data on a public URL and so
-needs an auth story first; it is not enabled.
+ChatGPT cannot launch a local process; it only connects outward to an HTTPS MCP endpoint.
+`remote_bridge.py` serves the *same* server over Streamable HTTP, importing `handle()`,
+`tool_specs()` and `handle_tool()` from `market_server.py` rather than reimplementing them,
+so the read-only allowlist and the payload projections cannot drift between transports.
+
+**Live at** `https://cipher-main.tail39504f.ts.net:10000/mcp` (Tailscale Funnel → 127.0.0.1:8284).
+
+Add it in ChatGPT under Settings → Connectors → Add custom connector:
+
+| field | value |
+|---|---|
+| URL | `https://cipher-main.tail39504f.ts.net:10000/mcp` |
+| Authentication | Bearer token / custom header |
+| Header | `Authorization: Bearer <token>` |
+
+Read the token with `cat runtime/config/app-password.txt`'s neighbour:
+
+```bash
+cat /home/aarav/Aarav/cipher/runtime/config/mcp-bearer-token.txt
+```
+
+It is stored there, and deliberately **not** in `/etc/cipher/cipher.env`: that file is
+rebuilt from scratch by `sync-secrets.py` and lost every credential during the 2026-08-12
+reboot, while `runtime/config/` secrets survived it.
+
+`search` and `fetch` exist alongside the specific tools because ChatGPT's deep-research mode
+looks for that pair by name and will not drive arbitrary tools. `search` resolves a ticker or
+a company name against Cipher's covered universe and never invents a symbol; `fetch` returns
+one ticker's quote, gamma levels, session levels and headlines.
+
+### Operating it
+
+```bash
+sudo systemctl status cipher-mcp-bridge.service
+curl -s https://cipher-main.tail39504f.ts.net:10000/health     # no token needed, reveals nothing
+sudo tailscale funnel --https=10000 off                        # take it off the internet
+```
+
+### What the gate does and does not do
+
+Every `/mcp` request needs `Authorization: Bearer <token>`, compared with
+`hmac.compare_digest` so a wrong token cannot be recovered from response timing. A missing or
+empty token file makes the bridge refuse **every** request rather than serve openly — absent
+configuration disables the service, never the gate, which is the lesson from
+`CIPHER_APP_AUTH=off`. `/health` is the one unauthenticated route and returns only liveness.
+
+The bridge binds to 127.0.0.1; Funnel is the only path in. It stays read-only: no mutating
+cipher-core route is in the allowlist and no tool can place, size, modify or cancel an order.
+
+There is one thing the token does not do: it is a single shared secret with no per-caller
+identity, no expiry and no rate limit. Anyone holding it has full read access to your market
+data. Rotate it by writing a new value and restarting:
+
+```bash
+openssl rand -hex 32 > /home/aarav/Aarav/cipher/runtime/config/mcp-bearer-token.txt
+sudo systemctl restart cipher-mcp-bridge.service
+```
+
+### A bug worth remembering
+
+`_authorized()` originally answered 401 without reading the request body. Under HTTP/1.1
+keep-alive the unread body stayed in the socket buffer, so the next request on that
+connection was parsed starting mid-JSON — request lines like `{"jsonrpc":...}POST /mcp`,
+answered 501. It only appeared through Funnel, which reuses connections: the public endpoint
+returned 401 and 501 alternately for the same wrong token while localhost was always 401.
+Every early return now drains the body or closes the connection, and
+`test_a_rejected_post_does_not_desync_the_next_request_on_the_same_connection` pipelines two
+requests down one socket to hold the property.
 
 ---
 

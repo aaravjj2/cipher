@@ -284,7 +284,96 @@ def tool_specs() -> list[dict[str, Any]]:
             "description": "Status of prospective (forward-testing) strategy registrations: sample progress, scored count and whether a verdict is yet supportable.",
             "inputSchema": schema({}),
         },
+        # ChatGPT's deep-research mode looks for a `search`/`fetch` pair by name and will
+        # not drive arbitrary tools. These two wrap the same read-only calls so one server
+        # satisfies both hosts; Claude Desktop can ignore them and use the specific tools.
+        {
+            "name": "search",
+            "description": "Find tickers Cipher can analyse. Returns matching symbols as ids for `fetch`. Accepts a ticker, a partial ticker, or a plain-language query naming one.",
+            "inputSchema": schema({"query": {"type": "string", "description": "Ticker or phrase, e.g. \"NVDA\" or \"nvidia gamma\"."}}, ["query"]),
+        },
+        {
+            "name": "fetch",
+            "description": "Full Cipher research record for one ticker id from `search`: quote, gamma walls and flip level, key exposure levels, session levels and recent headlines.",
+            "inputSchema": schema({"id": {"type": "string", "description": "Ticker id returned by `search`, e.g. \"NVDA\"."}}, ["id"]),
+        },
     ]
+
+
+# Symbols the research surface covers. Kept explicit so `search` never invents a ticker
+# that cipher-core would then fail on.
+SEARCHABLE = (
+    "SPY", "QQQ", "IWM", "DIA", "SMH", "XLE", "XLF", "XLI", "XLK", "XLP", "XLV",
+    "AAPL", "AMD", "AMZN", "AVGO", "BA", "BAC", "CAT", "COST", "CRM", "CVX", "DIS",
+    "GOOGL", "GS", "HD", "INTC", "JNJ", "JPM", "KO", "LLY", "MCD", "META", "MSFT",
+    "MU", "NFLX", "NVDA", "ORCL", "TSLA", "UNH", "WMT", "XOM", "IBIT",
+)
+
+# Words a query may contain that name a ticker without spelling it.
+ALIASES = {
+    "nvidia": "NVDA", "apple": "AAPL", "amazon": "AMZN", "google": "GOOGL",
+    "alphabet": "GOOGL", "microsoft": "MSFT", "meta": "META", "facebook": "META",
+    "tesla": "TSLA", "broadcom": "AVGO", "micron": "MU", "intel": "INTC",
+    "netflix": "NFLX", "oracle": "ORCL", "salesforce": "CRM", "walmart": "WMT",
+    "costco": "COST", "disney": "DIS", "boeing": "BA", "caterpillar": "CAT",
+    "chevron": "CVX", "exxon": "XOM", "goldman": "GS", "lilly": "LLY",
+    "eli lilly": "LLY", "johnson": "JNJ", "unitedhealth": "UNH", "bitcoin": "IBIT",
+    "semis": "SMH", "semiconductors": "SMH", "nasdaq": "QQQ", "s&p": "SPY",
+    "sp500": "SPY", "russell": "IWM", "dow": "DIA", "coca cola": "KO", "coke": "KO",
+}
+
+
+def _search(query: str) -> dict[str, Any]:
+    text = (query or "").strip()
+    upper = text.upper()
+    hits: list[str] = []
+
+    def add(symbol: str) -> None:
+        if symbol in SEARCHABLE and symbol not in hits:
+            hits.append(symbol)
+
+    for token in "".join(c if c.isalnum() or c == "&" else " " for c in upper).split():
+        add(token)
+    lower = text.lower()
+    for phrase, symbol in ALIASES.items():
+        if phrase in lower:
+            add(symbol)
+    if not hits and len(upper) >= 2:
+        for symbol in SEARCHABLE:
+            if symbol.startswith(upper):
+                add(symbol)
+    return {
+        "results": [
+            {"id": symbol, "title": symbol,
+             "text": f"Cipher research record for {symbol}: quote, gamma walls and flip level, exposure levels, session levels, headlines.",
+             "url": f"cipher://market/{symbol}"}
+            for symbol in hits[:10]
+        ],
+        "query": text,
+        "note": (
+            "No match means the symbol is not in Cipher's covered universe, not that it does not exist."
+            if not hits else RESEARCH_NOTICE
+        ),
+    }
+
+
+def _fetch(identifier: str) -> dict[str, Any]:
+    symbol = (identifier or "").strip().upper()
+    if symbol not in SEARCHABLE:
+        raise ValueError(f"{symbol!r} is not in Cipher's covered universe; call search first")
+    record: dict[str, Any] = {
+        "id": symbol,
+        "title": f"{symbol} — Cipher research record",
+        "url": f"cipher://market/{symbol}",
+        "quote": _get("/api/quote", {"symbol": symbol}),
+        "night_vision": project_night_vision(_get("/api/night-vision", {"symbol": symbol})),
+    }
+    try:
+        record["headlines"] = _get("/api/news", {"symbol": symbol, "limit": 8})
+    except ValueError as exc:
+        record["headlines"] = {"error": str(exc)}
+    record["research_notice"] = RESEARCH_NOTICE
+    return record
 
 
 def handle_tool(name: str, args: dict[str, Any]) -> Any:
@@ -327,6 +416,10 @@ def handle_tool(name: str, args: dict[str, Any]) -> Any:
         return project_strategies(_get("/api/strategies"))
     if name == "get_research_standing":
         return _get("/api/standing")
+    if name == "search":
+        return _search(str(args.get("query") or ""))
+    if name == "fetch":
+        return _fetch(str(args.get("id") or ""))
     raise ValueError(f"unknown tool: {name}")
 
 

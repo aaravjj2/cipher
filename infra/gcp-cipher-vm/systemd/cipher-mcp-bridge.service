@@ -1,0 +1,39 @@
+[Unit]
+Description=Cipher remote MCP bridge (read-only market research over HTTP)
+After=network-online.target cipher-core.service
+Wants=network-online.target
+# The bridge is useless without cipher-core, but it must not take cipher-core down with it.
+After=cipher-core.service
+
+[Service]
+Type=simple
+User=aarav
+Group=aarav
+WorkingDirectory=/home/aarav/Aarav/cipher/cipher-github/cipher-system/mcp-server
+Environment=CIPHER_CORE_URL=http://127.0.0.1:8282
+Environment=CIPHER_MCP_BRIDGE_HOST=127.0.0.1
+Environment=CIPHER_MCP_BRIDGE_PORT=8284
+# Deliberately NOT /etc/cipher/cipher.env: that file is rebuilt from scratch by
+# sync-secrets.py and lost every credential during the 2026-08-12 reboot. Secrets in
+# runtime/config survived it.
+Environment=CIPHER_MCP_TOKEN_FILE=/home/aarav/Aarav/cipher/runtime/config/mcp-bearer-token.txt
+ExecStart=/usr/bin/python3 /home/aarav/Aarav/cipher/cipher-github/cipher-system/mcp-server/remote_bridge.py
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+# The bridge reads one token file and talks to localhost. Nothing else is needed.
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6
+RestrictNamespaces=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+
+[Install]
+WantedBy=multi-user.target
