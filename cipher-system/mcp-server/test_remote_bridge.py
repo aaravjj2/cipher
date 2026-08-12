@@ -162,8 +162,19 @@ def test_health_is_reachable_without_a_token_but_reveals_nothing(bridge):
 
 def test_unknown_paths_are_not_the_mcp_endpoint(bridge):
     base, _ = bridge
-    status, _, _ = call(base, None, path="/", method="GET")
-    assert status == 404
+    for path in ("/admin", "/api/quote", "/mcp/extra"):
+        status, _, _ = call(base, None, path=path, method="GET")
+        assert status == 404, path
+
+
+def test_root_is_served_as_the_mcp_endpoint(bridge):
+    """Tailscale's path routing publishes this at https://host/mcp and forwards the
+    remainder, so the request arrives as '/'. Both must reach the same handler."""
+    base, _ = bridge
+    for path in ("/", "/mcp", "/mcp/"):
+        status, body, _ = call(base, INIT, path=path)
+        assert status == 200, path
+        assert body["result"]["serverInfo"]["name"] == "cipher-market-mcp"
 
 
 def test_a_rejected_post_does_not_desync_the_next_request_on_the_same_connection(bridge):
@@ -273,10 +284,52 @@ def test_an_unknown_method_is_an_error_not_a_crash(bridge):
     assert body["error"]["code"] == -32603
 
 
-def test_get_on_mcp_declines_rather_than_holding_a_socket(bridge):
+def test_get_without_an_event_stream_accept_still_declines(bridge):
     base, _ = bridge
     status, _, _ = call(base, None, path="/mcp", method="GET")
     assert status == 405
+
+
+def test_get_with_an_event_stream_accept_opens_a_stream(bridge, monkeypatch):
+    """The regression: this answered 405, and a client that probes GET first reads that as
+    'cannot connect' even though every JSON-RPC exchange over POST worked."""
+    monkeypatch.setattr(remote_bridge, "STREAM_SECONDS", 0.6)
+    monkeypatch.setattr(remote_bridge, "STREAM_PING_SECONDS", 0.2)
+    base, _ = bridge
+    request = urllib.request.Request(f"{base}/mcp", method="GET")
+    request.add_header("Authorization", f"Bearer {TOKEN}")
+    request.add_header("Accept", "text/event-stream")
+    with urllib.request.urlopen(request, timeout=30) as response:
+        assert response.status == 200
+        assert response.headers["Content-Type"] == "text/event-stream"
+        body = response.read().decode()
+    assert ": connected" in body
+
+
+def test_a_stream_only_client_gets_its_reply_as_an_event(bridge):
+    """A client advertising only text/event-stream may reject a JSON body."""
+    base, _ = bridge
+    request = urllib.request.Request(f"{base}/mcp", data=json.dumps(INIT).encode(), method="POST")
+    request.add_header("Authorization", f"Bearer {TOKEN}")
+    request.add_header("Content-Type", "application/json")
+    request.add_header("Accept", "text/event-stream")
+    with urllib.request.urlopen(request, timeout=30) as response:
+        assert response.headers["Content-Type"] == "text/event-stream"
+        body = response.read().decode()
+    assert body.startswith("event: message")
+    payload = json.loads(body.split("data: ", 1)[1].strip())
+    assert payload["result"]["serverInfo"]["name"] == "cipher-market-mcp"
+
+
+def test_a_client_accepting_both_gets_json(bridge):
+    """The common case: Accept: application/json, text/event-stream."""
+    base, _ = bridge
+    request = urllib.request.Request(f"{base}/mcp", data=json.dumps(INIT).encode(), method="POST")
+    request.add_header("Authorization", f"Bearer {TOKEN}")
+    request.add_header("Content-Type", "application/json")
+    request.add_header("Accept", "application/json, text/event-stream")
+    with urllib.request.urlopen(request, timeout=30) as response:
+        assert response.headers["Content-Type"] == "application/json"
 
 
 # ------------------------------------------------------------------ read-only

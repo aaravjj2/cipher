@@ -32,6 +32,7 @@ import json
 import os
 import sys
 import threading
+import time
 import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -51,9 +52,24 @@ TOKEN_PATH = Path(os.environ.get(
 ))
 MAX_BODY = 1 << 20
 PROTOCOL_VERSION = "2025-06-18"
+# A GET stream is held open for this long, then closed so the client reconnects. Bounded
+# because each open stream occupies a thread.
+STREAM_SECONDS = float(os.environ.get("CIPHER_MCP_STREAM_SECONDS", "300"))
+STREAM_PING_SECONDS = float(os.environ.get("CIPHER_MCP_STREAM_PING_SECONDS", "15"))
 
 _SESSIONS: set[str] = set()
 _SESSION_LOCK = threading.Lock()
+
+# Paths treated as the MCP endpoint.
+#
+# `/mcp` is the documented one. `/` is accepted because the bridge is also published on the
+# standard HTTPS port under a path prefix (`https://host/mcp`), and Tailscale's path routing
+# forwards the remainder of the path to the target -- so a request to `/mcp` arrives here as
+# `/`. Serving both means one implementation answers whichever URL a host was given, and the
+# port-443 URL exists at all because a client that refuses non-standard ports would report
+# "could not connect" against `:10000` with no further detail.
+MCP_PATHS = frozenset({"/mcp", "/mcp/", "/"})
+HEALTH_PATHS = frozenset({"/health", "/healthz", "/mcp/health"})
 
 
 def load_token() -> str | None:
@@ -167,27 +183,71 @@ class Handler(BaseHTTPRequestHandler):
 
     # ------------------------------------------------------------------ routes
 
+    def _wants_sse(self) -> bool:
+        return "text/event-stream" in (self.headers.get("Accept") or "").lower()
+
+    def _send_sse(self, payload: Any, *, extra: dict[str, str] | None = None) -> None:
+        """Deliver one JSON-RPC message as a Server-Sent Event, then end the stream.
+
+        Streamable HTTP lets the server answer a POST with either JSON or an SSE stream, and
+        a client that advertises `Accept: text/event-stream` may expect the latter. There is
+        no Content-Length on an event stream, so the connection delimits the body and must be
+        closed.
+        """
+        body = f"event: message\ndata: {json.dumps(payload, default=str)}\n\n".encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Connection", "close")
+        for key, value in (extra or {}).items():
+            self.send_header(key, value)
+        self.end_headers()
+        self.wfile.write(body)
+        self.wfile.flush()
+        self.close_connection = True
+
     def do_GET(self) -> None:
         path = self.path.split("?")[0]
-        if path in {"/health", "/healthz"}:
+        if path in HEALTH_PATHS:
             # Unauthenticated liveness only. It reveals nothing beyond "the bridge is up",
             # and deliberately does not reach cipher-core.
             self._send(200, {"status": "ok", "service": "cipher-mcp-bridge",
                              "protocol_version": PROTOCOL_VERSION,
                              "token_configured": bool(load_token())})
             return
-        if path != "/mcp":
+        if path not in MCP_PATHS:
             self._send(404, {"error": "not found", "detail": "the MCP endpoint is /mcp"})
             return
         if not self._authorized():
             return
-        # Streamable HTTP allows a GET to open a server-to-client stream. This server never
-        # initiates traffic, so declining is correct and simpler than holding an idle socket.
-        self._send(405, {"error": "method not allowed",
-                         "detail": "this server does not push; POST JSON-RPC to /mcp"})
+        if not self._wants_sse():
+            self._send(405, {"error": "method not allowed",
+                             "detail": "GET /mcp opens an event stream; send Accept: text/event-stream"})
+            return
+        # Open the server-to-client stream. This server never initiates a request, so the
+        # stream carries only keep-alive comments -- but clients treat a GET that fails as
+        # "cannot connect", so refusing it outright (as this did with a 405) breaks discovery
+        # even though every JSON-RPC exchange works over POST.
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Connection", "close")
+        self.end_headers()
+        deadline = time.monotonic() + STREAM_SECONDS
+        try:
+            self.wfile.write(b": connected\n\n")
+            self.wfile.flush()
+            while time.monotonic() < deadline:
+                time.sleep(STREAM_PING_SECONDS)
+                self.wfile.write(b": ping\n\n")
+                self.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError, OSError):
+            pass
+        finally:
+            self.close_connection = True
 
     def do_DELETE(self) -> None:
-        if self.path.split("?")[0] != "/mcp":
+        if self.path.split("?")[0] not in MCP_PATHS:
             self._send(404, {"error": "not found"})
             return
         if not self._authorized():
@@ -199,7 +259,7 @@ class Handler(BaseHTTPRequestHandler):
         self._send(200, {"ok": True})
 
     def do_POST(self) -> None:
-        if self.path.split("?")[0] != "/mcp":
+        if self.path.split("?")[0] not in MCP_PATHS:
             self._drain_body()
             self._send(404, {"error": "not found", "detail": "the MCP endpoint is /mcp"})
             return
@@ -261,7 +321,15 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Content-Length", "0")
             self.end_headers()
             return
-        self._send(200, replies if batch else replies[0], extra=session_header)
+        payload = replies if batch else replies[0]
+        # Honour the client's stated preference. A client that advertised only
+        # text/event-stream may reject an application/json body outright.
+        accept = (self.headers.get("Accept") or "").lower()
+        prefers_sse = "text/event-stream" in accept and "application/json" not in accept
+        if prefers_sse:
+            self._send_sse(payload, extra=session_header)
+            return
+        self._send(200, payload, extra=session_header)
 
 
 def main() -> int:
