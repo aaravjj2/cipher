@@ -133,12 +133,30 @@ class Handler(BaseHTTPRequestHandler):
             # disabled the gate instead of the service.
             self._unauthorized("server has no bearer token configured")
             return False
-        header = self.headers.get("Authorization") or ""
-        scheme, _, presented = header.partition(" ")
-        if scheme.lower() != "bearer" or not presented:
-            self._unauthorized("expected an Authorization: Bearer header")
+        # Accept the shapes a host might send the same secret in. ChatGPT's connector UI
+        # labels this an "API key" and does not promise which header carries it, so a
+        # mismatch here would look like a rejected token rather than a format problem.
+        # Every branch still ends in one constant-time comparison against one secret; being
+        # liberal about the envelope does not widen what is accepted as the value.
+        candidates: list[str] = []
+        header = (self.headers.get("Authorization") or "").strip()
+        if header:
+            scheme, _, rest = header.partition(" ")
+            if scheme.lower() == "bearer" and rest.strip():
+                candidates.append(rest.strip())
+            elif not rest:
+                # A bare token with no scheme.
+                candidates.append(header)
+        for name in ("X-Api-Key", "Api-Key", "X-Cipher-Token"):
+            value = (self.headers.get(name) or "").strip()
+            if value:
+                candidates.append(value)
+        if not candidates:
+            self._unauthorized("expected an Authorization: Bearer <token> header")
             return False
-        if not hmac.compare_digest(presented.strip(), expected):
+        # compare_digest over every candidate rather than short-circuiting, so timing does
+        # not reveal which header matched.
+        if not any(hmac.compare_digest(value, expected) for value in candidates):
             self._unauthorized("token rejected")
             return False
         return True

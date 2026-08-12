@@ -114,6 +114,36 @@ def test_an_empty_token_file_fails_closed(bridge):
     assert status == 401
 
 
+def test_the_token_is_accepted_in_the_shapes_a_host_might_send_it(bridge):
+    """ChatGPT calls this an "API key" without promising which header carries it."""
+    base, _ = bridge
+    host = base.removeprefix("http://")
+    body = json.dumps(INIT).encode()
+    for headers in (
+        {"Authorization": f"Bearer {TOKEN}"},
+        {"Authorization": TOKEN},
+        {"X-Api-Key": TOKEN},
+        {"Api-Key": TOKEN},
+    ):
+        request = urllib.request.Request(f"http://{host}/mcp", data=body, method="POST")
+        request.add_header("Content-Type", "application/json")
+        for key, value in headers.items():
+            request.add_header(key, value)
+        with urllib.request.urlopen(request, timeout=30) as response:
+            assert response.status == 200, headers
+
+
+def test_a_wrong_value_in_an_accepted_header_is_still_rejected(bridge):
+    base, _ = bridge
+    request = urllib.request.Request(f"{base}/mcp", data=json.dumps(INIT).encode(), method="POST")
+    request.add_header("X-Api-Key", "nope")
+    try:
+        urllib.request.urlopen(request, timeout=30)
+        raise AssertionError("expected 401")
+    except urllib.error.HTTPError as exc:
+        assert exc.code == 401
+
+
 def test_the_correct_token_is_accepted(bridge):
     base, _ = bridge
     status, body, headers = call(base, INIT)
