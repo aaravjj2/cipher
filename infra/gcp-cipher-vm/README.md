@@ -234,6 +234,49 @@ What this does and does not mean:
   the existing values rather than writing blanks, so a sync run on the current IAM does not
   destroy the hash.
 
+### The repo copy is not the copy that runs (2026-08-12)
+
+`cipher-secrets.service` executes **`/usr/local/lib/cipher/sync-secrets.py`**, not the file in
+this directory. Editing `infra/gcp-cipher-vm/bin/sync-secrets.py` and committing it changes
+nothing on the VM until it is copied across:
+
+```bash
+sudo cp -a /usr/local/lib/cipher/sync-secrets.py /usr/local/lib/cipher/sync-secrets.py.bak-$(date +%Y%m%d-%H%M%S)
+sudo cp infra/gcp-cipher-vm/bin/sync-secrets.py /usr/local/lib/cipher/sync-secrets.py
+sudo systemctl restart cipher-secrets.service   # then check the journal, see below
+```
+
+That gap caused a live incident. The fail-open fix was committed on 2026-08-11 but not
+deployed, so the *old* script was still installed when the VM rebooted at 04:24 on 2026-08-12.
+`cipher-secrets.service` is `WantedBy=multi-user.target` and ran before GCP auth was ready;
+every fetch returned `RetryError`, and the old script wrote **6 variables** — dropping the
+password hash, both Alpaca key pairs, the Tradier token, `LSE_API_KEY`,
+`TRADIER_STREAM_SYMBOLS` and `TRADIER_OPTION_UNDERLYINGS` — and set `CIPHER_APP_AUTH=off`.
+When `cipher-web.service` next restarted it read `off`, and the published URL served
+`/api/quote` and `/api/matrix` unauthenticated with an HTTP 200.
+
+Recovery was `cp` from `/etc/cipher/cipher.env.bak-*` (dated backups live beside the file and
+are the only copy of the hash), re-appending `TRADIER_OPTION_UNDERLYINGS`, then restarting
+`cipher-web`, `cipher-tradier` and `cipher-gex`.
+
+A sync run is healthy when the journal shows the fallbacks firing rather than skips:
+
+```
+keeping configured CIPHER_APP_PASSWORD_HASH (secret 'cipher-app-password-hash' unavailable)
+wrote 16 lines to /etc/cipher/cipher.env
+preserved unmanaged keys: TRADIER_OPTION_UNDERLYINGS, TRADIER_STREAM_SYMBOLS
+```
+
+`skipping CIPHER_APP_PASSWORD_HASH` in that log means the old script is installed again. The
+count matters too: 16 lines is correct, and 6 is the failure signature.
+
+After any reboot, verify the gate before assuming it held:
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' 'https://cipher-main.tail39504f.ts.net:8443/api/quote?symbol=SPY'   # must be 401
+grep '^CIPHER_APP_AUTH=' /etc/cipher/cipher.env                                                             # must be on
+```
+
 Recovery needs no cloud access, because the password is chosen rather than recovered:
 
 ```bash

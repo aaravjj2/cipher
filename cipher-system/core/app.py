@@ -1891,10 +1891,23 @@ class Handler(BaseHTTPRequestHandler):
                     else workspace_layouts.layouts_status()
                 )
             elif parsed.path == "/api/contract-search":
+                # `strike` is required and reaches float() unguarded. Without this the
+                # omission surfaced as an HTTP 500 whose only detail was
+                # "float() argument must be ... not 'NoneType'", which tells a caller
+                # nothing about what to send.
+                strike = pget("strike")
+                if strike in (None, ""):
+                    raise ValueError(
+                        "contract-search requires a numeric 'strike' (for example strike=770)."
+                    )
+                try:
+                    float(strike)
+                except (TypeError, ValueError):
+                    raise ValueError(f"contract-search 'strike' must be numeric, got {strike!r}.") from None
                 data = contract_search(
                     ticker,
                     feed,
-                    pget("strike"),
+                    strike,
                     pget("type", "call"),
                     expiration=pget("expiration") or None,
                     trade_date=pget("date") or None,
