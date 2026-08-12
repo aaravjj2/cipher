@@ -265,14 +265,23 @@ and lands in shell history, which is why `set-app-password.mjs` reads stdin only
 Reviewed 2026-08-11 after publishing. These are decisions, not oversights.
 
 **Login rate limiting is in-memory and resets on restart.** `app/auth.mjs` tracks failed
-attempts per IP with a doubling lockout, but the map lives in the process. Persisting it was
-considered and rejected: the password is 23 characters from a 31-character alphabet, about
+attempts per client with a doubling lockout, but the map lives in the process. Persisting it
+was considered and rejected: the password is 23 characters from a 31-character alphabet, about
 99 bits, so online guessing is not the threat model — no feasible number of attempts finds
 it. The limiter's real job is capping the scrypt CPU an unauthenticated caller can spend
 (~60 ms per attempt) and keeping the journal readable, and it does both within a process
 lifetime. Restarts are rare and reset nothing an attacker could have made progress on.
 If the password is ever shortened, this reasoning stops holding and the limiter must
 become persistent.
+
+> This entry said "per IP" and, until 2026-08-11, that was not true in this deployment.
+> The key was `req.socket.remoteAddress`, and the Funnel proxies to `127.0.0.1:8283`, so every
+> internet client shared one bucket. The consequence was not weaker guessing protection — that
+> was never the point — but an **availability** hole the entry had not considered: five wrong
+> guesses from anyone locked the real user out, renewable indefinitely for up to 15 minutes at
+> a time. The key is now the last `X-Forwarded-For` hop, which Tailscale sets and overwrites.
+> `X-Real-IP` is not consulted: a probe through the Funnel showed a spoofed value passing
+> through verbatim, so keying on it would let one client mint unlimited buckets.
 
 **`/accessobsidian-browser-logger.js` is served ungated with `access-control-allow-origin: *`.**
 Necessary: it is injected into a third-party page, so it cannot sit behind the session
@@ -285,11 +294,21 @@ full health (service name, `market_data_configured`, both feed names) is served 
 authenticated session, because `verify-cloudflare-access.py` correctly treats
 `market_data_configured` in an unauthenticated body as disclosure.
 
-**Served-build drift is possible.** `npm run build` writes `web/out`; only
-`scripts/sync_web_build.sh` copies it into `app/public`, which is what the server reads.
+**Served-build drift is possible, but now detectable.** `npm run build` writes `web/out`;
+only `scripts/sync_web_build.sh` copies it into `app/public`, which is what the server reads.
 Building without syncing leaves a newer bundle unserved, and because the symptom looks like
-a browser cache problem it is expensive to diagnose. There is no automated guard: run the
-sync script rather than `npm run build` directly.
+a browser cache problem it is expensive to diagnose. Run the sync script rather than
+`npm run build` directly, and to answer "is the served build current?" without a browser:
+
+```bash
+scripts/sync_web_build.sh --check   # exits 0 in sync, 1 on drift and lists the paths
+```
+
+The check is an `rsync -ain --delete` dry-run with the same flags as the real publish, so it
+cannot disagree with the copy that would actually happen. Directory entries differing only in
+mtime are ignored, since a directory's timestamp moves whenever anything inside it is written.
+It is worth running before verifying any UI change in a browser — confirming a change against
+a stale bundle costs far more than the check.
 
 ## Operational commands
 
