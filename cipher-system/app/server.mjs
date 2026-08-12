@@ -77,7 +77,34 @@ const readBoundedBody = async (req, limit = 8192) => {
   return Buffer.concat(chunks).toString("utf8");
 };
 
-const clientKey = (req) => String(req.socket?.remoteAddress || "shared-client");
+/**
+ * Rate-limit bucket for a request.
+ *
+ * `req.socket.remoteAddress` alone is wrong behind the Funnel. Tailscale proxies
+ * `https://…:8443` to `http://127.0.0.1:8283`, so the connection node sees always originates
+ * on localhost and *every* internet client shares one bucket. With a 5-failure threshold and
+ * a 15-minute cap that is an availability hole, not a hardening gap: anyone on the internet
+ * can hold the real user out indefinitely with a few wrong guesses a minute, and the per-IP
+ * isolation the limiter was written for never applies.
+ *
+ * `x-forwarded-for` is trustworthy *here specifically* because Tailscale sets it: a probe
+ * through the Funnel with a spoofed `X-Forwarded-For: 203.0.113.99` arrived as the real
+ * client address, overwritten. The last entry is taken rather than the first, which is
+ * correct whether the proxy overwrites the header or appends to it — the first entry is the
+ * one a client can choose.
+ *
+ * `x-real-ip` is deliberately not consulted. The same probe showed a spoofed
+ * `X-Real-IP: 198.51.100.7` passing through verbatim, so it is attacker-controlled; keying
+ * on it would let one client mint unlimited buckets and skip rate limiting entirely.
+ */
+const clientKey = (req) => {
+  const forwarded = String(req.headers?.["x-forwarded-for"] || "");
+  if (forwarded) {
+    const hops = forwarded.split(",").map((hop) => hop.trim()).filter(Boolean);
+    if (hops.length) return hops[hops.length - 1];
+  }
+  return String(req.socket?.remoteAddress || "shared-client");
+};
 
 async function sendLoginPage(res, status = 200) {
   const page = await readFile(loginPagePath);
