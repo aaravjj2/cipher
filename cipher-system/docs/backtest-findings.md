@@ -623,3 +623,42 @@ only path to ever answering the hurdle question with a measured number instead o
 one. Until then the honest statement is: **three configurations clear a 4% hurdle under an
 assumed cost that has never been checked against this universe, two of them by less than
 half a percentage point.**
+
+## Obsidian EOD Pine strategy: fails the cash hurdle even at zero transaction cost
+
+2026-08-11/12. A separate effort backtested the pasted Obsidian EOD Pine strategy on 2026 YTD
+1-minute SIP bars across ten large-caps, then was stopped as unsuccessful. The run's output
+survived (`data/backtests/obsidian_pine_ytd_2026.json`, untracked), and it is worth recording
+why, because the negative result is cleaner than the wheel's.
+
+Evaluated 2026-01-02 to 2026-08-11 (221 days), 1,150 trades, one tick of slippage per order
+and zero commission as the Pine source specifies:
+
+| | equal-weight compounded | annualized | vs 4% risk-free |
+|---|---|---|---|
+| net of slippage | +0.99% | **+1.65%** | −2.35 pp |
+| at zero slippage | +1.68% | **+2.79%** | −1.21 pp |
+
+Seven of ten symbols are positive, the spread runs from +6.86% (NVDA) to −3.44% (MSFT), and
+the worst per-symbol drawdown is 7.67%. Pooled net win rate is 51.13% at a profit factor of
+1.083.
+
+**The important part is the second row.** Unlike the leveraged-ETF wheel — whose verdict is
+blocked because its universe has no measured spread at all — this strategy does not need a
+cost model to be rejected. Set transaction costs to exactly zero and it still returns less
+than cash. No cost measurement, spread capture, or venue assumption can rescue it, so there
+is nothing further to buy or measure here.
+
+**A reporting defect found while checking this.** The runner published
+`gross_sum_return_pct`, and it summed `net_return_pct` — a post-slippage number under a name
+that means pre-cost everywhere in trading. It was also the only "gross" figure emitted, so the
+real cost drag appeared nowhere: pooled pre-cost was **+16.80%** against **+10.14%** net,
+meaning one tick per side consumed **39.6%** of the edge silently. On SPY alone, +1.015%
+pre-cost became +0.697% net, a 31.3% drag.
+
+That field is now `net_sum_return_pct`, alongside `pre_cost_sum_return_pct` and
+`slippage_drag_pct`. Verified by feeding the existing 113 SPY trade records back through the
+summary: the old field's value reproduces exactly as `net_sum_return_pct`, which confirms the
+mislabel rather than inferring it. Anyone re-reading the surviving JSON should note its
+`gross_sum_return_pct` is net, and that its `aggregate` block reports pooled sums that are not
+a portfolio return — the file says so itself, but the field name worked against it.

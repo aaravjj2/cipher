@@ -300,7 +300,16 @@ def _summary(trades: list[PineTrade], bars: list[dict[str, Any]]) -> dict[str, A
         "win_rate_pct": round(100.0 * len(wins) / len(returns), 3),
         "avg_trade_return_pct": round(sum(returns) / len(returns), 6),
         "median_trade_return_pct": round(sorted(returns)[len(returns) // 2], 6),
-        "gross_sum_return_pct": round(sum(returns), 6),
+        # Renamed from `gross_sum_return_pct`, which summed `net_return_pct` and so reported
+        # a post-slippage number under a name that means pre-cost everywhere in trading. It
+        # was the only "gross" figure published, so the actual cost drag was invisible: on
+        # the 2026 YTD run the pre-cost pooled sum was +16.80% against +10.14% net, meaning
+        # one tick per side consumed 39.6% of the edge while nothing in the output said so.
+        "net_sum_return_pct": round(sum(returns), 6),
+        "pre_cost_sum_return_pct": round(sum(t.gross_return_pct for t in trades), 6),
+        "slippage_drag_pct": round(
+            sum(t.gross_return_pct for t in trades) - sum(returns), 6
+        ),
         "compounded_return_pct": round((equity / 100_000.0 - 1.0) * 100.0, 6),
         "ending_equity": round(equity, 2),
         "max_drawdown_pct": round(max_drawdown_pct, 6),
@@ -325,15 +334,26 @@ def backtest_symbol(
     tick_size: float,
     evaluation_start: date | None,
     detector_params: dict[str, Any] | None = None,
+    precomputed_states: list[obsidian_eod.BarState] | None = None,
     evaluation_end: date | None = None,
     eod_exit_minute: int = 59,
     bar_minutes: int = 1,
+    bars_are_rth: bool = False,
 ) -> dict[str, Any]:
-    bars = _rth(rows)
+    bars = rows if bars_are_rth else _rth(rows)
     if not bars:
         return {"symbol": symbol, "coverage": {"bars": 0}, "summary": {"trades": 0}, "trades": []}
     params = {**PINE_DEFAULTS, **(detector_params or {})}
-    states, detector_summary = obsidian_eod.compute(bars, params)
+    if precomputed_states is None:
+        states, detector_summary = obsidian_eod.compute(bars, params)
+    else:
+        if len(precomputed_states) != len(bars):
+            raise ValueError(
+                f"precomputed state length {len(precomputed_states)} does not match "
+                f"RTH bar length {len(bars)} for {symbol}"
+            )
+        states = precomputed_states
+        detector_summary = {}
     candidates = _candidate_indices(
         bars,
         states,
@@ -468,7 +488,8 @@ def write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     fields = [
         "symbol", "trades", "wins", "losses", "win_rate_pct", "avg_trade_return_pct",
-        "median_trade_return_pct", "gross_sum_return_pct", "compounded_return_pct",
+        "median_trade_return_pct", "net_sum_return_pct", "pre_cost_sum_return_pct",
+        "slippage_drag_pct", "compounded_return_pct",
         "ending_equity", "max_drawdown_pct", "profit_factor", "avg_bars_held",
         "long_trades", "short_trades", "candidate_signals", "bars", "regular_session_days",
         "days_with_390_bars", "first_bar", "last_bar",

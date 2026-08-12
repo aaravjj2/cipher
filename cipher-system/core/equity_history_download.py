@@ -62,10 +62,10 @@ class DownloadSummary:
 
 
 class EquityBarStore:
-    def __init__(self, root: str | Path = DEFAULT_ROOT) -> None:
+    def __init__(self, root: str | Path = DEFAULT_ROOT, db_path: str | Path | None = None) -> None:
         self.root = Path(root).resolve()
         self.raw_root = self.root / "raw"
-        self.db_path = self.root / "equity_bars.sqlite"
+        self.db_path = Path(db_path).resolve() if db_path is not None else self.root / "equity_bars.sqlite"
         self.root.mkdir(parents=True, exist_ok=True)
         self.raw_root.mkdir(parents=True, exist_ok=True)
         self._ensure_schema()

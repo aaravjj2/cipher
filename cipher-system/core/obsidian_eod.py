@@ -114,15 +114,28 @@ def _sma(values, length):
 
 
 def _stdev(values, length):
-    """Population stdev over a rolling window (Pine's ta.stdev)."""
+    """Population stdev over a rolling window (Pine's ta.stdev).
+
+    Keep the same population/ddof=0 semantics as Pine, but use rolling sums so
+    parameter sweeps over minute bars remain practical instead of repeating a
+    100-value Python sum for every bar.
+    """
     out = [None] * len(values)
-    for i in range(len(values)):
-        if i < length - 1:
-            continue
-        window = values[i - length + 1 : i + 1]
-        mean = sum(window) / length
-        var = sum((x - mean) ** 2 for x in window) / length
-        out[i] = math.sqrt(var)
+    if length <= 0:
+        return out
+    running_sum = 0.0
+    running_sq = 0.0
+    for i, value in enumerate(values):
+        running_sum += value
+        running_sq += value * value
+        if i >= length:
+            old = values[i - length]
+            running_sum -= old
+            running_sq -= old * old
+        if i >= length - 1:
+            mean = running_sum / length
+            variance = max(0.0, running_sq / length - mean * mean)
+            out[i] = math.sqrt(variance)
     return out
 
 
