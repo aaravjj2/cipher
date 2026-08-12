@@ -54,8 +54,15 @@ MAX_BODY = 1 << 20
 PROTOCOL_VERSION = "2025-06-18"
 # A GET stream is held open for this long, then closed so the client reconnects. Bounded
 # because each open stream occupies a thread.
-STREAM_SECONDS = float(os.environ.get("CIPHER_MCP_STREAM_SECONDS", "300"))
-STREAM_PING_SECONDS = float(os.environ.get("CIPHER_MCP_STREAM_PING_SECONDS", "15"))
+# Kept short deliberately. A host validating a new connector may open this stream and wait
+# for it to finish before deciding the server is healthy; a five-minute hold would read as a
+# timeout. MCP clients reconnect, so a brief stream costs nothing.
+STREAM_SECONDS = float(os.environ.get("CIPHER_MCP_STREAM_SECONDS", "20"))
+STREAM_PING_SECONDS = float(os.environ.get("CIPHER_MCP_STREAM_PING_SECONDS", "10"))
+# Request tracing. On by default: this endpoint is driven by hosts whose failure messages
+# are generic, and the request shape is the only evidence available. No credential value
+# is ever written.
+TRACE = os.environ.get("CIPHER_MCP_TRACE", "1").lower() not in {"0", "false", "no"}
 
 _SESSIONS: set[str] = set()
 _SESSION_LOCK = threading.Lock()
@@ -181,6 +188,42 @@ class Handler(BaseHTTPRequestHandler):
         # Never log the Authorization header or query strings; only method and status.
         sys.stderr.write(f"{self.address_string()} {self.command} {self.path.split('?')[0]} {fmt % args}\n")
 
+    def _trace(self, note: str, **fields: Any) -> None:
+        """Record what a client actually sent, so a host's generic error becomes evidence.
+
+        A connector UI that reports "something went wrong" gives nothing to work from. This
+        logs the request shape -- method, path, negotiated headers, JSON-RPC method, whether
+        credentials were present -- and never the credential itself, so a failed handshake
+        can be read back from the journal instead of guessed at.
+        """
+        if not TRACE:
+            return
+        parts = [f"{key}={value!r}" for key, value in fields.items()]
+        sys.stderr.write(f"TRACE {note} " + " ".join(parts) + "\n")
+        sys.stderr.flush()
+
+    def _trace_request(self, rpc_method: str | None = None, body_bytes: int | None = None) -> None:
+        auth = "none"
+        if self.headers.get("Authorization"):
+            auth = "authorization"
+        for name in ("X-Api-Key", "Api-Key", "X-Cipher-Token"):
+            if self.headers.get(name):
+                auth = name
+        self._trace(
+            "request",
+            verb=self.command,
+            path=self.path.split("?")[0],
+            accept=self.headers.get("Accept"),
+            content_type=self.headers.get("Content-Type"),
+            user_agent=self.headers.get("User-Agent"),
+            protocol=self.request_version,
+            credential_header=auth,
+            session=self.headers.get("Mcp-Session-Id"),
+            mcp_protocol_version=self.headers.get("MCP-Protocol-Version"),
+            rpc_method=rpc_method,
+            body_bytes=body_bytes,
+        )
+
     # ------------------------------------------------------------------ routes
 
     def _wants_sse(self) -> bool:
@@ -207,6 +250,7 @@ class Handler(BaseHTTPRequestHandler):
         self.close_connection = True
 
     def do_GET(self) -> None:
+        self._trace_request()
         path = self.path.split("?")[0]
         if path in HEALTH_PATHS:
             # Unauthenticated liveness only. It reveals nothing beyond "the bridge is up",
@@ -260,6 +304,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         if self.path.split("?")[0] not in MCP_PATHS:
+            self._trace_request()
             self._drain_body()
             self._send(404, {"error": "not found", "detail": "the MCP endpoint is /mcp"})
             return
@@ -290,6 +335,10 @@ class Handler(BaseHTTPRequestHandler):
 
         batch = isinstance(message, list)
         requests = message if batch else [message]
+        self._trace_request(
+            rpc_method=",".join(str(r.get("method")) for r in requests if isinstance(r, dict)),
+            body_bytes=length,
+        )
         replies = []
         session_header: dict[str, str] = {}
         for item in requests:

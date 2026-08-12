@@ -484,10 +484,26 @@ RESOURCES = [
 ]
 
 
+DEFAULT_PROTOCOL_VERSION = "2025-06-18"
+# Revisions of the MCP protocol this server's messages are compatible with. The surface used
+# here -- initialize, tools/list, tools/call, prompts, resources -- is unchanged across them.
+SUPPORTED_PROTOCOL_VERSIONS = frozenset({"2024-11-05", "2025-03-26", "2025-06-18"})
+
+
+def _negotiate_protocol(params: dict[str, Any] | None) -> str:
+    requested = str((params or {}).get("protocolVersion") or "").strip()
+    return requested if requested in SUPPORTED_PROTOCOL_VERSIONS else DEFAULT_PROTOCOL_VERSION
+
+
 def handle(method: str, params: dict[str, Any]) -> Any:
     if method == "initialize":
         return {
-            "protocolVersion": "2025-06-18",
+            # Echo the client's protocol version when it is one we can speak. Replying with
+            # our own regardless is a legitimate reading of the spec, but a strict client
+            # that receives a version it never offered may abort the handshake -- and an
+            # aborted handshake shows up in a host UI as a generic "something went wrong"
+            # with nothing to point at. Negotiating removes that class of failure.
+            "protocolVersion": _negotiate_protocol(params),
             "capabilities": {
                 "tools": {"listChanged": False},
                 "prompts": {"listChanged": False},
