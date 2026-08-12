@@ -17,6 +17,7 @@ Environment=CIPHER_MCP_BRIDGE_PORT=8284
 # sync-secrets.py and lost every credential during the 2026-08-12 reboot. Secrets in
 # runtime/config survived it.
 Environment=CIPHER_MCP_TOKEN_FILE=/home/aarav/Aarav/cipher/runtime/config/mcp-bearer-token.txt
+Environment=CIPHER_MCP_OAUTH_STATE=/home/aarav/Aarav/cipher/runtime/config/mcp-oauth-state.json
 ExecStart=/usr/bin/python3 /home/aarav/Aarav/cipher/cipher-github/cipher-system/mcp-server/remote_bridge.py
 Restart=on-failure
 RestartSec=5
@@ -28,6 +29,12 @@ NoNewPrivileges=yes
 PrivateTmp=yes
 ProtectSystem=strict
 ProtectHome=read-only
+# OAuth state (registered clients, issued tokens) is written here, so this one directory must
+# stay writable despite ProtectHome=read-only. Without it the sandbox let the service read the
+# bearer token and then fail on the first authorization with
+# "OSError: [Errno 30] Read-only file system", surfacing to the client as an HTTP 502 from the
+# tunnel -- a failure no unit test reproduces, because tests write to an unsandboxed tmp dir.
+ReadWritePaths=/home/aarav/Aarav/cipher/runtime/config
 ProtectKernelTunables=yes
 ProtectControlGroups=yes
 RestrictAddressFamilies=AF_INET AF_INET6

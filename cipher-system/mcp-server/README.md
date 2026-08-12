@@ -111,6 +111,48 @@ curl -s https://cipher-main.tail39504f.ts.net:10000/health     # no token needed
 sudo tailscale funnel --https=10000 off                        # take it off the internet
 ```
 
+### OAuth (required by ChatGPT)
+
+ChatGPT will not accept a static bearer token for a custom connector. It reported
+`MCP server ... does not implement OAuth`, so the bridge implements the MCP authorization
+flow: RFC 9728 protected-resource metadata, RFC 8414 authorization-server metadata, RFC 7591
+dynamic client registration, and an authorization-code exchange with PKCE (S256 only).
+
+| endpoint | purpose |
+|---|---|
+| `/.well-known/oauth-protected-resource` | tells a client where to authorize; also cited in every 401 |
+| `/.well-known/oauth-authorization-server` | issuer, endpoints, supported grants |
+| `/register` | dynamic client registration — ChatGPT greys out DCR unless this is discovered |
+| `/authorize` | consent page, then a redirect carrying the code |
+| `/token` | code→token exchange, and refresh |
+
+**Who can approve a grant.** `/authorize` is a public URL on a public tunnel. It renders a
+consent form and issues no code until the bridge's own operator token is entered. Auto-approving
+would let anyone who found the URL mint a token, which would be strictly worse than the shared
+bearer it replaces. Access tokens last 24 hours and refresh; codes are single-use and expire in
+ten minutes, and a *failed* exchange still consumes the code so it cannot be guessed against.
+
+Discovery documents are built from `X-Forwarded-Proto` / `X-Forwarded-Host`, because the bridge
+binds to localhost behind a tunnel and cannot know its own public URL — an issuer pointing at
+127.0.0.1 would be discovered and then be unreachable, and the tunnel hostname changes between
+runs.
+
+If ChatGPT's wizard prefers a **User-Defined OAuth Client** over DCR, pre-register the callback
+it shows you and paste the printed id into "OAuth Client ID", leaving the secret blank:
+
+```bash
+python3 mcp-server/register_oauth_client.py https://chatgpt.com/connector/oauth/XXXX
+```
+
+To revoke everything issued: `python3 -c "import sys; sys.path.insert(0,'mcp-server'); import
+oauth_provider; oauth_provider.revoke_all()"` then restart the service.
+
+**A sandbox trap worth remembering.** The unit sets `ProtectHome=read-only`, which let the
+service read the token file and then fail on the first authorization with
+`OSError: [Errno 30] Read-only file system`, surfacing to the client as a 502 from the tunnel.
+No unit test reproduces it, because tests write to an unsandboxed temp directory.
+`ReadWritePaths=/home/aarav/Aarav/cipher/runtime/config` is required for the OAuth state file.
+
 ### What the gate does and does not do
 
 Every `/mcp` request needs `Authorization: Bearer <token>`, compared with

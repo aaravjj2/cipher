@@ -37,12 +37,14 @@ import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qs, urlparse
 
 HERE = Path(__file__).resolve().parent
 if str(HERE) not in sys.path:
     sys.path.insert(0, str(HERE))
 
 import market_server  # noqa: E402
+import oauth_provider  # noqa: E402
 
 HOST = os.environ.get("CIPHER_MCP_BRIDGE_HOST", "127.0.0.1")
 PORT = int(os.environ.get("CIPHER_MCP_BRIDGE_PORT", "8284"))
@@ -77,6 +79,11 @@ _SESSION_LOCK = threading.Lock()
 # "could not connect" against `:10000` with no further detail.
 MCP_PATHS = frozenset({"/mcp", "/mcp/", "/"})
 HEALTH_PATHS = frozenset({"/health", "/healthz", "/mcp/health"})
+
+# Discovery documents. Clients probe several spellings -- with and without the resource path
+# appended -- so each is matched by suffix rather than by one exact string.
+PROTECTED_RESOURCE_SUFFIX = "/.well-known/oauth-protected-resource"
+AUTH_SERVER_SUFFIX = "/.well-known/oauth-authorization-server"
 
 
 def load_token() -> str | None:
@@ -137,7 +144,12 @@ class Handler(BaseHTTPRequestHandler):
     def _unauthorized(self, detail: str) -> None:
         self._drain_body()
         self.send_response(401)
-        self.send_header("WWW-Authenticate", 'Bearer realm="cipher-mcp"')
+        # RFC 9728: tell the client where to learn how to authorize. Without this a client
+        # that supports OAuth cannot discover the authorization server from a 401.
+        metadata = f"{self._base_url()}{PROTECTED_RESOURCE_SUFFIX}"
+        self.send_header(
+            "WWW-Authenticate",
+            f'Bearer realm="cipher-mcp", resource_metadata="{metadata}"')
         body = json.dumps({"error": "unauthorized", "detail": detail}).encode("utf-8")
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
@@ -179,10 +191,14 @@ class Handler(BaseHTTPRequestHandler):
             return False
         # compare_digest over every candidate rather than short-circuiting, so timing does
         # not reveal which header matched.
-        if not any(hmac.compare_digest(value, expected) for value in candidates):
-            self._unauthorized("token rejected")
-            return False
-        return True
+        if any(hmac.compare_digest(value, expected) for value in candidates):
+            return True
+        # An OAuth access token issued by this server is equally valid. The static token is
+        # kept for stdio-style clients and for curl; ChatGPT will always present an OAuth one.
+        if any(oauth_provider.token_is_valid(value) for value in candidates):
+            return True
+        self._unauthorized("token rejected")
+        return False
 
     def log_message(self, fmt: str, *args: Any) -> None:
         # Never log the Authorization header or query strings; only method and status.
@@ -226,6 +242,64 @@ class Handler(BaseHTTPRequestHandler):
 
     # ------------------------------------------------------------------ routes
 
+    def _base_url(self) -> str:
+        """The externally visible origin, taken from the proxy's headers.
+
+        The bridge binds to localhost behind Cloudflare or Tailscale, so it cannot know its
+        own public URL. Every OAuth document must advertise the origin the *client* used --
+        an issuer or endpoint pointing at 127.0.0.1 would be discovered and then be
+        unreachable. The tunnel hostname also changes between runs, so this cannot be a
+        constant.
+        """
+        proto = (self.headers.get("X-Forwarded-Proto") or "").split(",")[0].strip()
+        host = (self.headers.get("X-Forwarded-Host") or "").split(",")[0].strip()
+        if not host:
+            host = (self.headers.get("Host") or f"{HOST}:{PORT}").strip()
+        if not proto:
+            # A tunnelled request arrives over plain HTTP; anything not obviously local is
+            # reached over TLS by the client.
+            proto = "http" if host.startswith(("127.0.0.1", "localhost")) else "https"
+        return f"{proto}://{host}"
+
+    def _send_html(self, status: int, body: bytes) -> None:
+        self.send_response(status)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _redirect(self, location: str) -> None:
+        self.send_response(302)
+        self.send_header("Location", location)
+        self.send_header("Content-Length", "0")
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+
+    def _read_form(self) -> dict[str, Any]:
+        """Parse a form-encoded or JSON body.
+
+        JSON values keep their type. Coercing them to strings turned dynamic registration's
+        `redirect_uris` list into the string "['https://...']", which then failed the
+        "redirect_uris is required" check -- a list arriving as a string is not a missing
+        field, but that is what the error said.
+        """
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            return {}
+        if length <= 0 or length > MAX_BODY:
+            return {}
+        raw = self.rfile.read(length).decode("utf-8", "replace")
+        content_type = (self.headers.get("Content-Type") or "").lower()
+        if "application/json" in content_type:
+            try:
+                parsed = json.loads(raw)
+            except ValueError:
+                return {}
+            return parsed if isinstance(parsed, dict) else {}
+        return {k: v[-1] for k, v in parse_qs(raw, keep_blank_values=True).items()}
+
     def _wants_sse(self) -> bool:
         return "text/event-stream" in (self.headers.get("Accept") or "").lower()
 
@@ -252,6 +326,23 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         self._trace_request()
         path = self.path.split("?")[0]
+        base = self._base_url()
+        # Discovery is deliberately unauthenticated: a client cannot present a token before
+        # it has learned how to obtain one.
+        if path.endswith(PROTECTED_RESOURCE_SUFFIX) or path.startswith(PROTECTED_RESOURCE_SUFFIX):
+            self._send(200, oauth_provider.protected_resource_metadata(base))
+            return
+        if path.endswith(AUTH_SERVER_SUFFIX) or path.startswith(AUTH_SERVER_SUFFIX):
+            self._send(200, oauth_provider.authorization_server_metadata(base))
+            return
+        if path == "/authorize":
+            params = {k: v[-1] for k, v in parse_qs(urlparse(self.path).query).items()}
+            context, error = oauth_provider.validate_authorize(params)
+            if error:
+                self._send(400, {"error": "invalid_request", "error_description": error})
+                return
+            self._send_html(200, oauth_provider.consent_page(context, base))
+            return
         if path in HEALTH_PATHS:
             # Unauthenticated liveness only. It reveals nothing beyond "the bridge is up",
             # and deliberately does not reach cipher-core.
@@ -303,7 +394,38 @@ class Handler(BaseHTTPRequestHandler):
         self._send(200, {"ok": True})
 
     def do_POST(self) -> None:
-        if self.path.split("?")[0] not in MCP_PATHS:
+        path = self.path.split("?")[0]
+        if path in {"/register", "/authorize", "/token"}:
+            self._trace_request()
+            form = self._read_form()
+            if path == "/register":
+                status, payload = oauth_provider.register_client(form)
+                self._send(status, payload)
+                return
+            if path == "/token":
+                status, payload = oauth_provider.exchange(form)
+                self._send(status, payload)
+                return
+            # /authorize approval. The operator secret is the consent step; without it no
+            # code is issued, so discovering this URL is not enough to gain access.
+            context, error = oauth_provider.validate_authorize(form)
+            if error:
+                self._send(400, {"error": "invalid_request", "error_description": error})
+                return
+            expected = load_token()
+            presented = (form.get("secret") or "").strip()
+            if not expected or not presented or not hmac.compare_digest(presented, expected):
+                self._send_html(
+                    403,
+                    oauth_provider.consent_page(
+                        context, self._base_url(),
+                        error="That token does not match. Access was not granted."),
+                )
+                return
+            code = oauth_provider.issue_code(context)
+            self._redirect(oauth_provider.redirect_with_code(context, code))
+            return
+        if path not in MCP_PATHS:
             self._trace_request()
             self._drain_body()
             self._send(404, {"error": "not found", "detail": "the MCP endpoint is /mcp"})
