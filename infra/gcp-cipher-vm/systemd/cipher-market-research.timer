@@ -1,0 +1,14 @@
+[Unit]
+Description=Run Cipher's read-only market research during the trading day
+
+[Timer]
+OnCalendar=Mon..Fri *-*-* 06:45:00 America/New_York
+OnCalendar=Mon..Fri *-*-* 09:15:00 America/New_York
+OnCalendar=Mon..Fri *-*-* 12:30:00 America/New_York
+OnCalendar=Mon..Fri *-*-* 15:45:00 America/New_York
+Persistent=true
+RandomizedDelaySec=120
+Unit=cipher-market-research.service
+
+[Install]
+WantedBy=timers.target

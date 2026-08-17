@@ -498,7 +498,10 @@ def build_status() -> dict[str, Any]:
         "all_eight_closed": all(item["closed"] for item in tracks),
         "work_package_complete": all(item["closed"] for item in tracks),
         "architecture_complete": bool(architecture_audit.get("architecture_complete", False)),
-        "architecture_status": str(architecture_audit.get("verdict") or "not_measured_by_this_work_package"),
+        # This work package must never report an ambiguous architecture state. Preserve the
+        # audit's boolean boundary while exposing the stable status vocabulary consumed by
+        # operators and tests.
+        "architecture_status": "COMPLETE" if architecture_audit.get("architecture_complete") else "INCOMPLETE",
         "architecture_phase_exit_criteria_met": int(architecture_audit.get("phase_exit_criteria_met") or 0),
         "architecture_operational_layers_complete": int(architecture_audit.get("operational_layers_complete") or 0),
         "architecture_audit_artifact": str(GOV / "original_architecture_self_audit.json"),

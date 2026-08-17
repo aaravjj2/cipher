@@ -1,0 +1,20 @@
+[Unit]
+Description=Run Cipher's scheduled read-only market research agent
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=aarav
+Group=aarav
+WorkingDirectory=/home/aarav/Aarav/cipher/cipher-system
+ExecStart=/home/aarav/.venvs/cipher/bin/python /home/aarav/Aarav/cipher/cipher-system/scripts/run_market_research_agent.py
+ReadWritePaths=/home/aarav/Aarav/cipher/cipher-system/data/research_agent
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=read-only
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+[Install]
+WantedBy=multi-user.target
