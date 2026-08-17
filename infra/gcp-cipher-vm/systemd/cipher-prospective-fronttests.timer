@@ -1,0 +1,12 @@
+[Unit]
+Description=Monitor frozen prospective fronttests every minute
+
+[Timer]
+OnCalendar=Mon..Fri *:*:00
+RandomizedDelaySec=8
+AccuracySec=10s
+Persistent=false
+Unit=cipher-prospective-fronttests.service
+
+[Install]
+WantedBy=timers.target

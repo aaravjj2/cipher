@@ -51,20 +51,20 @@
 :root {
   /* Cipher extras — raw tokens from live app, not mapped to shadcn names */
   --bg: #07090f;
-  --panel: #0d1118;
-  --panel-2: #11161f;
-  --line: #1b2230;
-  --line-soft: #141a26;
-  --text: #d7dee9;
-  --text-dim: #76819299;
-  --text-mute: #5b6678;
+  --panel: #0e131c;
+  --panel-2: #141b26;
+  --line: #242d3c;
+  --line-soft: #192130;
+  --text: #e5eaf1;
+  --text-dim: #a3adbc;
+  --text-mute: #738095;
   --gold: #f7bd29;
   --neg: #f93a52;
   /* Success/connected status — the one deliberate exception to the purple=positive /
      red=negative convention (see Header.tsx quote-change comment). Used for "CONNECTED"
      style status pills only, never for numeric up/down deltas. */
   --success: #3ecf8e;
-  --nav-active: #7a2140; /* approximate — verify against live site */
+  --nav-active: color-mix(in srgb, #8b5cf6 25%, #141b26);
   --glass-panel: linear-gradient(
     180deg,
     color-mix(in srgb, #11161f 80%, transparent),

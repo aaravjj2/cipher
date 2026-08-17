@@ -1,0 +1,35 @@
+[Unit]
+# Pre-registered forward test of the Structural Fib strategy on NVDA and AAPL.
+#
+# The backtest (core/structural_fib_lab.py) refuted all three published hit rates over
+# 2025-12-02 to 2026-08-11, but that reading is in-sample and its cost basis is
+# not-applicable, which caps it at evidence tier 4 permanently. Signals recorded from
+# 2026-08-13 forward fall inside the measured option-spread capture window, so each carries a
+# measured half-spread at signal time -- the only route to tier 1 for this strategy.
+#
+# Research-only, and structurally so: it records signals to an append-only file and scores
+# them in a strictly later pass. It places no orders, holds no position, and its highest
+# output is a hit-rate table a human reads.
+Description=Pre-registered Structural Fib forward test pass (NVDA/AAPL)
+Wants=network-online.target
+After=network-online.target cipher-core.service
+
+[Service]
+Type=oneshot
+User=aarav
+Group=aarav
+# The repo path is a symlink to cipher-github/cipher-system, so this runs the committed code
+# rather than a copy that can drift from it.
+WorkingDirectory=/home/aarav/Aarav/cipher/cipher-system
+EnvironmentFile=-/etc/cipher/cipher.env
+ExecStart=/home/aarav/.venvs/cipher/bin/python \
+    /home/aarav/Aarav/cipher/cipher-system/scripts/run_structural_fib_forward.py
+# Yields to the live collectors; a five-minute strategy has no need to compete for IO.
+Nice=10
+IOSchedulingClass=idle
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=cipher-structural-fib-forward
+
+[Install]
+WantedBy=multi-user.target

@@ -23,7 +23,7 @@ const SPYGLASS_SUB_TITLES: Record<SpyglassTab, string> = {
 const WORKSPACE_COUNT = 2;
 
 export default function Home() {
-  const [activePanel, setActivePanel] = useState("Strike Matrix");
+  const [activePanel, setActivePanel] = useState("Morning Brief");
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [spyglassTab, setSpyglassTab] = useState<SpyglassTab>("spyglass");
   /**
@@ -80,6 +80,10 @@ export default function Home() {
   const handleMobileOpenChange = useCallback((open: boolean) => setMobileNavOpen(open), []);
   const handleMenuClick = useCallback(() => setMobileNavOpen(true), []);
   const handlePaletteOpen = useCallback(() => setPaletteOpen(true), []);
+  const handlePanelNavigate = useCallback((panel: string, nextTicker?: string) => {
+    if (nextTicker) setTicker(nextTicker);
+    handleActivePanelChange(panel);
+  }, [handleActivePanelChange, setTicker]);
 
   useCommandPaletteShortcut(setPaletteOpen);
 
@@ -136,13 +140,14 @@ export default function Home() {
             <Workspace ticker={ticker} openRequest={openRequest} />
           </main>
         ) : (
-          <main className="flex-1 overflow-y-auto overflow-x-hidden p-6">
+          <main className="flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-6">
             <PanelHost
               panel={activePanel}
               ticker={ticker}
               toolbarSlot={toolbarSlot}
               spyglassTab={spyglassTab}
               onSpyglassTabChange={setSpyglassTab}
+              onNavigate={handlePanelNavigate}
             />
           </main>
         )}

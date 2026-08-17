@@ -6,5 +6,19 @@ websockets==16.1.1
 anthropic
 openai
 
+# Imported unguarded at module level by code the test suite collects, so the suite cannot
+# even be collected without them -- verified 2026-08-12 by building a clean venv from this
+# file alone: 6 test modules failed on `pandas`, then 1 on `huggingface_hub`, and removing
+# any of duckdb/pyarrow/pyyaml/requests individually reproduces failures. Before that check
+# this file described a working install that did not exist, so a fresh clone could not run
+# the tests. Not listed: keyring -- the suite passes without it (604 passed), so it belongs
+# with the optional runtime extras, not here.
+pandas
+pyarrow
+duckdb
+pyyaml
+requests
+huggingface_hub
+
 # Testing
 pytest>=8.0.0

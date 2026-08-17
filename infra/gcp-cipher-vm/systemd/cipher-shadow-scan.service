@@ -1,0 +1,23 @@
+[Unit]
+Description=Cipher scheduled local Flash observations for shadow paper testing
+Wants=network-online.target
+Requires=cipher-core.service cipher-paper-executor.service
+After=network-online.target cipher-core.service cipher-paper-executor.service
+
+[Service]
+Type=oneshot
+User=aarav
+Group=aarav
+WorkingDirectory=/home/aarav/Aarav/cipher/cipher-system
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/home/aarav/.venvs/cipher/bin/python -m core.paper_executor.local_scan_scheduler
+TimeoutStartSec=25min
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=read-only
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=cipher-shadow-scan

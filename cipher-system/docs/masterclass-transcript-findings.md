@@ -14,24 +14,41 @@ arrived; one was tested fresh today on real data; two are currently blocked or
 unbacktestable for reasons stated below, and are not being reported as
 negative findings — absence of evidence, not evidence of absence.
 
-## Structural Fib — already tested, already falsified
+## Structural Fib — falsified, and re-tested properly on 2026-08-13
 
-This is not new: `docs/backtest-findings.md` (under "Structural Fib") already
-ran `scripts/backtest_structural_fib.py --symbols NVDA,AAPL --days 365` against
-this exact system — the same 1.5% pre-market range filter, the same
-trend-based Fibonacci extension mapping, the same 0/0.5/1/2 level scheme. The
-transcript's own probability table claims 98% (level 1) and 64% (level 2). The
-measured touch rate — the charitable reading, price reaching the level at any
-point in the session, no stop — was **80.0%** and **49.6%**. The transcript's
-own 1.5% pre-market filter, tested as a filter for which days to trade, did not
-select better days: trending days scored *worse* (77.6% vs 80.0% on the first
-leg). And the decisive number: a 74.6% *win rate* on the first leg came with a
-**negative average return** — wins are small, losses are large. A headline win
-rate that high is compatible with losing money, and here it does.
+**The 2026-08-10 entry below was too confident about what had been tested.** It said
+"nothing about this transcript changes that finding", and on the numbers it quoted
+that was true. But the run it relied on had tested a materially different strategy:
+the anchor was pinned to the opening 5-minute candle for the whole session, where
+the method trails it, and the reversal setup — the transcript's *strongest* claim,
+98%, stated twice — had never been separated from continuation or tested at all.
+Calling the system falsified while its headline claim sat unmeasured was
+overreach, even though the conclusion has now survived the proper test.
 
-Nothing about this transcript changes that finding. It restates the same
-system with a cleaner-sounding probability table than the reality Cipher
-already measured against it.
+Re-tested with `core/structural_fib_lab.py` on 173 sessions per symbol
+(2025-12-02 → 2026-08-11), 1,304 signals, trailed anchor, reversal separated:
+
+| claim | stated | measured | 95% CI |
+|---|---|---|---|
+| continuation 0.5→1 | 95–98% | **83.7%** | [80.4, 86.4] |
+| continuation 1→2 | 63–64% | **57.2%** | [51.8, 62.5] |
+| **reversal 1→2** | **98%** | **44.0%** | [38.6, 49.7] |
+| pre-market ≤1.5% picks trending days | ~90% | **66.7%**, vs 80.0% on the days it rejects | — |
+
+Three findings the earlier run could not have reached:
+
+1. **The strongest claim is the weakest result.** The 98% reversal measures 44%, robust
+   at 42–45% across every definition of "rolled over from a high".
+2. **The 1.5% filter is inverted**, worth −13.3 points on non-overlapping intervals.
+3. **The levels do carry information and the entry rule spends it.** Against a matched
+   random-entry control the continuation legs beat random by +14.2 and +13.6 points on
+   touch rate — then lose money where the control makes money, because waiting for a body
+   close past the level fills a median 0.244% beyond it. Bucketed by that slippage, the
+   win rate climbs 58% → 67% → 85% → **96.6%** while the return turns sharply negative:
+   the advertised hit rate and the losses are the same phenomenon, not a contradiction.
+
+Full numbers, the reward:risk arithmetic, and the option-cost hurdle are in
+`docs/backtest-findings.md`. **Standing: REJECTED**, evidence tier 4.
 
 ## Capital Flywheel (CSP wheel + Ripster clouds) on NVDL — tested fresh today, first attempt was misconfigured
 
@@ -170,7 +187,7 @@ be a result, and no matched-control test exists to check it properly.
 
 | Strategy | Status | What would change it |
 |---|---|---|
-| Structural Fib (NVDA/AAPL) | **Falsified** | Nothing pending — tested, high win rate coincides with negative average return |
-| Capital Flywheel / CSP wheel (NVDL) | **INSUFFICIENT** (first test was misconfigured — corrected to 1 real signal, still open, no scored outcome) | Daily-cadence option-chain coverage in the local archive (51 of 65 candidate days had none downloaded) |
+| Structural Fib (NVDA/AAPL) | **REJECTED**, tier 4 — re-tested 2026-08-13 with a trailed anchor and the reversal separated; all three published claims fall outside their own 95% intervals | Nothing available. The levels beat a random-entry control on touch rate by ~14 points, but the confirmation entry costs more than that edge is worth, and ~1 bp of underlying edge cannot pay a 0DTE option round trip |
+| Capital Flywheel / CSP wheel (NVDL) | **OUT OF SCOPE** as of 2026-08-13 — the wheel line of work was stopped. Last standing was INSUFFICIENT (1 real signal, still open, no scored outcome) | Nothing pending; deprioritised in `research_corpus.DEPRIORITISED_PREFIXES`, results retained on disk and readable under `scope="all"` |
 | Golden Vex bounce (SPY) | **Blocked + name mismatch** | Point-in-time OI reaching 60 days (currently 13); also needs the actual described quantity identified, since "golden" ≠ vanna in this codebase |
 | Flash Agentic floor bounce ($MU) | **INSUFFICIENT** | A real backtest harness for Flash Agentic against a matched control, and ≥30 observed instances |

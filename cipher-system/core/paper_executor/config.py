@@ -71,6 +71,10 @@ class InstrumentConfig:
 @dataclass(frozen=True)
 class MarketDataConfig:
     provider: str = "tradier_production"
+    core_url: str = "http://127.0.0.1:8282"
+    request_timeout_seconds: int = 90
+    chain_expiration_count: int = 6
+    chain_cache_seconds: int = 30
     credential_service: str = "cipher-paper-executor"
     credential_username: str = "tradier-market-token"
     quote_maximum_age_seconds: int = 2
@@ -271,6 +275,8 @@ def load_config(path: str | Path | None = None) -> ExecutorConfig:
     )
     if cfg.mode not in {Mode.DISABLED, Mode.SHADOW, Mode.PAPER}:
         raise ValueError("Invalid executor mode.")
-    if cfg.market_data.provider != "tradier_production":
-        raise ValueError("Only Tradier production market data is supported.")
+    if cfg.market_data.provider not in {"tradier_production", "alpaca_core"}:
+        raise ValueError("Market data provider must be tradier_production or alpaca_core.")
+    if cfg.market_data.provider == "alpaca_core" and not cfg.market_data.core_url.startswith("http://127.0.0.1:"):
+        raise ValueError("Alpaca core market data must use a loopback Cipher API URL.")
     return cfg

@@ -1,0 +1,18 @@
+[Unit]
+Description=Rank Cipher's research evidence once a day and report what changed
+
+[Timer]
+# 06:30 ET, after the 05:15 Parquet mirror and the 03:15 backup have finished, so this reads
+# a settled disk and does not contend with them for IO. Before the 09:30 open, so the report
+# is waiting rather than arriving mid-session.
+OnCalendar=*-*-* 06:30:00 America/New_York
+# A powered-off VM should still produce one pass when it comes back: the whole value of this
+# loop is the diff between consecutive passes, and a skipped day widens the diff rather than
+# losing it. Persistent=true is safe here because the pass is idempotent -- running it twice
+# in a row produces a noop, not a duplicate.
+Persistent=true
+RandomizedDelaySec=300
+Unit=cipher-autopilot.service
+
+[Install]
+WantedBy=timers.target

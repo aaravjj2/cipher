@@ -1,0 +1,22 @@
+[Unit]
+Description=Record Structural Fib forward-test signals every five minutes
+
+[Timer]
+# Five minutes matches the strategy's own bar size, so a signal is recorded on the bar it
+# fires rather than up to one bar late.
+#
+# Fires on weekdays around the clock rather than only 09:30-16:00 ET, because the timezone
+# offset shifts with DST and a unit pinned to UTC clock hours would silently drift an hour
+# twice a year. The script applies the session guard itself in exchange local time: outside
+# the session it skips the fetch entirely, and the post-close scoring pass is guaranteed to
+# get a turn.
+OnCalendar=Mon..Fri *:0/5
+# Persistent=false on purpose. A missed pass cannot be made up: the signal it would have
+# recorded is only pre-registered if it was written while the outcome was still unknown, so
+# replaying one on boot would manufacture a record that was never prospective.
+Persistent=false
+RandomizedDelaySec=15
+Unit=cipher-structural-fib-forward.service
+
+[Install]
+WantedBy=timers.target

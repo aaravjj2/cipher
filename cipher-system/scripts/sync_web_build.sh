@@ -9,9 +9,10 @@
 # looks exactly like a browser cache problem, which is what makes it expensive: the
 # obvious fixes (hard refresh, restart the server) all appear to do nothing.
 #
-# web/out and app/public are both pure build output — no hand-authored file lives in
-# either — so --delete is safe and removes the stale content-hashed chunks that would
-# otherwise accumulate on every build.
+# web/out and app/public are both pure build output. Publishing stages a complete
+# sibling tree, verifies it, then atomically exchanges the two directories with
+# renameat2. A request therefore sees either the old release or the new one, never
+# half of each. The exchanged old tree becomes a timestamped rollback release.
 # `--check` reports whether the served tree matches the last build without building or
 # copying anything, so "is the served build current?" is answerable at a glance instead of
 # being diagnosed through a browser. It exits 1 on drift, which makes it usable as a guard
@@ -48,11 +49,50 @@ if [[ "${1:-}" == "--check" ]]; then
   exit 1
 fi
 
+if [[ "${1:-}" == "--rollback" ]]; then
+  latest="$(find "$ROOT/app/.releases" -mindepth 1 -maxdepth 1 -type d -name 'previous-*' -printf '%T@ %p\n' 2>/dev/null | sort -nr | head -1 | cut -d' ' -f2-)"
+  if [[ -z "$latest" ]]; then
+    echo "No rollback release is available."
+    exit 1
+  fi
+  python3 "$ROOT/scripts/atomic_publish.py" "$latest" "$ROOT/app/public"
+  echo "Rolled back atomically. The replaced release is now at $latest."
+  exit 0
+fi
+
 echo "Building frontend…"
 npm run build --prefix "$ROOT/web"
 
-echo "Publishing web/out -> app/public…"
-rsync -a --delete "$ROOT/web/out/" "$ROOT/app/public/"
+releases="$ROOT/app/.releases"
+mkdir -p "$releases"
+stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+staged="$(mktemp -d "$ROOT/app/.publish-${stamp}-XXXXXX")"
+cleanup() {
+  # An EXIT trap inherits its final command's status. The short-circuit form returned 1
+  # after a successful publish deliberately moved the staging directory, making the whole
+  # wrapper look failed even though `--check` immediately reported an exact match.
+  if [[ -d "$staged" ]]; then
+    rm -rf -- "$staged"
+  fi
+}
+trap cleanup EXIT
+rsync -a --delete "$ROOT/web/out/" "$staged/"
+[[ -s "$staged/index.html" ]] || { echo "Staged build has no index.html"; exit 1; }
+changes="$(rsync -ain --delete "$ROOT/web/out/" "$staged/" | grep -vE '^\.d[.t]+[[:space:]]' || true)"
+[[ -z "$changes" ]] || { echo "Staged manifest does not match web/out"; printf '%s\n' "$changes"; exit 1; }
+
+echo "Publishing verified tree atomically…"
+if [[ -d "$ROOT/app/public" ]]; then
+  python3 "$ROOT/scripts/atomic_publish.py" "$staged" "$ROOT/app/public"
+  previous="$releases/previous-$stamp"
+  mv -- "$staged" "$previous"
+  staged="$ROOT/app/.publish-consumed"
+  find "$releases" -mindepth 1 -maxdepth 1 -type d -name 'previous-*' -printf '%T@ %p\n' \
+    | sort -nr | tail -n +4 | cut -d' ' -f2- | xargs -r rm -rf --
+else
+  mv -- "$staged" "$ROOT/app/public"
+  staged="$ROOT/app/.publish-consumed"
+fi
 
 echo "Done. Restart app/server.mjs is NOT required (static files are read per request)."
 echo "Verify at any time with: scripts/sync_web_build.sh --check"

@@ -1,0 +1,22 @@
+[Unit]
+Description=Cipher Structural Fib V6 local paper-account pass (NVDA/AAPL)
+Wants=network-online.target
+After=network-online.target cipher-core.service
+
+[Service]
+Type=oneshot
+User=aarav
+Group=aarav
+WorkingDirectory=/home/aarav/Aarav/cipher/cipher-system
+EnvironmentFile=-/etc/cipher/cipher.env
+ExecStart=/home/aarav/.venvs/cipher/bin/python scripts/run_structural_fib_v6_paper.py
+Nice=10
+IOSchedulingClass=idle
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=/home/aarav/Aarav/cipher/runtime/data/structural_fib_v6
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=cipher-structural-fib-v6-paper

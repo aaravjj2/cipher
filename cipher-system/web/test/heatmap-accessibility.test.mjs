@@ -162,6 +162,6 @@ test("dense tables expose accessible labels and column headers", () => {
 });
 
 test("Plan 2 empty states explain the next useful action", () => {
-  assert.match(FLOW_TAPE, /Lower the premium threshold or keep Live on/);
+  assert.match(FLOW_TAPE, /Lower the premium threshold or keep auto refresh on/);
   assert.match(GEX_REPLAY, /Capture history first, then return here to replay it/);
 });

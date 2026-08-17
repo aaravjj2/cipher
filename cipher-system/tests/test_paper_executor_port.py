@@ -17,6 +17,7 @@ import sys
 from pathlib import Path
 
 import pytest
+import sqlite3
 
 ROOT = Path(__file__).resolve().parents[1]
 for path in (str(ROOT), str(ROOT / "core")):
@@ -96,3 +97,14 @@ def test_gate_fails_closed_on_a_missing_registry(tmp_path):
 def test_gate_refuses_an_unpromoted_strategy():
     assert promotion_gate.is_eligible("edge.rsi2_reversion") is False
     assert promotion_gate.is_eligible("gex.wall_bounce") is False
+
+
+def test_gate_reads_the_current_registry_schema(tmp_path):
+    registry = tmp_path / "registry.sqlite"
+    with sqlite3.connect(registry) as db:
+        db.execute("create table strategies(strategy_id text, current_state text)")
+        db.executemany("insert into strategies values (?,?)", [
+            ("idea", "IDEA"), ("qualified", "FAST_BACKTESTED"),
+        ])
+        db.execute("create table promotion_events(strategy_id text, to_state text, decided_at text)")
+    assert promotion_gate.eligible_strategies(registry) == {"qualified"}

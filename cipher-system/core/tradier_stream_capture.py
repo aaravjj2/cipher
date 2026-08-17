@@ -241,6 +241,31 @@ def ensure_schema(db_path: Path) -> None:
                 option_type text,
                 strike real
             );
+
+            -- A narrow, query-oriented projection of option timesales.  The raw
+            -- event table is intentionally exhaustive and is now tens of GB; a
+            -- trader-facing tape must not scan that table or pretend that the
+            -- latest trade attached to every chain snapshot is a live tape.
+            -- `stream_event_id` keeps one immutable link back to the authoritative
+            -- captured event and makes bounded historical backfills idempotent.
+            create table if not exists tradier_option_timesales (
+                stream_event_id integer primary key,
+                run_id integer not null references tradier_stream_runs(id),
+                captured_at text not null,
+                provider_ts text,
+                session_date text not null,
+                symbol text not null,
+                underlying text not null,
+                option_expiration text,
+                option_type text,
+                strike real,
+                bid real,
+                ask real,
+                price real,
+                size real,
+                premium real,
+                exchange text
+            );
             """
         )
         for definition in (
@@ -269,6 +294,12 @@ def ensure_schema(db_path: Path) -> None:
                 on tradier_stream_events(symbol, captured_at);
             create index if not exists idx_tradier_events_type_time
                 on tradier_stream_events(event_type, captured_at);
+            create index if not exists idx_tradier_timesales_underlying_session_time
+                on tradier_option_timesales(underlying, session_date, provider_ts desc);
+            create index if not exists idx_tradier_timesales_symbol_time
+                on tradier_option_timesales(symbol, provider_ts desc);
+            create index if not exists idx_tradier_timesales_underlying_session_premium
+                on tradier_option_timesales(underlying, session_date, premium);
             """
         )
 
@@ -525,6 +556,9 @@ def store_events(
             )
 
     with sqlite3.connect(db_path) as db:
+        previous_event_id = int(
+            db.execute("select coalesce(max(id), 0) from tradier_stream_events").fetchone()[0]
+        )
         db.executemany(
             """
             insert into tradier_stream_events (
@@ -534,6 +568,35 @@ def store_events(
             ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             rows,
+        )
+        # Project only the just-inserted batch.  The primary-key range is cheap
+        # even when the authoritative event database is very large.  Timesale
+        # events carry the bid/ask that accompanied the print, which is the only
+        # basis this product may call contemporaneous side inference.
+        db.execute(
+            """
+            insert or ignore into tradier_option_timesales (
+                stream_event_id, run_id, captured_at, provider_ts, session_date,
+                symbol, underlying, option_expiration, option_type, strike,
+                bid, ask, price, size, premium, exchange
+            )
+            select
+                id, run_id, captured_at, provider_ts,
+                substr(coalesce(provider_ts, captured_at), 1, 10),
+                symbol, underlying, option_expiration, option_type, strike,
+                bid, ask, coalesce(last, price), size,
+                case
+                    when coalesce(last, price) is not null and size is not null
+                    then coalesce(last, price) * size * 100.0
+                    else null
+                end,
+                json_extract(raw_json, '$.exch')
+            from tradier_stream_events
+            where id > ? and run_id = ? and event_type = 'timesale'
+              and asset_class = 'option' and symbol is not null
+              and underlying is not null
+            """,
+            (previous_event_id, int(run_id)),
         )
         db.executemany(
             """

@@ -5,6 +5,7 @@ import { DownloadIcon } from "@/components/icons";
 import {
   ApiError,
   fetchFlashAgenticLive,
+  fetchFinvizDiscovery,
   fetchScanJob,
   listScanHistory,
   loadSavedScan,
@@ -14,6 +15,7 @@ import {
   type RealClusterSetup,
   type RealScanCard,
   type RealScanJob,
+  type RealScanResult,
   type SavedScanEntry,
   type ScanMode,
   type ScanStrategy,
@@ -56,14 +58,22 @@ const POLL_MS = 1500;
 const AGENTIC_POLL_MS = 8000;
 const RESULT_LIMIT = 30;
 const FLASH_STRATEGIES = new Set<ScanStrategy>(["flash", "flash_index", "flash_agentic"]);
+const SCAN_PRESETS: Array<{ label: string; detail: string; strategy: ScanStrategy; mode: ScanMode }> = [
+  { label: "Intraday", detail: "nearest-exp structure", strategy: "cipher", mode: "short" },
+  { label: "Weekly", detail: "multi-exp structure", strategy: "cipher", mode: "long" },
+  { label: "Momentum", detail: "trigger + runway", strategy: "flash", mode: "short" },
+  { label: "Mean reversion", detail: "liquidity magnets", strategy: "liquidity", mode: "short" },
+  { label: "Index momentum", detail: "liquid index set", strategy: "flash_index", mode: "short" },
+  { label: "Exposure zones", detail: "stacked GEX/VEX", strategy: "cluster", mode: "short" },
+];
 
 /** Trims trailing zeros without mangling values that need decimals (e.g. 1.5, 34.5). */
-function fmt(n: number): string {
-  return Number(n.toFixed(2)).toString();
+function fmt(n?: number | null): string {
+  return n == null || !Number.isFinite(n) ? "—" : Number(n.toFixed(2)).toString();
 }
 
-function fmtList(values: number[]): string {
-  return values.map(fmt).join(", ");
+function fmtList(values?: number[] | null): string {
+  return values?.length ? values.map(fmt).join(", ") : "—";
 }
 
 function toCard(c: RealScanCard, rank: number): ScannerResultCard {
@@ -310,6 +320,119 @@ function ResultCard({ card }: { card: ScannerResultCard }) {
       </div>
     </div>
   );
+}
+
+function ResultComparison({ cards, onNavigate }: { cards: RealScanCard[]; onNavigate?: (panel: string, ticker?: string) => void }) {
+  const [selectedTickers, setSelectedTickers] = useState<string[]>([]);
+  const availableTickers = new Set(cards.map((card) => card.ticker));
+  const activeSelectedTickers = selectedTickers.filter((ticker) => availableTickers.has(ticker));
+  const selectedCards = activeSelectedTickers
+    .map((ticker) => cards.find((card) => card.ticker === ticker))
+    .filter((card): card is RealScanCard => card != null);
+
+  function toggleComparison(ticker: string) {
+    setSelectedTickers((current) => {
+      const available = current.filter((value) => availableTickers.has(value));
+      if (available.includes(ticker)) return available.filter((value) => value !== ticker);
+      return available.length < 3 ? [...available, ticker] : available;
+    });
+  }
+
+  function navigateFromEvidence(panel: string, card: RealScanCard) {
+    if (panel === "Night Vision" && card.evidence_snapshot?.replay_available) {
+      sessionStorage.setItem("cipher:night-vision-replay", JSON.stringify({
+        ticker: card.ticker,
+        snapshot_id: card.evidence_snapshot.snapshot_id,
+      }));
+    }
+    onNavigate?.(panel, card.ticker);
+  }
+
+  return <div className="flex flex-col gap-3">
+    <section className="rounded-xl border p-3" style={{ borderColor: "var(--line)", background: "var(--panel)" }} aria-label="Setup comparison tray">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h3 className="text-[11px] font-bold uppercase tracking-[0.12em]">Compare setups</h3>
+          <p className="mt-1 text-[10px]" style={{ color: "var(--text-mute)" }}>Select up to three candidates. Blank catalyst and expected-move fields mean this scan did not observe them.</p>
+        </div>
+        <span className="text-[10px] font-semibold" style={{ color: selectedCards.length === 3 ? "var(--gold)" : "var(--text-mute)" }}>{selectedCards.length}/3 selected</span>
+      </div>
+      {selectedCards.length === 0 ? (
+        <div className="mt-3 rounded-lg border border-dashed px-3 py-4 text-center text-[11px]" style={{ borderColor: "var(--line)", color: "var(--text-mute)" }}>
+          Use the Compare controls in the ranked results below.
+        </div>
+      ) : (
+        <div className="mt-3 grid grid-cols-1 gap-2 lg:grid-cols-3">
+          {selectedCards.map((raw) => {
+            const evidence = raw.evidence_snapshot;
+            const eventTime = evidence?.event_at ? new Date(evidence.event_at).toLocaleString("en-US", { timeZone: "America/New_York", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "Unknown";
+            return <article key={raw.ticker} className="rounded-lg border p-3" style={{ borderColor: "var(--line-soft)", background: "var(--bg)" }}>
+              <div className="flex items-start justify-between gap-2">
+                <div><strong className="text-[15px]">{raw.ticker}</strong><div className="text-[10px] font-bold" style={{ color: raw.direction === "BULLISH" ? "var(--positive)" : "var(--negative)" }}>{raw.direction} · {raw.score.toFixed(1)}</div></div>
+                <button type="button" onClick={() => toggleComparison(raw.ticker)} className="rounded border px-2 py-1 text-[9px]" style={{ borderColor: "var(--line)", color: "var(--text-mute)" }} aria-label={`Remove ${raw.ticker} from comparison`}>Remove</button>
+              </div>
+              <dl className="mt-3 grid grid-cols-[105px_1fr] gap-x-2 gap-y-1 text-[10px]">
+                <dt style={{ color: "var(--text-mute)" }}>Setup</dt><dd>{raw.setup_type || "Unknown"}</dd>
+                <dt style={{ color: "var(--text-mute)" }}>Spot → target</dt><dd>{fmt(raw.spot)} → <span style={{ color: "var(--gold)" }}>{fmt(raw.target)}</span></dd>
+                <dt style={{ color: "var(--text-mute)" }}>Invalidation / R:R</dt><dd>{fmt(raw.invalidation)} / {raw.reward_risk?.toFixed(2) ?? "Unknown"}</dd>
+                <dt style={{ color: "var(--text-mute)" }}>Liquidity</dt><dd>{evidence?.coverage.status ?? raw.coverage_status ?? "unknown"} · {evidence?.coverage.contracts ?? raw.contracts ?? "?"} contracts</dd>
+                <dt style={{ color: "var(--text-mute)" }}>Observed</dt><dd>{eventTime} ET · {evidence?.freshness.status ?? "unknown"}</dd>
+                <dt style={{ color: "var(--text-mute)" }}>Expected move</dt><dd>Not observed</dd>
+                <dt style={{ color: "var(--text-mute)" }}>Catalyst</dt><dd>Not observed</dd>
+                <dt style={{ color: "var(--text-mute)" }}>Evidence</dt><dd title={evidence?.snapshot_id}>{evidence?.snapshot_id.slice(0, 12) ?? "Unavailable"}</dd>
+              </dl>
+              {!!evidence?.missing_reasons.length && <p className="mt-2 text-[9px]" style={{ color: "var(--gold)" }}>Missing: {evidence.missing_reasons.join(" · ")}</p>}
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                {[["Night Vision", "Replay chart"], ["Options Terminal", "Options"], ["Backtest", "Backtest"]].map(([panel, label]) => <button key={panel} type="button" onClick={() => navigateFromEvidence(panel, raw)} className="rounded border px-2 py-1 text-[9px]" style={{ borderColor: "var(--line)", color: "var(--text-dim)" }}>{label}</button>)}
+              </div>
+            </article>;
+          })}
+        </div>
+      )}
+    </section>
+    <div className="overflow-hidden rounded-xl border" style={{ borderColor: "var(--line)", background: "var(--panel)" }}>
+    <div className="hidden grid-cols-[42px_86px_86px_70px_90px_90px_1fr] gap-3 border-b px-4 py-2 text-[9px] font-bold uppercase tracking-[0.12em] sm:grid" style={{ borderColor: "var(--line)", color: "var(--text-mute)" }}>
+      <span>Rank</span><span>Ticker</span><span>Bias</span><span>Score</span><span>Confidence</span><span>Coverage</span><span>Setup / path</span>
+    </div>
+    {cards.map((raw, index) => {
+      const card = toCard(raw, index + 1);
+      const tone = raw.direction === "BULLISH" ? "var(--positive)" : "var(--negative)";
+      return <details key={raw.ticker} className="group border-b last:border-b-0" style={{ borderColor: "var(--line-soft)" }}>
+        <summary className="grid cursor-pointer list-none grid-cols-[36px_1fr_auto] items-center gap-3 px-4 py-3 sm:grid-cols-[42px_86px_86px_70px_90px_90px_1fr]">
+          <span className="text-[10px]" style={{ color: "var(--text-mute)" }}>#{index + 1}</span>
+          <strong className="text-[12px]">{raw.ticker}</strong>
+          <span className="text-[10px] sm:order-none" style={{ color: tone }}>{raw.direction}</span>
+          <span className="hidden text-[12px] sm:block">{raw.score.toFixed(1)}</span>
+          <span className="hidden text-[9px] font-bold uppercase sm:block" style={{ color: raw.confidence === "higher" ? "var(--positive)" : "var(--gold)" }}>{raw.confidence ?? "legacy"}</span>
+          <span className="hidden text-[10px] sm:block" style={{ color: "var(--text-dim)" }}>{raw.coverage_status ?? "unknown"}</span>
+          <span className="hidden truncate text-[10px] sm:block" style={{ color: "var(--text-dim)" }}>{raw.setup_type} · target {fmt(raw.target)}</span>
+        </summary>
+        <div className="border-t p-3" style={{ borderColor: "var(--line-soft)", background: "var(--bg)" }}>
+          <ResultCard card={card} />
+          <div className="mt-2 flex flex-wrap gap-3 px-1 text-[10px]" style={{ color: "var(--text-mute)" }}>
+            <span>OPRA cells {raw.coverage_cells ?? "unknown"}</span><span>contracts {raw.contracts ?? "unknown"}</span><span>R:R {raw.reward_risk?.toFixed(2) ?? "unknown"}</span>
+            {raw.evidence_snapshot && <span title={raw.evidence_snapshot.snapshot_id}>Evidence {raw.evidence_snapshot.snapshot_id.slice(0, 12)} · {raw.evidence_snapshot.freshness.status} · {raw.evidence_snapshot.session.phase} ET</span>}
+            {!!raw.quality_reasons?.length && <span style={{ color: "var(--gold)" }}>Hold: {raw.quality_reasons.join(" · ")}</span>}
+            {!!raw.evidence_snapshot?.missing_reasons.length && <span style={{ color: "var(--gold)" }}>Missing: {raw.evidence_snapshot.missing_reasons.join(" · ")}</span>}
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2 px-1">
+            <button
+              type="button"
+              onClick={() => toggleComparison(raw.ticker)}
+              aria-pressed={activeSelectedTickers.includes(raw.ticker)}
+              disabled={!activeSelectedTickers.includes(raw.ticker) && activeSelectedTickers.length >= 3}
+              className="rounded-md border px-2.5 py-1 text-[10px] disabled:cursor-not-allowed disabled:opacity-40"
+              style={{ borderColor: activeSelectedTickers.includes(raw.ticker) ? "var(--gold)" : "var(--line)", color: activeSelectedTickers.includes(raw.ticker) ? "var(--gold)" : "var(--text-dim)" }}
+            >
+              {activeSelectedTickers.includes(raw.ticker) ? "Compared" : "Compare"}
+            </button>
+            {[['Night Vision', raw.evidence_snapshot?.replay_available ? 'Replay chart' : 'Validate chart'], ['Options Terminal', 'Structure'], ['Backtest', 'Test'], ['Trader Journal', 'Record']].map(([panel, label]) => <button key={panel} type="button" onClick={() => navigateFromEvidence(panel, raw)} className="rounded-md border px-2.5 py-1 text-[10px]" style={{ borderColor: "var(--line)", color: "var(--text-dim)" }}>{label}</button>)}
+          </div>
+        </div>
+      </details>;
+    })}
+    </div>
+  </div>;
 }
 
 // ---------------------------------------------------------------------------
@@ -808,7 +931,7 @@ function FlashAgenticCard({ row }: { row: FlashAgenticRow }) {
 // Component
 // ---------------------------------------------------------------------------
 
-export function SetupScanner() {
+export function SetupScanner({ onNavigate }: { onNavigate?: (panel: string, ticker?: string) => void } = {}) {
   const [mode, setMode] = useState<ScanMode>("short");
   const [clusterExp, setClusterExp] = useState(CLUSTER_EXP_OPTIONS[0].value);
   const [scanning, setScanning] = useState(false);
@@ -819,6 +942,7 @@ export function SetupScanner() {
   const [sideFilter, setSideFilter] = useState<ClusterSideFilter>("all");
   const [kindFilter, setKindFilter] = useState<ClusterKindFilter>("all");
   const [job, setJob] = useState<RealScanJob | null>(null);
+  const [scanMeta, setScanMeta] = useState<RealScanResult | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyEntries, setHistoryEntries] = useState<SavedScanEntry[]>([]);
@@ -826,6 +950,7 @@ export function SetupScanner() {
   const [agenticView, setAgenticView] = useState(false);
   const [agentic, setAgentic] = useState<FlashAgenticLive | null>(null);
   const [agenticError, setAgenticError] = useState("");
+  const [discoveryMessage, setDiscoveryMessage] = useState("");
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -862,7 +987,7 @@ export function SetupScanner() {
     };
   }, [agenticView]);
 
-  async function startScan(strategy: ScanStrategy) {
+  async function startScan(strategy: ScanStrategy, modeOverride: ScanMode = mode, tickers?: string[]) {
     if (scanning) return;
     if (pollRef.current) clearInterval(pollRef.current);
     setAgenticView(false);
@@ -872,15 +997,17 @@ export function SetupScanner() {
     setSideFilter("all");
     setKindFilter("all");
     setJob(null);
+    setScanMeta(null);
     setErrorMessage("");
     setScanning(true);
 
     try {
       const { job_id } = await startScanJob({
-        mode,
+        mode: modeOverride,
         strategy,
         limit: RESULT_LIMIT,
         clusterExp: strategy === "cipher" || strategy === "cluster" ? clusterExp : undefined,
+        tickers,
       });
 
       pollRef.current = setInterval(async () => {
@@ -891,10 +1018,12 @@ export function SetupScanner() {
             if (pollRef.current) clearInterval(pollRef.current);
             const top = j.result?.top ?? [];
             const resolvedStrategy = (j.result?.strategy as ScanStrategy) ?? strategy;
+            setScanMeta(j.result ?? null);
             setLastStrategy(resolvedStrategy);
             if (resolvedStrategy === "cluster" || FLASH_STRATEGIES.has(resolvedStrategy)) {
               setRawResults(top);
             } else {
+              setRawResults(top);
               setResults(top.map((c, i) => toCard(c, i + 1)));
             }
             setScanning(false);
@@ -911,6 +1040,7 @@ export function SetupScanner() {
             if (strategy === "cluster" || FLASH_STRATEGIES.has(strategy)) {
               setRawResults(j.partial_top);
             } else {
+              setRawResults(j.partial_top);
               setResults(j.partial_top.map((c, i) => toCard(c, i + 1)));
             }
             setHasResults(true);
@@ -924,6 +1054,22 @@ export function SetupScanner() {
     } catch (err) {
       setErrorMessage(err instanceof ApiError ? err.message : "Failed to start scan.");
       setScanning(false);
+    }
+  }
+
+  async function startDiscoveryScan() {
+    if (scanning) return;
+    setDiscoveryMessage("Refreshing delayed Finviz discovery…");
+    try {
+      const discovery = await fetchFinvizDiscovery();
+      if (!discovery.symbols.length) {
+        setDiscoveryMessage("Finviz discovery unavailable; the normal Cipher universe is still available.");
+        return;
+      }
+      setDiscoveryMessage(`${discovery.symbols.length} delayed candidates found; validating each through Alpaca SIP/OPRA.`);
+      await startScan("cipher", mode, discovery.symbols);
+    } catch (error) {
+      setDiscoveryMessage(error instanceof Error ? error.message : "Finviz discovery unavailable.");
     }
   }
 
@@ -950,13 +1096,14 @@ export function SetupScanner() {
       const result = await loadSavedScan(entry.id);
       const top = result.top ?? [];
       const strategy = (result.strategy as ScanStrategy) ?? "cipher";
+      setScanMeta(result);
       setLastStrategy(strategy);
       if (strategy === "cluster" || FLASH_STRATEGIES.has(strategy)) {
         setRawResults(top);
         setResults([]);
       } else {
         setResults(top.map((c, i) => toCard(c, i + 1)));
-        setRawResults([]);
+        setRawResults(top);
       }
       setHasResults(true);
       setHistoryOpen(false);
@@ -996,10 +1143,25 @@ export function SetupScanner() {
           Setup Scanner
         </h1>
         <p className="text-[13px] mt-1 max-w-[640px]" style={{ color: "var(--text-dim)" }}>
-          The Cipher engine ranks the entire universe and surfaces the 30 highest-conviction
-          setups. Powered by the Cipher proprietary model.
+          Choose the job first. Data-quality and liquidity gates run before structural score;
+          confidence describes evidence coverage, not a predicted win rate.
         </p>
       </div>
+
+      <div role="region" className="grid grid-cols-2 gap-2 lg:grid-cols-3 2xl:grid-cols-6" aria-label="Scanner presets">
+        {SCAN_PRESETS.map((preset) => <button key={preset.label} type="button" disabled={scanning} onClick={() => { setMode(preset.mode); startScan(preset.strategy, preset.mode); }} className="rounded-xl border p-3 text-left disabled:opacity-60" style={{ borderColor: "var(--line)", background: "var(--panel)" }}>
+          <span className="block text-[11px] font-bold">{preset.label}</span><span className="mt-1 block text-[9px]" style={{ color: "var(--text-mute)" }}>{preset.detail}</span>
+        </button>)}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-3 rounded-xl border px-3 py-2" style={{ borderColor: "var(--line)", background: "var(--panel-2)" }}>
+        <button type="button" disabled={scanning} onClick={startDiscoveryScan} className="rounded-lg border px-3 py-1.5 text-[10px] font-bold disabled:opacity-50" style={{ borderColor: "var(--accent)", color: "var(--accent)" }}>Discover liquid movers</button>
+        <span className="text-[10px]" style={{ color: "var(--text-mute)" }}>{discoveryMessage || "Finviz supplies a delayed shortlist; Alpaca remains the live validation source."}</span>
+      </div>
+
+      <details className="rounded-xl border px-3 py-2" style={{ borderColor: "var(--line)", background: "var(--panel)" }}>
+        <summary className="cursor-pointer text-[10px] font-bold uppercase tracking-[0.12em]" style={{ color: "var(--text-mute)" }}>Advanced engines and expiration controls</summary>
+        <div className="mt-3 flex flex-col gap-3">
 
       {/* Control row 1: mode tabs + primary CTA */}
       <div className="flex flex-row flex-wrap items-center gap-3 pt-1">
@@ -1108,6 +1270,8 @@ export function SetupScanner() {
           <BetaBadge />
         </button>
       </div>
+        </div>
+      </details>
 
       {/* Download CSV + local scan history — history is our own addition since the real
           product doesn't persist scans server-side (see core/scan_history.py). */}
@@ -1208,6 +1372,14 @@ export function SetupScanner() {
       <p className="text-[13px]" style={{ color: "var(--text-mute)" }}>
         {HELPER_TEXT[mode]}
       </p>
+
+      {scanMeta && <div role="region" className="grid grid-cols-2 gap-2 sm:grid-cols-5" aria-label="Scan funnel">
+        {[
+          ["Scanned", scanMeta.scanned], ["Qualified", scanMeta.qualified], ["Rejected", scanMeta.rejected ?? 0],
+          ["Provider errors", scanMeta.failed ?? 0], ["Actionable", scanMeta.actionable ?? 0],
+        ].map(([label, value]) => <div key={String(label)} className="rounded-lg border px-3 py-2" style={{ borderColor: "var(--line)", background: "var(--panel)" }}><span className="block text-[9px] uppercase" style={{ color: "var(--text-mute)" }}>{label}</span><strong className="text-sm">{value}</strong></div>)}
+        {!!Object.keys(scanMeta.rejection_counts ?? {}).length && <div className="col-span-full rounded-lg border px-3 py-2 text-[10px]" style={{ borderColor: "var(--line)", color: "var(--gold)" }}>Rejection funnel: {Object.entries(scanMeta.rejection_counts ?? {}).map(([reason, count]) => `${reason.replaceAll("_", " ")} ${count}`).join(" · ")}</div>}
+      </div>}
 
       {/* Warning banner — visible while scanning and after results land */}
       {(scanning || hasResults) && (
@@ -1366,11 +1538,7 @@ export function SetupScanner() {
         </div>
       )}
       {!agenticView && hasResults && !isRawView && (
-        <div className="grid grid-cols-1 sm:grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-4 mt-1">
-          {results.map((card) => (
-            <ResultCard key={card.ticker} card={card} />
-          ))}
-        </div>
+        <ResultComparison cards={rawResults} onNavigate={onNavigate} />
       )}
 
       {/* Empty state */}

@@ -73,6 +73,12 @@ def validate_card(raw: dict[str, Any], cfg: ExecutorConfig, now: datetime | None
     else:
         direction = Direction(direction_text)
     setup = normalize_setup(raw.get("setup") or raw.get("setup_type") or raw.get("setupType"))
+    # Upstream scanner flags are advisory only when absent, but an explicit false
+    # is authoritative. This keeps leaderboard/context cards out of the paper book.
+    if raw.get("geometry_valid") is False:
+        reasons.append(SkipReason.SKIPPED_INVALID_GEOMETRY.value)
+    if raw.get("actionable") is False:
+        reasons.append(SkipReason.SKIPPED_NOT_ACTIONABLE.value)
     try:
         captured = parse_ts(raw.get("captured_timestamp") or raw.get("captured_at") or raw.get("timestamp"))
     except Exception:

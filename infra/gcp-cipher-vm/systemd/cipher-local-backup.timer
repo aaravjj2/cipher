@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily Cipher local state restore-verified backup
+
+[Timer]
+OnCalendar=*-*-* 23:30:00 UTC
+Persistent=true
+RandomizedDelaySec=120
+Unit=cipher-local-backup.service
+
+[Install]
+WantedBy=timers.target

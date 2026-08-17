@@ -432,16 +432,20 @@ def test_local_scheduler_records_blocked_jobs_without_execution(tmp_path: Path):
     ), f"unexpected scheduler status: {[e['status'] for e in events]}"
     assert any(event["status"] == "blocked" for event in events)
 
-    # Everything below depends on which research engines are installed
-    # (requirements-research-engines.txt), which the runtime does not need — the
-    # core imports only numpy and scipy. Without them every job stops earlier, at
-    # qlib_or_rdagent_runtime_unavailable, so neither a "ready" job nor the volume
-    # gate is reachable. Asserting them anyway proved nothing and read as a red
-    # test on any runtime-only checkout.
-    if all(event["status"] == "blocked" for event in events):
-        pytest.skip("no research engine capabilities installed; nothing can be ready")
-    assert any(event["status"] == "ready_for_manual_research_run" for event in events)
-    assert any(event["blocker"] == "full_volume_gate_reference_scope_unresolved" for event in events)
+    # The factor blocker depends specifically on Qlib + RD-Agent. Other model
+    # jobs can be ready independently, so `any ready` cannot be used as a proxy
+    # for the factor-engine installation state.
+    factor_events = [event for event in events if event["job_id"] in {
+        "factor_research", "autoresearch_feedback",
+    }]
+    packages = capabilities["research_packages"]
+    expected = (
+        "full_volume_gate_reference_scope_unresolved"
+        if packages["qlib"] and packages["rdagent"]
+        else "qlib_or_rdagent_runtime_unavailable"
+    )
+    assert factor_events
+    assert all(event["blocker"] == expected for event in factor_events)
 
 
 def test_vectorbt_adapter_refuses_uncleared_holdout_c(tmp_path: Path):

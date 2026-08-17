@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """Cipher Research Engine MCP. Research only: no orders, no secrets in output."""
 from __future__ import annotations
 import json, math, os, re, sqlite3, sys, uuid

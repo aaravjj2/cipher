@@ -51,9 +51,30 @@ def eligible_strategies(registry_path: Path = REGISTRY_PATH) -> set[str]:
     except sqlite3.Error:
         return set()
     try:
-        rows = conn.execute(
-            "select strategy_id, state from promotion_events"
-        ).fetchall()
+        # The canonical registry stores the materialized promotion state on
+        # strategies.current_state. Older paper-runtime registries stored an event
+        # stream with a `state` column, while current registries call it `to_state`.
+        # Support all three shapes and fail closed on anything else.
+        strategy_columns = {
+            str(row[1]) for row in conn.execute("pragma table_info(strategies)")
+        }
+        event_columns = {
+            str(row[1]) for row in conn.execute("pragma table_info(promotion_events)")
+        }
+        if {"strategy_id", "current_state"}.issubset(strategy_columns):
+            rows = conn.execute(
+                "select strategy_id, current_state from strategies"
+            ).fetchall()
+        elif {"strategy_id", "to_state"}.issubset(event_columns):
+            rows = conn.execute(
+                "select strategy_id, to_state from promotion_events order by decided_at"
+            ).fetchall()
+        elif {"strategy_id", "state"}.issubset(event_columns):
+            rows = conn.execute(
+                "select strategy_id, state from promotion_events"
+            ).fetchall()
+        else:
+            return set()
     except sqlite3.Error:
         return set()
     finally:

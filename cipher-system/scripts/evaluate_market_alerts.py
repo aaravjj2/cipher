@@ -53,8 +53,17 @@ COMPARISONS: dict[str, tuple[str, str]] = {
     "price_below": ("price_context", "below"),
     "day_change_above": ("day_change_pct", "above"),
     "day_change_below": ("day_change_pct", "below"),
+    "scanner_score_above": ("value", "above"),
+    "flow_premium_above": ("value", "above"),
+    "net_gex_above": ("value", "above"),
+    "net_gex_below": ("value", "below"),
+    "atm_iv_above": ("value", "above"),
+    "atm_spread_above": ("value", "above"),
+    "expiration_days_below": ("value", "below"),
+    "portfolio_delta_abs_above": ("value", "above"),
+    "data_stale_count_above": ("value", "above"),
 }
-UNITS = {"price_context": "", "day_change_pct": "%"}
+UNITS = {"price_context": "", "day_change_pct": "%", "value": ""}
 
 
 def utcnow() -> datetime:
@@ -85,6 +94,17 @@ def fetch_quote(ticker: str, *, base: str = CORE_URL, timeout: float = 15.0) -> 
     url = f"{base}/api/quote?ticker={urllib.parse.quote(ticker)}"
     try:
         with urllib.request.urlopen(url, timeout=timeout) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except (urllib.error.URLError, urllib.error.HTTPError, ValueError, TimeoutError) as exc:
+        return {"error": f"{type(exc).__name__}: {exc}"}
+
+
+def fetch_observation(rule: dict[str, Any], *, base: str = CORE_URL, timeout: float = 30.0) -> dict[str, Any]:
+    if rule.get("kind") in {"price_above", "price_below", "day_change_above", "day_change_below"}:
+        return fetch_quote(rule["ticker"], base=base, timeout=timeout)
+    query = urllib.parse.urlencode({"ticker": rule["ticker"], "kind": rule["kind"]})
+    try:
+        with urllib.request.urlopen(f"{base}/api/alert-metric?{query}", timeout=timeout) as response:
             return json.loads(response.read().decode("utf-8"))
     except (urllib.error.URLError, urllib.error.HTTPError, ValueError, TimeoutError) as exc:
         return {"error": f"{type(exc).__name__}: {exc}"}
@@ -154,15 +174,16 @@ def run(*, state_path: Path, target: str, dry_run: bool, db_path: Path,
         now: datetime | None = None) -> dict[str, Any]:
     state = load_state(state_path)
     rules = [r for r in alert_store.list_rules(db_path)["rules"] if r.get("enabled")]
-    quotes: dict[str, dict[str, Any]] = {}
+    quotes: dict[tuple[str, str], dict[str, Any]] = {}
     crossings: list[str] = []
     report: list[dict[str, Any]] = []
 
     for rule in rules:
         ticker = rule["ticker"]
-        if ticker not in quotes:
-            quotes[ticker] = fetch_quote(ticker)
-        outcome = evaluate_rule(rule, quotes[ticker], now=now)
+        metric_key = (ticker, rule["kind"])
+        if metric_key not in quotes:
+            quotes[metric_key] = fetch_observation(rule)
+        outcome = evaluate_rule(rule, quotes[metric_key], now=now)
         previous = (state.get(rule["id"]) or {}).get("status")
         entry = {"id": rule["id"], "ticker": ticker, "kind": rule["kind"],
                  "previous": previous, **outcome}
@@ -199,6 +220,14 @@ def run(*, state_path: Path, target: str, dry_run: bool, db_path: Path,
             "Read-only observation. Cipher places no orders and this is not advice.",
         ])
         delivered = send_hermes_message(message, target=target)
+        for row in report:
+            if row.get("notified"):
+                alert_store.record_delivery(
+                    rule_id=row["id"], observed_at=quotes[(row["ticker"], row["kind"])].get("as_of"),
+                    observed=row.get("observed"), threshold=float(row["threshold"]),
+                    channel=target, status="sent" if delivered in (None, 0, True) else "attempted",
+                    message=describe(next(rule for rule in rules if rule["id"] == row["id"]), row), db_path=db_path,
+                )
 
     if not dry_run:
         save_state(state_path, state)

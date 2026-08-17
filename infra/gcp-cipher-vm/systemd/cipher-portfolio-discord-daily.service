@@ -1,0 +1,20 @@
+[Unit]
+Description=Send daily Cipher shadow portfolio changes to Discord
+After=cipher-fronttest-portfolios.service
+
+[Service]
+Type=oneshot
+User=aarav
+Group=aarav
+WorkingDirectory=/home/aarav/Aarav/cipher/cipher-system
+EnvironmentFile=/home/aarav/Aarav/agent-stack/.env
+ExecStart=/home/aarav/.venvs/cipher/bin/python scripts/send_portfolio_daily_discord.py
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=/home/aarav/Aarav/cipher/runtime/data/fronttest_portfolios
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=cipher-portfolio-discord-daily

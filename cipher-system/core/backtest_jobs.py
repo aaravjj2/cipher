@@ -15,11 +15,15 @@ Research-only. Simulated fills over historical bars; places no orders.
 """
 from __future__ import annotations
 
+import gzip
+import json
+import os
 import threading
 import time
 import uuid
 from copy import deepcopy
 from datetime import datetime, timezone
+from pathlib import Path
 
 _JOBS: dict[str, dict] = {}
 _LOCK = threading.Lock()
@@ -32,6 +36,29 @@ MAX_JOBS = 40
 DEFAULT_UNIVERSE = [
     "NVDA", "AAPL", "SPY", "QQQ", "TSLA", "AMD", "META", "MSFT", "AMZN", "GOOGL",
 ]
+
+
+def _persist_run(payload: dict, bars: dict[str, list[dict]]) -> dict:
+    """Atomically persist the exact inputs and report for deterministic replay."""
+    run_id = payload["manifest"]["run_id"]
+    root = Path(__file__).resolve().parents[1] / "data" / "backtest_runs"
+    root.mkdir(parents=True, exist_ok=True)
+    snapshot = root / f"{run_id}.bars.json.gz"
+    report = root / f"{run_id}.report.json"
+    snapshot_tmp = root / f".{run_id}.bars.tmp.gz"
+    report_tmp = root / f".{run_id}.report.tmp.json"
+    with gzip.open(snapshot_tmp, "wt", encoding="utf-8") as handle:
+        json.dump(bars, handle, sort_keys=True, separators=(",", ":"))
+    os.replace(snapshot_tmp, snapshot)
+    artifacts = {
+        "input_snapshot": str(snapshot.relative_to(root.parents[1])),
+        "report": str(report.relative_to(root.parents[1])),
+    }
+    payload["manifest"]["artifacts"] = artifacts
+    with report_tmp.open("w", encoding="utf-8") as handle:
+        json.dump(payload, handle, sort_keys=True, indent=2, default=str)
+    os.replace(report_tmp, report)
+    return artifacts
 
 
 def _utcnow() -> str:
@@ -92,6 +119,11 @@ def start_backtest_job(
     target_atr: float | None = None,
     max_hold_bars: int | None = None,
     cost_bps: float | None = None,
+    slippage_bps: float = 2.0,
+    commission_bps: float = 0.0,
+    holdout_fraction: float = 0.30,
+    embargo_bars: int = 1,
+    seed: int = 17,
 ) -> str:
     """Queue a backtest. `mode` is 'filter' or 'standalone'."""
     symbols = [s.strip().upper() for s in (symbols or DEFAULT_UNIVERSE) if s.strip()]
@@ -126,14 +158,13 @@ def start_backtest_job(
                     message=f"Loading {len(symbols)} symbols of {timeframe} bars…")
 
             import sys
-            from pathlib import Path
-
             root = Path(__file__).resolve().parents[1]
             for path in (str(root), str(root.parent)):
                 if path not in sys.path:
                     sys.path.insert(0, path)
 
             import backtest_engine as be
+            import backtest_protocol as bp
             from scripts.run_obsidian_backtest import load_bars
 
             bars = load_bars(symbols, timeframe, years)
@@ -145,41 +176,105 @@ def start_backtest_job(
             _update(job_id, pct=45,
                     message=f"Loaded {len(bars)} symbols; running the {mode} evaluation…")
 
-            kw = {"cost_bps": cost_bps} if cost_bps is not None else {}
-            for name, value in (("stop_atr", stop_atr), ("target_atr", target_atr),
-                                ("max_hold_bars", max_hold_bars)):
-                if value is not None:
-                    kw[name] = value
+            effective_stop = be.DEFAULT_STOP_ATR if stop_atr is None else stop_atr
+            effective_target = be.DEFAULT_TARGET_ATR if target_atr is None else target_atr
+            effective_hold = be.DEFAULT_MAX_HOLD_BARS if max_hold_bars is None else max_hold_bars
+            # `cost_bps` remains a compatibility alias for old direct callers.
+            # Product/API runs name slippage and commission separately.
+            effective_slippage = float(cost_bps) if cost_bps is not None else slippage_bps
+            total_cost_bps = effective_slippage + commission_bps
+            spec = bp.experiment_spec(
+                mode=mode, symbols=symbols, timeframe=timeframe, years=years,
+                detector_mode=detector_mode, lookback_bars=lookback_bars,
+                entry_every=entry_every, control_repeats=control_repeats,
+                stop_atr=effective_stop, target_atr=effective_target,
+                max_hold_bars=effective_hold,
+                slippage_bps_per_side=effective_slippage,
+                commission_bps_per_side=commission_bps,
+                holdout_fraction=holdout_fraction, embargo_bars=embargo_bars,
+                seed=seed,
+            )
+            kw = {
+                "cost_bps": total_cost_bps,
+                "stop_atr": effective_stop,
+                "target_atr": effective_target,
+                "max_hold_bars": effective_hold,
+            }
 
-            if mode == "standalone":
-                result = be.run_backtest(
-                    bars, detector_params={"mode": detector_mode}, **kw
-                )
-                _update(job_id, pct=75, message="Running the matched random control…")
-                control = be.run_control(result, bars, repeats=control_repeats, **kw)
-                payload = {
-                    "mode": "standalone",
-                    "stats": result.stats,
-                    "params": result.params,
-                    "control": control,
-                    "caveat": result.caveat,
-                }
-            else:
-                payload = be.run_filter(
-                    bars,
+            train_bars, holdout_bars, coverage = bp.split_bars(
+                bars, holdout_fraction=holdout_fraction,
+                embargo_bars=embargo_bars,
+            )
+            manifest = bp.build_manifest(spec, coverage)
+
+            def evaluate(dataset: dict[str, list[dict]], *, include_control: bool = True) -> dict:
+                if mode == "standalone":
+                    evaluated = be.run_backtest(
+                        dataset, detector_params={"mode": detector_mode}, **kw
+                    )
+                    trade_returns = [trade.return_pct for trade in evaluated.trades]
+                    block_length = spec["validation"]["uncertainty"]["block_length_trades"]
+                    out = {
+                        "stats": evaluated.stats,
+                        "params": evaluated.params,
+                        "portfolio": bp.portfolio_summary(evaluated.trades),
+                        "trade_ledger": [trade.__dict__ for trade in evaluated.trades],
+                        "uncertainty": bp.bootstrap_mean_interval(
+                            trade_returns, seed=seed,
+                        ),
+                        "serial_uncertainty": bp.moving_block_bootstrap_mean_interval(
+                            trade_returns, seed=seed, block_length=block_length,
+                        ),
+                    }
+                    if include_control:
+                        out["control"] = be.run_control(
+                            evaluated, dataset, repeats=control_repeats, seed=seed, **kw
+                        )
+                    return out
+                filtered = be.run_filter(
+                    dataset,
                     detector_params={"mode": detector_mode},
                     lookback_bars=lookback_bars,
                     entry_every=entry_every,
                     control_repeats=control_repeats,
+                    seed=seed,
                     **kw,
                 )
+                return filtered
+
+            if mode == "standalone":
+                _update(job_id, pct=75, message="Running the matched random control…")
+                full = evaluate(bars)
+                payload = {
+                    "mode": "standalone",
+                    **full,
+                    "caveat": be.BacktestResult(strategy="obsidian", symbols=[]).caveat,
+                }
+            else:
+                payload = evaluate(bars)
                 payload["mode"] = "filter"
+
+            _update(job_id, pct=86, message="Evaluating locked train and holdout partitions…")
+            validation = {"status": manifest["validation_status"]}
+            if train_bars and holdout_bars:
+                validation["train"] = evaluate(train_bars)
+                validation["holdout"] = evaluate(holdout_bars)
+            else:
+                validation["blocker"] = (
+                    "No symbol had at least 120 bars in both chronological partitions. "
+                    "Lengthen history or use a finer timeframe."
+                )
 
             payload["symbols"] = sorted(bars)
             payload["timeframe"] = timeframe
             payload["years"] = years
             payload["detector_mode"] = detector_mode
+            payload["manifest"] = manifest
+            payload["experiment_id"] = manifest["experiment_id"]
+            payload["run_id"] = manifest["run_id"]
+            payload["validation"] = validation
             payload["elapsed_ms"] = int((time.time() - started) * 1000)
+            payload["artifacts"] = _persist_run(payload, bars)
             _update(job_id, status="done", pct=100, result=payload, message="Backtest complete")
         except Exception as exc:  # noqa: BLE001 - surface the failure to the UI
             _update(job_id, status="error", error=f"{type(exc).__name__}: {exc}",

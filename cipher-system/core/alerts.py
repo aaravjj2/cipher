@@ -15,13 +15,19 @@ Rules are evaluated in two places, and the difference matters:
 """
 from __future__ import annotations
 
+import json
 import sqlite3
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
 DEFAULT_DB = Path(__file__).resolve().parents[1] / "data" / "alerts.sqlite"
-KINDS = {"price_above", "price_below", "day_change_above", "day_change_below"}
+KINDS = {
+    "price_above", "price_below", "day_change_above", "day_change_below",
+    "scanner_score_above", "flow_premium_above", "net_gex_above", "net_gex_below",
+    "atm_iv_above", "atm_spread_above", "expiration_days_below",
+    "portfolio_delta_abs_above", "data_stale_count_above",
+}
 
 
 def _now() -> str:
@@ -40,6 +46,12 @@ def _connect(path: Path) -> sqlite3.Connection:
             created_at TEXT NOT NULL
         )
     """)
+    db.execute("""CREATE TABLE IF NOT EXISTS alert_deliveries(
+        delivery_key TEXT PRIMARY KEY, rule_id TEXT NOT NULL, observed_at TEXT,
+        observed REAL, threshold REAL NOT NULL, channel TEXT NOT NULL,
+        status TEXT NOT NULL, message TEXT NOT NULL, created_at TEXT NOT NULL
+    )""")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_alert_deliveries_rule_time ON alert_deliveries(rule_id,created_at DESC)")
     return db
 
 
@@ -48,8 +60,10 @@ def list_rules(db_path: Path = DEFAULT_DB) -> dict:
         rows = db.execute(
             "SELECT id,ticker,kind,threshold,enabled,created_at FROM alert_rules ORDER BY created_at DESC"
         ).fetchall()
+        deliveries = db.execute("SELECT * FROM alert_deliveries ORDER BY created_at DESC LIMIT 100").fetchall()
     return {"rules": [{**dict(row), "enabled": bool(row["enabled"])} for row in rows],
-            "kinds": sorted(KINDS), "local_only": True, "execution_capability": False}
+            "deliveries": [dict(row) for row in deliveries], "kinds": sorted(KINDS),
+            "local_only": True, "execution_capability": False}
 
 
 def add_rule(*, ticker: str, kind: str, threshold: object, db_path: Path = DEFAULT_DB) -> dict:
@@ -78,3 +92,16 @@ def delete_rule(rule_id: str, db_path: Path = DEFAULT_DB) -> dict:
     if cursor.rowcount != 1:
         raise ValueError("unknown alert rule")
     return {"deleted": str(rule_id)}
+
+
+def record_delivery(*, rule_id: str, observed_at: str | None, observed: float | None,
+                    threshold: float, channel: str, status: str, message: str,
+                    db_path: Path = DEFAULT_DB) -> dict:
+    """Append one idempotent delivery record for an observed crossing."""
+    key = f"{rule_id}|{observed_at or 'unknown'}|{threshold:g}|{channel}"
+    row = {"delivery_key": key, "rule_id": rule_id, "observed_at": observed_at,
+           "observed": observed, "threshold": threshold, "channel": channel,
+           "status": status, "message": message[:1000], "created_at": _now()}
+    with _connect(db_path) as db:
+        db.execute("INSERT OR IGNORE INTO alert_deliveries VALUES(?,?,?,?,?,?,?,?,?)", tuple(row.values()))
+    return row

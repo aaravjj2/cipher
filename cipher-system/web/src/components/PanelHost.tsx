@@ -7,6 +7,7 @@ import { Spyglass as SpyglassBase, type SpyglassTab } from "@/components/panels/
 import { News as NewsBase } from "@/components/panels/News";
 import { Watchlists as WatchlistsBase } from "@/components/panels/Watchlists";
 import { Standing as StandingBase } from "@/components/panels/Standing";
+import { Beliefs as BeliefsBase } from "@/components/panels/Beliefs";
 import { Holdings as HoldingsBase } from "@/components/panels/Holdings";
 import { AskCipher as AskCipherBase } from "@/components/panels/AskCipher";
 import { Trident as TridentBase } from "@/components/panels/Trident";
@@ -18,6 +19,16 @@ import { OptionsBacktest as OptionsBacktestBase } from "@/components/panels/Opti
 import { GexReplay as GexReplayBase } from "@/components/panels/GexReplay";
 import { Alerts as AlertsBase } from "@/components/panels/Alerts";
 import { Settings as SettingsBase } from "@/components/panels/Settings";
+import { MorningBrief as MorningBriefBase } from "@/components/panels/MorningBrief";
+import { PaperPortfolios as PaperPortfoliosBase } from "@/components/panels/PaperPortfolios";
+import { OptionsTerminal as OptionsTerminalBase } from "@/components/panels/OptionsTerminal";
+import { PortfolioRisk as PortfolioRiskBase } from "@/components/panels/PortfolioRisk";
+import { ChartWorkbench as ChartWorkbenchBase } from "@/components/panels/ChartWorkbench";
+import { TraderJournal as TraderJournalBase } from "@/components/panels/TraderJournal";
+import { CompanyContext as CompanyContextBase } from "@/components/panels/CompanyContext";
+import { OperatorStatus as OperatorStatusBase } from "@/components/panels/OperatorStatus";
+import { ResearchDesk as ResearchDeskBase } from "@/components/panels/ResearchDesk";
+import { TickerWorkbench as TickerWorkbenchBase } from "@/components/panels/TickerWorkbench";
 
 /**
  * One place that maps a sidebar label to the panel it renders.
@@ -41,6 +52,7 @@ const Spyglass = memo(SpyglassBase);
 const News = memo(NewsBase);
 const Watchlists = memo(WatchlistsBase);
 const Standing = memo(StandingBase);
+const Beliefs = memo(BeliefsBase);
 const Holdings = memo(HoldingsBase);
 const AskCipher = memo(AskCipherBase);
 const Backtest = memo(BacktestBase);
@@ -52,16 +64,36 @@ const Trident = memo(TridentBase);
 const ChartSaves = memo(ChartSavesBase);
 const SetupScanner = memo(SetupScannerBase);
 const Settings = memo(SettingsBase);
+const MorningBrief = memo(MorningBriefBase);
+const PaperPortfolios = memo(PaperPortfoliosBase);
+const OptionsTerminal = memo(OptionsTerminalBase);
+const PortfolioRisk = memo(PortfolioRiskBase);
+const ChartWorkbench = memo(ChartWorkbenchBase);
+const TraderJournal = memo(TraderJournalBase);
+const CompanyContext = memo(CompanyContextBase);
+const OperatorStatus = memo(OperatorStatusBase);
+const ResearchDesk = memo(ResearchDeskBase);
+const TickerWorkbench = memo(TickerWorkbenchBase);
 
 /** Uppercase display titles — used by Header's subtitle and by dockview tab labels. */
 export const PANEL_TITLES: Record<string, string> = {
+  "Morning Brief": "MORNING BRIEF",
+  "Research Desk": "RESEARCH DESK",
+  "Ticker Workbench": "TICKER WORKBENCH",
   "Strike Matrix": "STRIKE MATRIX",
+  "Options Terminal": "OPTIONS TERMINAL",
+  "Chart Workbench": "CHART WORKBENCH",
   "Night Vision": "NIGHT VISION",
   Spyglass: "SPYGLASS",
   News: "NEWS",
   "My Watchlists": "MY WATCHLISTS",
   Standing: "STANDING",
+  Beliefs: "BELIEFS",
   Holdings: "HOLDINGS",
+  "Portfolio Risk": "PORTFOLIO RISK",
+  "Trader Journal": "TRADER JOURNAL",
+  "Company Context": "COMPANY & EVENT CONTEXT",
+  "Paper Portfolios": "PAPER PORTFOLIOS",
   "Ask Cipher": "ASK CIPHER",
   Trident: "TRIDENT",
   "Chart Saves": "CHART SAVES",
@@ -72,6 +104,7 @@ export const PANEL_TITLES: Record<string, string> = {
   Alerts: "LOCAL ALERTS",
   Strategies: "STRATEGY CATALOG",
   Settings: "SETTINGS",
+  "Operator Status": "OPERATOR STATUS",
 };
 
 export function panelTitle(label: string): string {
@@ -96,6 +129,7 @@ type PanelHostProps = {
    */
   spyglassTab?: SpyglassTab;
   onSpyglassTabChange?: (tab: SpyglassTab) => void;
+  onNavigate?: (panel: string, ticker?: string) => void;
 };
 
 export function PanelHost({
@@ -104,10 +138,21 @@ export function PanelHost({
   toolbarSlot = null,
   spyglassTab,
   onSpyglassTabChange,
+  onNavigate,
 }: PanelHostProps) {
   switch (panel) {
+    case "Morning Brief":
+      return <MorningBrief ticker={ticker} onNavigate={onNavigate} />;
+    case "Research Desk":
+      return <ResearchDesk onNavigate={onNavigate} />;
+    case "Ticker Workbench":
+      return <TickerWorkbench ticker={ticker} onNavigate={onNavigate} />;
     case "Strike Matrix":
       return <StrikeMatrix ticker={ticker} toolbarSlot={toolbarSlot} />;
+    case "Options Terminal":
+      return <OptionsTerminal key={ticker} ticker={ticker} onNavigate={onNavigate} />;
+    case "Chart Workbench":
+      return <ChartWorkbench key={ticker} ticker={ticker} />;
     case "Night Vision":
       return <NightVision ticker={ticker} toolbarSlot={toolbarSlot} />;
     case "Spyglass":
@@ -120,10 +165,20 @@ export function PanelHost({
       return <Watchlists />;
     case "Standing":
       return <Standing />;
+    case "Beliefs":
+      return <Beliefs />;
     case "Holdings":
       return <Holdings />;
+    case "Portfolio Risk":
+      return <PortfolioRisk />;
+    case "Trader Journal":
+      return <TraderJournal ticker={ticker} />;
+    case "Company Context":
+      return <CompanyContext key={ticker} ticker={ticker} />;
+    case "Paper Portfolios":
+      return <PaperPortfolios />;
     case "Ask Cipher":
-      return <AskCipher />;
+      return <AskCipher ticker={ticker} />;
     case "Backtest":
       return <Backtest ticker={ticker} />;
     case "Strategies":
@@ -139,9 +194,11 @@ export function PanelHost({
     case "Chart Saves":
       return <ChartSaves />;
     case "Setup Scanner":
-      return <SetupScanner />;
+      return <SetupScanner onNavigate={onNavigate} />;
     case "Settings":
       return <Settings />;
+    case "Operator Status":
+      return <OperatorStatus />;
     default:
       // Reachable for real: a saved workspace layout can name a panel that a later
       // build renamed or removed. Say so plainly rather than rendering an empty tile.

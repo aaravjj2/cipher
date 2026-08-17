@@ -47,6 +47,13 @@ cipher-system/app/public/
 cipher-system/app/public_new/
 cipher-system/app/public_backup_*/
 cipher-system/app/public.legacy/
+cipher-system/app/.releases/
 
 # Backtest bar cache — 68 MB of re-fetchable Alpaca OHLCV
 cipher-system/data/bar_cache/
+
+# Local release-capture retries; only named/sanitized walkthrough media is kept.
+cipher-system/release-artifacts/page@*.webm
+
+# Local runtime/release state
+runtime/

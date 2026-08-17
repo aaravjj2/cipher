@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterator
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 class PaperExecutorDatabase:
@@ -141,6 +141,26 @@ class PaperExecutorDatabase:
                     pnl_pct real,
                     payload_json text not null
                 );
+                create table if not exists contract_mark_tape (
+                    id text primary key,
+                    position_id text not null references paper_positions(id),
+                    episode_id text,
+                    symbol text not null,
+                    role text not null,
+                    observed_at text not null,
+                    captured_at text not null,
+                    source text not null,
+                    bid real,
+                    ask real,
+                    bid_size integer,
+                    ask_size integer,
+                    last real,
+                    volume integer,
+                    open_interest integer,
+                    quote_age_seconds real,
+                    payload_json text not null
+                );
+                create index if not exists idx_contract_tape_position on contract_mark_tape(position_id,symbol,observed_at);
                 create table if not exists paper_events (
                     id text primary key,
                     event_time text not null,
@@ -387,6 +407,68 @@ class PaperExecutorDatabase:
                 ),
             )
         return mark_id
+
+    def insert_contract_mark(self, *, position_id: str, episode_id: str | None, symbol: str,
+                             role: str, quote: Any, captured_at: datetime,
+                             source: str) -> str:
+        """Persist an observed quote; never interpolate or synthesize absent fields."""
+        from .models import sha256_id
+
+        observed = quote.timestamp.astimezone(timezone.utc)
+        captured = captured_at.astimezone(timezone.utc)
+        payload = {
+            "position_id": position_id, "episode_id": episode_id, "symbol": symbol.upper(),
+            "role": role, "observed_at": observed.isoformat(), "captured_at": captured.isoformat(),
+            "source": source, "bid": quote.bid, "ask": quote.ask,
+            "bid_size": quote.bid_size, "ask_size": quote.ask_size, "last": quote.last,
+            "volume": quote.volume, "open_interest": quote.open_interest,
+            "quote_age_seconds": max(0.0, (captured - observed).total_seconds()),
+            "crossed_or_locked": quote.ask <= quote.bid,
+        }
+        mark_id = sha256_id("contract_mark", {"position": position_id, "symbol": symbol,
+                                                "role": role, "observed": payload["observed_at"],
+                                                "captured": payload["captured_at"]})
+        with self.connect() as db:
+            db.execute("""insert or ignore into contract_mark_tape(
+                id,position_id,episode_id,symbol,role,observed_at,captured_at,source,bid,ask,bid_size,
+                ask_size,last,volume,open_interest,quote_age_seconds,payload_json)
+                values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (mark_id, position_id, episode_id, symbol.upper(), role, payload["observed_at"],
+                 payload["captured_at"], source, quote.bid, quote.ask, quote.bid_size, quote.ask_size,
+                 quote.last, quote.volume, quote.open_interest, payload["quote_age_seconds"],
+                 json.dumps(payload, default=str)))
+        return mark_id
+
+    def mark_coverage(self, position_id: str, *, expected_interval_seconds: int = 30,
+                      fresh_seconds: int = 30) -> dict[str, Any]:
+        with self.connect() as db:
+            rows = [dict(row) for row in db.execute(
+                "select * from contract_mark_tape where position_id=? order by symbol,observed_at", (position_id,)
+            ).fetchall()]
+        by_symbol: dict[str, list[dict[str, Any]]] = {}
+        for row in rows:
+            by_symbol.setdefault(row["symbol"], []).append(row)
+        symbols = []
+        for symbol, marks in sorted(by_symbol.items()):
+            times = [datetime.fromisoformat(row["observed_at"]) for row in marks]
+            gaps = [(right - left).total_seconds() for left, right in zip(times, times[1:])]
+            duration = max(0.0, (times[-1] - times[0]).total_seconds()) if times else 0.0
+            expected = max(1, int(duration / max(1, expected_interval_seconds)) + 1)
+            symbols.append({
+                "symbol": symbol, "role": marks[0]["role"], "samples": len(marks),
+                "expected_samples": expected, "coverage_pct": round(min(100.0, len(marks) / expected * 100), 1),
+                "first_observed_at": marks[0]["observed_at"], "last_observed_at": marks[-1]["observed_at"],
+                "maximum_gap_seconds": max(gaps) if gaps else None,
+                "fresh_quote_pct": round(sum(float(row["quote_age_seconds"] or 0) <= fresh_seconds for row in marks) / len(marks) * 100, 1),
+                "crossed_or_locked": sum((row["ask"] is not None and row["bid"] is not None and row["ask"] <= row["bid"]) for row in marks),
+            })
+        usable = bool(symbols) and all(row["coverage_pct"] >= 90 and row["fresh_quote_pct"] >= 90 and
+                                       (row["maximum_gap_seconds"] is None or row["maximum_gap_seconds"] <= expected_interval_seconds * 2)
+                                       for row in symbols if row["role"] != "underlying")
+        return {"position_id": position_id, "status": "REPLAYABLE" if usable else "INSUFFICIENT_MARK_COVERAGE",
+                "expected_interval_seconds": expected_interval_seconds, "symbols": symbols,
+                "mark_assumption": "Long-option liquidation uses bid; displayed midpoint is non-executable reference only.",
+                "interpolation": False, "actual_fill_claim": False}
 
     def close_position(self, position_id: str, exit_price: float, exit_reason: str, payload: dict[str, Any]) -> bool:
         now = self.now_text()

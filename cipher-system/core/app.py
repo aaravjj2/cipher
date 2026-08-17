@@ -16,7 +16,7 @@ import time
 import uuid
 from collections.abc import Callable
 from copy import deepcopy
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.error import HTTPError, URLError
@@ -29,12 +29,22 @@ import sys
 CORE_DIR = Path(__file__).resolve().parent
 if str(CORE_DIR) not in sys.path:
     sys.path.insert(0, str(CORE_DIR))
+# The package root as well as the package directory. Modules here are imported bare
+# (`import evidence_status`), but several -- autopilot, research_corpus, research_agenda,
+# cluster_kronos_forward -- import each other as `from core.X import Y`, which needs
+# cipher-system itself on the path. Running `python core/app.py` puts only core/ there, so
+# without this the service raises ModuleNotFoundError: No module named 'core' at import time.
+ROOT_DIR = CORE_DIR.parent
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
 import disk_cache
 from scanner import SCAN_UNIVERSE, UNIVERSE_META, get_scan_job, run_scan, start_scan_job
 import weight_lab
 import cluster_backtest
 import ranking_lab
 import session_levels
+import evidence_snapshot
+import evidence_contract
 import evidence_status
 import backtest_jobs
 import holdings
@@ -44,7 +54,24 @@ import workspace_layouts
 import options_backtest_catalog
 import gex_replay
 import alerts
+import autopilot
+import tradier_flow
+import product_status
+import paper_portfolio_api
+import prospective_fronttest_api
+import morning_brief
+import options_terminal
+import portfolio_risk
+import watchlists
+import trader_journal
+import company_context
+import operator_status
+import provider_telemetry
+import terminal_service
 import options_backtest_jobs
+import market_research_agent
+import finviz_discovery
+import autopilot_status
 from company_research_engine import yahoo_rss_headlines
 from zoneinfo import ZoneInfo
 
@@ -71,6 +98,22 @@ CONTRACTS = "https://paper-api.alpaca.markets/v2/options/contracts"
 FLASH_AGENTIC_DATA_DIR = ROOT / "data" / "flash_agentic"
 FLASH_AGENTIC_LIVE_STATUS = FLASH_AGENTIC_DATA_DIR / "live_status.json"
 ACCESSOBSIDIAN_SCANS_DIR = ROOT / "data" / "accessobsidian_scans"
+
+
+def _json_safe(value):
+    """Replace non-standard numeric sentinels before crossing the HTTP boundary.
+
+    Python's JSON encoder emits NaN/Infinity by default, but browser JSON.parse
+    correctly rejects them. Provider frames commonly use NaN for missing fields;
+    missing evidence is represented as JSON null throughout the public API.
+    """
+    if isinstance(value, float):
+        return value if math.isfinite(value) else None
+    if isinstance(value, dict):
+        return {key: _json_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(item) for item in value]
+    return value
 
 
 def _latest_flash_agentic_capture() -> dict | None:
@@ -103,7 +146,34 @@ MATRIX_CACHE: dict = {}
 BARS_CACHE: dict = {}
 FLOW_CACHE: dict = {}
 QUOTE_CACHE: dict = {}
-_CACHE_LOCK = threading.Lock()
+# Cache-hit accounting is intentionally called while the cache itself is held so
+# the returned value and its hit counter describe the same observation.  This must
+# therefore be re-entrant; a plain Lock deadlocks on every warm-cache read.
+_CACHE_LOCK = threading.RLock()
+_CACHE_METRICS = {name: {"hits": 0, "misses": 0} for name in ("quote", "chain", "matrix", "bars", "flow", "oi")}
+
+
+def _cache_event(name: str, hit: bool) -> None:
+    with _CACHE_LOCK:
+        _CACHE_METRICS[name]["hits" if hit else "misses"] += 1
+
+
+def cache_status() -> list[dict]:
+    now = time.time()
+    rows = []
+    for name, cache, ttl in (("quote", QUOTE_CACHE, 3), ("chain", CHAIN_CACHE, 15),
+                             ("matrix", MATRIX_CACHE, 12), ("bars", BARS_CACHE, 20),
+                             ("flow", FLOW_CACHE, 10), ("oi", OI_CACHE, 600)):
+        with _CACHE_LOCK:
+            ages = [now - value[0] for value in cache.values()] if cache else []
+            count = len(cache)
+        rows.append({"name": name, "entries": count, "ttl_seconds": ttl,
+                     "oldest_age_s": round(max(ages), 1) if ages else None,
+                     "newest_age_s": round(min(ages), 1) if ages else None,
+                     "avg_age_s": round(sum(ages) / len(ages), 1) if ages else None,
+                     **_CACHE_METRICS[name],
+                     "hit_rate_pct": round(_CACHE_METRICS[name]["hits"] / max(1, _CACHE_METRICS[name]["hits"] + _CACHE_METRICS[name]["misses"]) * 100, 1)})
+    return rows
 
 
 def utcnow():
@@ -398,9 +468,18 @@ def local_settings():
 DEFAULT_SCAN_WORKERS = 4
 RATE_LIMIT_RETRIES = 4
 RATE_LIMIT_BACKOFF_SECONDS = 1.5
+NIGHT_VISION_CACHE_TTL_SECONDS = 300
+
+
+def _night_vision_cache_key(ticker, feed, depth, expiration_count):
+    """Stable spillover key for a bounded, read-only Night Vision fallback."""
+    return "night_vision|{}|{}|{}|{}".format(
+        str(ticker).upper(), resolve_options_feed(feed), str(depth), int(expiration_count)
+    )
 
 
 def alpaca(path, query=None, base=DATA):
+    telemetry_started = time.monotonic()
     key, secret, _, _ = local_settings()
     url = base + path
     if query:
@@ -421,7 +500,9 @@ def alpaca(path, query=None, base=DATA):
     for attempt in range(RATE_LIMIT_RETRIES):
         try:
             with urlopen(request, timeout=45) as response:
-                return json.loads(response.read().decode("utf-8"))
+                payload = json.loads(response.read().decode("utf-8"))
+                provider_telemetry.record_provider("alpaca", path, (time.monotonic() - telemetry_started) * 1000, "ok")
+                return payload
         except HTTPError as exc:
             last_exc = exc
             if exc.code == 429 and attempt < RATE_LIMIT_RETRIES - 1:
@@ -439,8 +520,10 @@ def alpaca(path, query=None, base=DATA):
                 if exc.code == 429
                 else "check symbol and configured market-data access"
             )
+            provider_telemetry.record_provider("alpaca", path, (time.monotonic() - telemetry_started) * 1000, "error", f"HTTP_{exc.code}")
             raise ValueError(f"Alpaca market-data request failed (HTTP {exc.code}); {detail}.") from exc
         except URLError as exc:
+            provider_telemetry.record_provider("alpaca", path, (time.monotonic() - telemetry_started) * 1000, "error", "URL_ERROR")
             raise ValueError("Unable to reach Alpaca market data. Check the network and retry.") from exc
     raise ValueError(f"Alpaca market-data request failed (HTTP {getattr(last_exc, 'code', '?')}).")
 
@@ -460,7 +543,9 @@ def option_open_interest(ticker, expiration_gte=None, expiration_lte=None):
     with _CACHE_LOCK:
         cached = OI_CACHE.get(cache_key)
         if cached and time.time() - cached[0] < 600:
+            _cache_event("oi", True)
             return cached[1]
+    _cache_event("oi", False)
     key, secret, _, _ = local_settings()
     query = {"underlying_symbols": ticker, "limit": 10000}
     if expiration_gte:
@@ -552,7 +637,9 @@ def quote(ticker):
     with _CACHE_LOCK:
         cached = QUOTE_CACHE.get(ticker)
         if cached and time.time() - cached[0] < 3:
+            _cache_event("quote", True)
             return deepcopy(cached[1])
+    _cache_event("quote", False)
     _, _, _, preferred_stock = local_settings()
     feeds = []
     for feed in (preferred_stock, "sip", "iex"):
@@ -621,7 +708,9 @@ def option_chain(ticker, feed, force=False, max_pages=8, expiration_gte=None, ex
         # the expensive call (multi-page snapshot fetch), and a 580-ticker Setup Scanner
         # run previously blew through the old 15s window before it could reuse anything.
         if not force and cached and time.time() - cached[0] < 60:
+            _cache_event("chain", True)
             return deepcopy(cached[1])
+    _cache_event("chain", False)
     # Fall back to the disk cache before paying for the network. This is what lets a
     # restart (or a second scan soon after the first) start warm instead of cold.
     disk_key = "chain|" + "|".join(str(part) for part in cache_key)
@@ -699,6 +788,9 @@ def option_chain(ticker, feed, force=False, max_pages=8, expiration_gte=None, ex
                     "iv": number(item.get("impliedVolatility", item.get("implied_volatility"))),
                     "gamma": number(greeks.get("gamma")),
                     "delta": number(greeks.get("delta")),
+                    "theta": number(greeks.get("theta")),
+                    "vega": number(greeks.get("vega")),
+                    "rho": number(greeks.get("rho")),
                     "quote_time": q.get("t", q.get("timestamp")),
                     "feed": used_feed,
                 }
@@ -708,6 +800,119 @@ def option_chain(ticker, feed, force=False, max_pages=8, expiration_gte=None, ex
         CHAIN_CACHE[cache_key] = (time.time(), contracts)
     disk_cache.put(disk_key, contracts)
     return deepcopy(contracts)
+
+
+def alert_metric(ticker: str, kind: str, feed: str) -> dict:
+    """Resolve one non-price alert metric with source time and unknown semantics."""
+    now = utcnow()
+    if kind == "flow_premium_above":
+        payload = flow(ticker, feed, min_premium=0)
+        prints = payload.get("prints") or []
+        values = [number(row.get("premium")) for row in prints]
+        known = [value for value in values if value is not None]
+        value = sum(known) if known else None
+        return {"value": value, "as_of": payload.get("as_of"), "source": payload.get("source"),
+                "detail": f"sum of {len(known)} included prints; query_truncated={bool(payload.get('query_truncated'))}"}
+    if kind in {"net_gex_above", "net_gex_below"}:
+        payload = matrix(ticker, feed, "0.06", 2)
+        values = [number(cell.get("net_gex")) for row in payload.get("rows", []) for cell in row.get("cells", [])]
+        known = [value for value in values if value is not None]
+        return {"value": sum(known) if known else None, "as_of": payload.get("as_of"), "source": payload.get("feed"),
+                "detail": "public-OI GEX heuristic, not verified dealer positioning"}
+    if kind in {"atm_iv_above", "atm_spread_above"}:
+        today = datetime.now(timezone.utc).date()
+        contracts = option_chain(ticker, feed, max_pages=8, expiration_gte=today.isoformat(), expiration_lte=(today + timedelta(days=45)).isoformat())
+        q = quote(ticker)
+        view = options_terminal.chain_view(ticker, q, contracts, expiration_limit=1)
+        first = view.get("expirations", [{}])[0] if view.get("expirations") else {}
+        rows = first.get("rows") or []
+        nearest = min(rows, key=lambda row: abs(float(row["strike"]) - float(view["spot"])), default=None)
+        contracts_atm = [nearest.get(side) for side in ("call", "put") if nearest and nearest.get(side)]
+        field = "iv" if kind == "atm_iv_above" else "spread_pct"
+        known = [number(row.get(field)) for row in contracts_atm if number(row.get(field)) is not None]
+        return {"value": sum(known) / len(known) if known else None, "as_of": view.get("as_of"), "source": view.get("feed"),
+                "detail": f"nearest-expiry ATM call/put mean {field}"}
+    if kind in {"portfolio_delta_abs_above", "expiration_days_below"}:
+        payload = portfolio_risk.status(
+            quote_fn=quote,
+            chain_fn=lambda symbol, start, end: option_chain(symbol, feed, max_pages=12, expiration_gte=start, expiration_lte=end),
+        )
+        if kind == "portfolio_delta_abs_above":
+            delta = payload["summary"]["aggregate_greeks"].get("delta")
+            stamps = [row.get("mark_as_of") for row in payload["positions"] if row.get("mark_as_of")]
+            return {"value": abs(delta) if delta is not None else None, "as_of": min(stamps) if stamps else None,
+                    "source": "manual_portfolio_marks", "detail": "absolute aggregate position delta"}
+        expirations = [date.fromisoformat(row["expiration"]) for row in payload["positions"] if row.get("expiration")]
+        return {"value": min((expiry - date.today()).days for expiry in expirations) if expirations else None,
+                "as_of": now, "source": "manual_portfolio_ledger", "detail": "days to nearest declared option expiration"}
+    if kind == "data_stale_count_above":
+        q = quote(ticker)
+        payload = product_status.status(ticker=ticker, quote=q, flow_session=tradier_flow.latest_session(ticker), universe_meta=UNIVERSE_META)
+        return {"value": sum(row.get("state") in {"stale", "unavailable"} for row in payload["items"]),
+                "as_of": payload["generated_at"], "source": "product_status", "detail": "stale plus unavailable resources"}
+    if kind == "scanner_score_above":
+        import scan_history
+        for meta in scan_history.list_scans(limit=20):
+            saved = scan_history.load_scan(meta["id"]) or {}
+            match = next((row for row in saved.get("top", []) if row.get("ticker") == ticker), None)
+            if match:
+                return {"value": number(match.get("score")), "as_of": saved.get("as_of"), "source": f"saved_scan:{meta['id']}", "detail": saved.get("strategy")}
+        return {"value": None, "as_of": None, "source": "saved_scan", "detail": "ticker absent from recent saved scan results"}
+    raise ValueError(f"unsupported alert metric kind: {kind}")
+
+
+def workspace_context(ticker: str, feed: str) -> dict:
+    """Bounded active-ticker evidence bundle for Ask Cipher; every section is timestamped."""
+    result = {"ticker": ticker, "generated_at": utcnow(), "sections": {}, "errors": [],
+              "read_only": True, "execution_capability": False}
+
+    def capture(name, fn):
+        try:
+            result["sections"][name] = fn()
+        except Exception as exc:
+            result["errors"].append({"section": name, "error": str(exc)})
+
+    capture("quote", lambda: quote(ticker))
+
+    def matrix_summary():
+        payload = matrix(ticker, feed, "0.06", 2)
+        return {"as_of": payload.get("as_of"), "feed": payload.get("feed"),
+                "summary": payload.get("summary"), "coverage": payload.get("coverage"),
+                "formula": payload.get("formula"), "caveat": payload.get("caveat")}
+    capture("matrix", matrix_summary)
+
+    def flow_summary():
+        payload = flow(ticker, feed, min_premium=50_000)
+        return {key: payload.get(key) for key in ("as_of", "session_date", "source", "capture_mode", "count", "coverage", "caveat")} | {
+            "top_prints": (payload.get("prints") or [])[:10]}
+    capture("flow", flow_summary)
+
+    def option_summary():
+        today = datetime.now(timezone.utc).date()
+        contracts = option_chain(ticker, feed, max_pages=10, expiration_gte=today.isoformat(), expiration_lte=(today + timedelta(days=90)).isoformat())
+        payload = options_terminal.chain_view(ticker, quote(ticker), contracts, expiration_limit=4)
+        import option_history
+        payload.update(option_history.history_status(ticker))
+        return {"as_of": payload.get("as_of"), "feed": payload.get("feed"), "spot": payload.get("spot"),
+                "term_structure": payload.get("term_structure"), "iv_rank": payload.get("iv_rank"),
+                "iv_history_status": payload.get("iv_history_status"), "open_interest_caveat": payload.get("open_interest_caveat")}
+    capture("options", option_summary)
+
+    def portfolio_summary():
+        payload = portfolio_risk.status(
+            quote_fn=quote,
+            chain_fn=lambda symbol, start, end: option_chain(symbol, feed, max_pages=12, expiration_gte=start, expiration_lte=end),
+        )
+        return {"as_of": payload["as_of"], "summary": payload["summary"], "exceptions": payload["exceptions"],
+                "active_ticker_positions": [row for row in payload["positions"] if row["ticker"] == ticker], "caveat": payload["caveat"]}
+    capture("portfolio_risk", portfolio_summary)
+    capture("journal", lambda: trader_journal.list_entries(ticker=ticker, bars_fn=bars))
+
+    def company_summary():
+        payload = company_context.context(ticker)
+        return {key: payload.get(key) for key in ("generated_at", "profile", "fundamentals", "filings", "earnings", "corporate_actions", "macro", "sources", "errors")}
+    capture("company_events", company_summary)
+    return result
 
 
 def matrix(ticker, feed, depth, expiration_count, force=False, chain_pages=None):
@@ -721,7 +926,9 @@ def matrix(ticker, feed, depth, expiration_count, force=False, chain_pages=None)
     with _CACHE_LOCK:
         cached = MATRIX_CACHE.get(cache_key)
         if not force and cached and time.time() - cached[0] < 60:
+            _cache_event("matrix", True)
             return deepcopy(cached[1])
+    _cache_event("matrix", False)
     context = quote(ticker)
     spot = context["price_context"]
     if spot is None:
@@ -1065,8 +1272,9 @@ def heatmap(ticker, feed, depth, expiration_count):
     }
 
 
-def night_vision(ticker, feed, depth, expiration_count, force=False):
-    payload = matrix(ticker, feed, depth, expiration_count, force=force)
+def _night_vision_from_matrix(payload, ticker, *, include_session_levels=True):
+    """Derive Night Vision from a live or frozen normalized matrix payload."""
+    payload = deepcopy(payload)
     levels = []
     xray = []
     for row in payload["rows"]:
@@ -1146,19 +1354,68 @@ def night_vision(ticker, feed, depth, expiration_count, force=False):
     # chart next to the exposure levels and treats them as reaction zones; nothing
     # here produced them before. Failures are non-fatal — a missing bar feed should
     # cost the session lines, not the whole Night Vision payload.
-    try:
-        minute = bars(ticker, "5m", limit=1000).get("bars") or []
-        daily = bars(ticker, "1d", limit=30).get("bars") or []
-        payload["session_levels"] = session_levels.compute(minute, daily_bars=daily)
-        premarket_pct = session_levels.premarket_range_pct(minute)
-        payload["premarket_range_pct"] = (
-            round(premarket_pct, 4) if premarket_pct is not None else None
-        )
-    except Exception as exc:  # noqa: BLE001 - bar feed is optional context here
-        payload["session_levels"] = {"levels": [], "note": f"unavailable: {exc}"}
+    if include_session_levels:
+        try:
+            minute = bars(ticker, "5m", limit=1000).get("bars") or []
+            daily = bars(ticker, "1d", limit=30).get("bars") or []
+            payload["session_levels"] = session_levels.compute(minute, daily_bars=daily)
+            premarket_pct = session_levels.premarket_range_pct(minute)
+            payload["premarket_range_pct"] = (
+                round(premarket_pct, 4) if premarket_pct is not None else None
+            )
+        except Exception as exc:  # noqa: BLE001 - bar feed is optional context here
+            payload["session_levels"] = {"levels": [], "note": f"unavailable: {exc}"}
+            payload["premarket_range_pct"] = None
+    else:
+        payload["session_levels"] = {
+            "levels": [],
+            "note": "Not captured by the scanner snapshot; exposure levels are frozen exactly.",
+        }
         payload["premarket_range_pct"] = None
 
+    payload["evidence_snapshot"] = evidence_snapshot.build(
+        payload,
+        view="night_vision",
+        session_levels=payload.get("session_levels"),
+    )
+    try:
+        payload["evidence_contract"] = evidence_contract.EvidenceSnapshot.from_mapping(
+            payload["evidence_snapshot"]
+        ).to_dict()
+    except (TypeError, ValueError):
+        payload["evidence_contract_error"] = "incomplete_evidence_contract"
+
     return payload
+
+
+def night_vision(ticker, feed, depth, expiration_count, force=False):
+    cache_key = _night_vision_cache_key(ticker, feed, depth, expiration_count)
+    try:
+        payload = matrix(ticker, feed, depth, expiration_count, force=force)
+        payload = deepcopy(payload)
+        payload["data_status"] = "live"
+        payload["cache_note"] = "Live Alpaca-backed matrix; bounded replay cache is available on provider failure."
+        # Matrix payloads are already normalized JSON and contain no credentials.
+        # Persisting a short-lived copy lets a browser restart remain useful without
+        # silently presenting stale data as current.
+        disk_cache.put(cache_key, payload)
+        return _night_vision_from_matrix(payload, ticker)
+    except Exception as exc:  # noqa: BLE001 - provider failures are a normal data state
+        cached = disk_cache.get(cache_key, ttl=NIGHT_VISION_CACHE_TTL_SECONDS)
+        if not isinstance(cached, dict):
+            raise
+        fallback = deepcopy(cached)
+        # Keep the original quote event time, but advance the capture timestamp so
+        # the evidence builder correctly marks the replay as stale rather than
+        # treating the old payload as a newly observed live snapshot.
+        fallback["as_of"] = utcnow()
+        fallback["data_status"] = "stale_cache"
+        fallback["provider_error"] = str(exc)[:240]
+        fallback["cache_note"] = (
+            "Provider refresh failed; showing a bounded cached snapshot. Re-check freshness "
+            "before treating any level as actionable."
+        )
+        return _night_vision_from_matrix(fallback, ticker)
 
 
 def bars(ticker, timeframe, limit=200, start=None):
@@ -1211,7 +1468,9 @@ def bars(ticker, timeframe, limit=200, start=None):
     with _CACHE_LOCK:
         cached = BARS_CACHE.get(cache_key)
         if cached and time.time() - cached[0] < 20:
+            _cache_event("bars", True)
             return deepcopy(cached[1])
+    _cache_event("bars", False)
 
     # Span wide enough to contain `want` newest bars; over-fetch then slice the tail.
     # Alpaca returns ascending from `start`, so a tight start+small limit yields the oldest bars.
@@ -1425,10 +1684,44 @@ def contract_search(ticker, feed, strike, option_type, expiration=None, trade_da
 
 
 def flow(ticker, feed, min_premium=5000, max_price=None, option_type="all", side="all", moneyness="all", force=False):
-    """Build a Spyglass tape from latest option trades on the chain snapshots."""
-    feed = resolve_options_feed(feed)
+    """Return a truthful, session-bounded options-flow view.
+
+    Captured Tradier timesales are preferred because each event carries its
+    contemporaneous bid/ask.  Alpaca's chain snapshot is retained as a clearly
+    labelled coverage fallback; it is one latest trade per contract, not a tape.
+    """
+    option_type = str(option_type or "all").lower()
+    if option_type in {"calls", "c"}:
+        option_type = "call"
+    elif option_type in {"puts", "p"}:
+        option_type = "put"
+    side = str(side or "all").lower()
+    if side in {"ask", "bought"}:
+        side = "buy"
+    elif side in {"bid", "sold"}:
+        side = "sell"
+
     context = quote(ticker)
     spot = context["price_context"]
+    captured = tradier_flow.flow(
+        ticker,
+        spot=spot,
+        min_premium=min_premium,
+        max_price=max_price,
+        option_type=option_type,
+        side=side,
+        moneyness=moneyness,
+    )
+    if captured is not None:
+        captured["quote"] = context
+        age = number(captured.get("event_age_seconds"))
+        captured["freshness"] = {
+            "status": "current" if age is not None and age <= 120 else "stale" if age is not None else "unknown",
+            "age_seconds": age,
+        }
+        return captured
+
+    feed = resolve_options_feed(feed)
     contracts = option_chain(ticker, feed, force=force)
     prints = []
     for contract in contracts:
@@ -1442,14 +1735,10 @@ def flow(ticker, feed, min_premium=5000, max_price=None, option_type="all", side
         if premium < float(min_premium):
             continue
         kind = contract.get("type")
-        if option_type == "calls" and kind != "call":
-            continue
-        if option_type == "puts" and kind != "put":
+        if option_type in {"call", "put"} and kind != option_type:
             continue
         aggressor = classify_aggressor(last, contract.get("bid"), contract.get("ask"))
-        if side == "ask" and aggressor != "buy":
-            continue
-        if side == "bid" and aggressor != "sell":
+        if side in {"buy", "sell"} and aggressor != side:
             continue
         strike = contract.get("strike")
         if spot and strike is not None:
@@ -1478,65 +1767,60 @@ def flow(ticker, feed, min_premium=5000, max_price=None, option_type="all", side
                 "bid": contract.get("bid"),
                 "ask": contract.get("ask"),
                 "side": aggressor,
+                "side_basis": "snapshot_bid_ask",
                 "tier": premium_tier(premium),
                 "otm_pct": otm_pct,
                 "exchange": contract.get("exchange"),
                 "feed": contract.get("feed") or feed,
+                "session_date": str(contract.get("trade_time") or "")[:10] or None,
             }
         )
     prints.sort(key=lambda item: item.get("time") or "", reverse=True)
-    # Keep a rolling buffer so repeated polls feel like a live tape.
-    with _CACHE_LOCK:
-        prior = FLOW_CACHE.get(ticker.upper(), [])
-        seen = {f"{p['contract']}|{p['time']}|{p['size']}|{p['price']}" for p in prints}
-        merged = prints[:]
-        for item in prior:
-            key = f"{item['contract']}|{item['time']}|{item['size']}|{item['price']}"
-            if key not in seen:
-                merged.append(item)
-                seen.add(key)
-        merged.sort(key=lambda item: item.get("time") or "", reverse=True)
-        FLOW_CACHE[ticker.upper()] = merged[:400]
-        tape = FLOW_CACHE[ticker.upper()]
-    # Re-apply filters on the merged buffer for response.
-    filtered = []
-    for item in tape:
-        if item["premium"] < float(min_premium):
-            continue
-        if max_price is not None and item["price"] > max_price:
-            continue
-        if option_type == "calls" and item["type"] != "call":
-            continue
-        if option_type == "puts" and item["type"] != "put":
-            continue
-        if side == "ask" and item["side"] != "buy":
-            continue
-        if side == "bid" and item["side"] != "sell":
-            continue
-        if moneyness == "otm":
-            if item.get("otm_pct") is None:
-                continue
-            kind = item["type"]
-            spot_now = spot or 0
-            is_otm = (kind == "call" and item["strike"] > spot_now) or (kind == "put" and item["strike"] < spot_now)
-            if not is_otm:
-                continue
-        if moneyness == "itm":
-            kind = item["type"]
-            spot_now = spot or 0
-            is_otm = (kind == "call" and item["strike"] > spot_now) or (kind == "put" and item["strike"] < spot_now)
-            if is_otm:
-                continue
-        filtered.append(item)
+    # A chain contains one latest trade per contract and those trades may span
+    # days.  Never merge or display those dates as one session.  Keeping only the
+    # newest represented date is less coverage, but it is honest coverage.
+    session_date = max((p.get("session_date") for p in prints if p.get("session_date")), default=None)
+    filtered = [p for p in prints if not session_date or p.get("session_date") == session_date]
+    newest = max((p.get("time") for p in filtered if p.get("time")), default=None)
+    oldest = min((p.get("time") for p in filtered if p.get("time")), default=None)
+    newest_dt = None
+    if newest:
+        try:
+            newest_dt = datetime.fromisoformat(str(newest).replace("Z", "+00:00"))
+            if newest_dt.tzinfo is None:
+                newest_dt = newest_dt.replace(tzinfo=timezone.utc)
+            newest_dt = newest_dt.astimezone(timezone.utc)
+        except (TypeError, ValueError):
+            newest_dt = None
+    event_age_seconds = (
+        max(0.0, (datetime.now(timezone.utc) - newest_dt).total_seconds())
+        if newest_dt else None
+    )
     return {
         "ticker": ticker.upper(),
-        "as_of": utcnow(),
+        "generated_at": utcnow(),
+        "as_of": newest,
+        "oldest_event_at": oldest,
+        "newest_event_at": newest,
+        "event_age_seconds": event_age_seconds,
+        "freshness": {
+            "status": "current" if event_age_seconds is not None and event_age_seconds <= 120 else "stale" if event_age_seconds is not None else "unknown",
+            "age_seconds": event_age_seconds,
+        },
+        "session_date": session_date,
+        "source": "alpaca_chain_snapshot",
+        "capture_mode": "latest_trade_per_contract",
         "feed": feed,
         "quote": context,
         "min_premium": float(min_premium),
         "count": len(filtered),
         "prints": filtered[:150],
-        "caveat": "Aggressor side is inferred from trade vs bid/ask; not a verified buyer/seller label.",
+        "coverage": {
+            "scope": "latest trade attached to each currently returned chain contract",
+            "contracts_with_matching_session": len(filtered),
+        },
+        "caveat": "Fallback snapshot, not a live tape. It shows one latest trade per chain contract from only the newest represented session. Side compares that historical trade with the current chain snapshot bid/ask and is not reliable event-time aggressor classification.",
+        "read_only": True,
     }
 
 
@@ -1639,12 +1923,20 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, _format, *_args):
         return
 
+    def _cors_origin(self) -> str:
+        origin = self.headers.get("Origin", "")
+        if origin in {"http://127.0.0.1:8283", "http://localhost:8283"}:
+            return origin
+        return "http://127.0.0.1:8283"
+
     def send_json(self, status, data):
-        body = json.dumps(data, separators=(",", ":"), default=str).encode("utf-8")
+        body = json.dumps(
+            _json_safe(data), separators=(",", ":"), default=str, allow_nan=False
+        ).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
-        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Origin", self._cors_origin())
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
         self.wfile.write(body)
@@ -1654,12 +1946,14 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "text/event-stream; charset=utf-8")
         self.send_header("Cache-Control", "no-cache, no-store")
         self.send_header("Connection", "keep-alive")
-        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Origin", self._cors_origin())
         self.send_header("X-Accel-Buffering", "no")
         self.end_headers()
 
     def write_event(self, event, data):
-        payload = json.dumps(data, separators=(",", ":"), default=str)
+        payload = json.dumps(
+            _json_safe(data), separators=(",", ":"), default=str, allow_nan=False
+        )
         chunk = f"event: {event}\ndata: {payload}\n\n".encode("utf-8")
         try:
             self.wfile.write(chunk)
@@ -1719,9 +2013,10 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_OPTIONS(self):
         self.send_response(204)
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Allow-Origin", self._cors_origin())
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, Accept")
+        self.send_header("Content-Length", "0")
         self.end_headers()
 
     def do_GET(self):
@@ -1765,6 +2060,11 @@ class Handler(BaseHTTPRequestHandler):
                         lookback_bars=int(pget("lookback", "6") or 6),
                         entry_every=int(pget("entry_every", "12") or 12),
                         control_repeats=int(pget("repeats", "20") or 20),
+                        slippage_bps=float(pget("slippage_bps", pget("cost_bps", "2")) or 2),
+                        commission_bps=float(pget("commission_bps", "0") or 0),
+                        holdout_fraction=float(pget("holdout", "0.30") or 0.30),
+                        embargo_bars=int(pget("embargo", "1") or 1),
+                        seed=int(pget("seed", "17") or 17),
                     )
                     data = {"job_id": job_id, "status": "queued"}
                 elif action == "list":
@@ -1780,6 +2080,76 @@ class Handler(BaseHTTPRequestHandler):
                 data = evidence_status.status()
             elif parsed.path == "/api/research-status":
                 data = research_status()
+            elif parsed.path == "/api/research-ranking":
+                # Serves the last autopilot pass rather than recomputing: walking every
+                # report under runtime/data is far too slow for a request handler and
+                # would compete with the live collector on every page load. The age and a
+                # computed `stale` flag ship with the data so a missed pass is visible.
+                data = autopilot.last_run_summary()
+            elif parsed.path == "/api/product-status":
+                current_quote = quote(ticker)
+                data = product_status.status(
+                    ticker=ticker,
+                    quote=current_quote,
+                    flow_session=tradier_flow.latest_session(ticker),
+                    universe_meta=UNIVERSE_META,
+                )
+            elif parsed.path == "/api/morning-brief":
+                current_quote = quote(ticker)
+                freshness = product_status.status(
+                    ticker=ticker,
+                    quote=current_quote,
+                    flow_session=tradier_flow.latest_session(ticker),
+                    universe_meta=UNIVERSE_META,
+                )
+                data = morning_brief.build(
+                    ticker=ticker, quote_fn=quote, flow_fn=flow,
+                    status_payload=freshness,
+                )
+            elif parsed.path == "/api/research-desk":
+                action = (pget("action") or "latest").lower()
+                if action == "history":
+                    data = {"reports": market_research_agent.history(limit=int(pget("limit", "30") or 30))}
+                else:
+                    data = market_research_agent.latest()
+            elif parsed.path == "/api/finviz-discovery":
+                presets = [part.strip() for part in (pget("presets") or "").split(",") if part.strip()] or None
+                data = finviz_discovery.discover(preset_ids=presets, limit=max(1, min(int(pget("limit", "75") or 75), 100)))
+            elif parsed.path == "/api/paper-portfolios":
+                data = paper_portfolio_api.snapshot()
+            elif parsed.path == "/api/prospective-fronttests":
+                data = prospective_fronttest_api.snapshot()
+            elif parsed.path == "/api/options-chain":
+                expiration_count = max(1, min(int(pget("expirations", "6") or 6), 12))
+                data = terminal_service.options_chain_view(
+                    ticker, feed, expiration_count, quote_fn=quote, chain_fn=option_chain,
+                    force=str(pget("fresh", "0")).lower() in {"1", "true", "yes"},
+                )
+            elif parsed.path == "/api/portfolio-risk":
+                action = (pget("action") or "status").lower()
+                if action == "export":
+                    data = {"filename": "cipher-portfolio.csv", "csv": portfolio_risk.export_csv(),
+                            "execution_capability": False}
+                else:
+                    data = terminal_service.portfolio_snapshot(feed, quote_fn=quote, chain_fn=option_chain)
+            elif parsed.path == "/api/watchlists":
+                data = watchlists.list_all()
+            elif parsed.path == "/api/screens":
+                import scan_history
+                screen_id = pget("id") or ""
+                scores = {}
+                recent = scan_history.list_scans(limit=1)
+                if recent:
+                    saved = scan_history.load_scan(recent[0]["id"]) or {}
+                    scores = {str(row.get("ticker")): float(row.get("score") or 0) for row in saved.get("top", [])}
+                data = watchlists.run_screen(screen_id, quote_fn=quote, universe=set(SCAN_UNIVERSE), scanner_scores=scores)
+            elif parsed.path == "/api/journal":
+                action = (pget("action") or "list").lower()
+                data = trader_journal.list_templates() if action == "templates" else trader_journal.list_entries(
+                    ticker=pget("ticker") or None, bars_fn=bars,
+                )
+            elif parsed.path == "/api/company-context":
+                data = company_context.context(ticker)
             elif parsed.path == "/api/options-backtest":
                 action = (pget("action") or "list").lower()
                 if action == "list":
@@ -1821,33 +2191,18 @@ class Handler(BaseHTTPRequestHandler):
                     return
             elif parsed.path == "/api/alerts":
                 data = alerts.list_rules()
+            elif parsed.path == "/api/alert-metric":
+                data = alert_metric(ticker, str(pget("kind") or ""), feed)
             elif parsed.path == "/api/quote":
                 data = quote(ticker)
+            elif parsed.path == "/api/operator-status":
+                cache_rows = cache_status()
+                provider_telemetry.record_caches(cache_rows)
+                data = operator_status.status(caches=cache_rows)
+            elif parsed.path == "/api/autopilot-status":
+                data = autopilot_status.snapshot()
             elif parsed.path == "/debug/caches":
-                now = time.time()
-                def _cache_stats(name, cache, ttl):
-                    with _CACHE_LOCK:
-                        n = len(cache)
-                        ages = [now - v[0] for v in cache.values()] if cache else []
-                    return {
-                        "name": name,
-                        "entries": n,
-                        "ttl_seconds": ttl,
-                        "oldest_age_s": round(max(ages), 1) if ages else None,
-                        "newest_age_s": round(min(ages), 1) if ages else None,
-                        "avg_age_s": round(sum(ages) / len(ages), 1) if ages else None,
-                    }
-                data = {
-                    "as_of": utcnow(),
-                    "caches": [
-                        _cache_stats("quote", QUOTE_CACHE, 3),
-                        _cache_stats("chain", CHAIN_CACHE, 15),
-                        _cache_stats("matrix", MATRIX_CACHE, 12),
-                        _cache_stats("bars", BARS_CACHE, 20),
-                        _cache_stats("flow", FLOW_CACHE, 10),
-                        _cache_stats("oi", OI_CACHE, 600),
-                    ],
-                }
+                data = {"as_of": utcnow(), "caches": cache_status()}
             elif parsed.path == "/api/matrix":
                 data = matrix(
                     ticker,
@@ -1871,6 +2226,39 @@ class Handler(BaseHTTPRequestHandler):
                     int(pget("expirations", str(DEFAULT_MATRIX_EXPIRATIONS))),
                     force=str(pget("fresh", "0")).lower() in {"1", "true", "yes"},
                 )
+            elif parsed.path == "/api/night-vision-replay":
+                replay_id = pget("id") or ""
+                artifact = evidence_snapshot.load_matrix(replay_id)
+                if not artifact:
+                    self.send_json(404, {"error": "Unknown or expired evidence snapshot"})
+                    return
+                replay_ticker = str(artifact.get("ticker") or "").upper()
+                if ticker and ticker.upper() != replay_ticker:
+                    self.send_json(422, {"error": "Evidence snapshot ticker does not match request"})
+                    return
+                data = _night_vision_from_matrix(
+                    artifact["matrix"], replay_ticker, include_session_levels=False
+                )
+                frozen_evidence = deepcopy(artifact.get("evidence_snapshot") or {})
+                frozen_evidence["view"] = "night_vision_replay"
+                frozen_evidence["replay_available"] = True
+                data["evidence_snapshot"] = frozen_evidence
+                try:
+                    data["evidence_contract"] = evidence_contract.EvidenceSnapshot.from_mapping(
+                        frozen_evidence
+                    ).to_dict()
+                except (TypeError, ValueError):
+                    data["evidence_contract_error"] = "incomplete_evidence_contract"
+                data["replay"] = {
+                    "mode": "frozen",
+                    "snapshot_id": replay_id,
+                    "event_at": artifact.get("event_at"),
+                    "captured_at": artifact.get("captured_at"),
+                    "exposure_frozen": True,
+                    "session_levels_captured": False,
+                    "read_only": True,
+                    "execution_capability": False,
+                }
             elif parsed.path == "/api/bars":
                 data = bars(
                     ticker, pget("timeframe", "5m"), limit=int(pget("limit", "200")),
@@ -2060,6 +2448,7 @@ class Handler(BaseHTTPRequestHandler):
                     "tier_counts": UNIVERSE_META.get("tier_counts"),
                     "excluded_counts": UNIVERSE_META.get("excluded_counts"),
                     "thresholds_usd": UNIVERSE_META.get("thresholds_usd"),
+                    "validation": UNIVERSE_META.get("validation"),
                     "as_of": UNIVERSE_META.get("as_of"),
                     "concurrency": 1,
                     "modes": ["short", "long", "leap"],
@@ -2319,6 +2708,7 @@ class Handler(BaseHTTPRequestHandler):
                             "/api/scan",
                             "/api/scan/job",
                             "/api/scan/universe",
+                            "/api/research-desk",
                             "/api/ranking-lab",
                             "/api/weight-lab",
                             "/api/backtest",
@@ -2356,7 +2746,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_OPTIONS(self):
         self.send_response(204)
-        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Origin", self._cors_origin())
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type, Accept")
         self.send_header("Content-Length", "0")
@@ -2457,12 +2847,16 @@ class Handler(BaseHTTPRequestHandler):
                 history = body.get("history") or []
                 if not isinstance(history, list):
                     raise ValueError("history must be a list")
+                active_ticker = str(body.get("active_ticker") or "SPY").strip().upper()
+                if not re.fullmatch(r"[A-Z]{1,6}(?:\.[A-Z]{1,2})?", active_ticker):
+                    raise ValueError("active_ticker must be a valid symbol")
                 tool_impls = {
                     "get_evidence_status": evidence_status.status,
                     "get_standing": standing_status,
                     "get_holdings": lambda: holdings.holdings_status(quote_fn=quote, bars_fn=bars),
                     "get_quote": quote,
                     "list_strategies": _list_strategies_for_chat,
+                    "get_workspace_context": lambda: workspace_context(active_ticker, local_settings()[2]),
                 }
                 job_id = chat_jobs.start_chat_job(message, history, tool_impls)
                 self.send_json(202, {"job_id": job_id, "status": "queued"})
@@ -2492,6 +2886,77 @@ class Handler(BaseHTTPRequestHandler):
                 job_id = options_backtest_jobs.start_job(str(body.get("protocol") or ""))
                 self.send_json(202, {"job_id": job_id, "status": "queued", "research_only": True})
                 return
+            if parsed.path == "/api/options-builder":
+                body = self._read_json_body()
+                if not isinstance(body, dict):
+                    raise ValueError("request body must be a JSON object")
+                ticker = str(body.get("ticker") or "").strip().upper()
+                if not ticker:
+                    raise ValueError("ticker is required")
+                spot = number(body.get("spot"))
+                if spot is None or spot <= 0:
+                    spot = quote(ticker).get("price_context")
+                legs = body.get("legs")
+                if not isinstance(legs, list):
+                    raise ValueError("legs must be a list")
+                self.send_json(200, options_terminal.analyze_structure(ticker, float(spot), legs))
+                return
+            if parsed.path == "/api/portfolio-risk":
+                action = (pget("action") or "add").lower()
+                body = self._read_json_body()
+                if not isinstance(body, dict):
+                    raise ValueError("request body must be a JSON object")
+                if action == "add":
+                    self.send_json(201, portfolio_risk.add_position(body))
+                elif action == "delete":
+                    self.send_json(200, portfolio_risk.delete_position(body.get("id", "")))
+                elif action == "cash":
+                    self.send_json(200, portfolio_risk.set_cash(body.get("cash")))
+                elif action == "import":
+                    self.send_json(200, portfolio_risk.import_csv(
+                        str(body.get("csv") or ""), replace=bool(body.get("replace", False)),
+                    ))
+                else:
+                    self.send_json(400, {"error": f"Unknown portfolio-risk action: {action}"})
+                return
+            if parsed.path == "/api/watchlists":
+                action = (pget("action") or "create").lower()
+                body = self._read_json_body()
+                if not isinstance(body, dict):
+                    raise ValueError("request body must be a JSON object")
+                if action == "create":
+                    data, code = watchlists.create_watchlist(body.get("name")), 201
+                elif action == "add":
+                    data, code = watchlists.add_member(str(body.get("watchlist_id") or ""), body.get("ticker")), 200
+                elif action == "remove":
+                    data, code = watchlists.remove_member(str(body.get("watchlist_id") or ""), body.get("ticker")), 200
+                elif action == "delete":
+                    data, code = watchlists.delete_watchlist(str(body.get("id") or "")), 200
+                elif action == "save-screen":
+                    data, code = watchlists.save_screen(body.get("name"), body.get("criteria"), body.get("watchlist_id")), 201
+                elif action == "delete-screen":
+                    data, code = watchlists.delete_screen(str(body.get("id") or "")), 200
+                else:
+                    self.send_json(400, {"error": f"Unknown watchlists action: {action}"})
+                    return
+                self.send_json(code, data)
+                return
+            if parsed.path == "/api/journal":
+                action = (pget("action") or "create").lower()
+                body = self._read_json_body()
+                if not isinstance(body, dict):
+                    raise ValueError("request body must be a JSON object")
+                if action == "create":
+                    self.send_json(201, trader_journal.create_entry(body))
+                elif action == "update":
+                    self.send_json(200, trader_journal.update_entry(str(body.get("id") or ""), body))
+                elif action == "delete":
+                    self.send_json(200, trader_journal.delete_entry(str(body.get("id") or "")))
+                elif action == "save-template":
+                    self.send_json(200, trader_journal.save_template(body.get("name"), body.get("state")))
+                else:
+                    self.send_json(400, {"error": f"Unknown journal action: {action}"})
+                return
             self.send_json(
                 404,
                 {
@@ -2502,6 +2967,10 @@ class Handler(BaseHTTPRequestHandler):
                         "/api/workspace-layouts?action=save|delete",
                         "/api/ask",
                         "/api/alerts?action=add|delete",
+                        "/api/options-builder",
+                        "/api/portfolio-risk?action=add|delete|cash|import",
+                        "/api/watchlists?action=create|add|remove|delete|save-screen|delete-screen",
+                        "/api/journal?action=create|update|delete|save-template",
                     ],
                 },
             )

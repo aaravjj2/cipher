@@ -33,6 +33,20 @@ def test_unknown_tool_is_refused_without_dispatch():
         ask_cipher._dispatch_openai_tool("submit_order", {}, {})
 
 
+def test_workspace_context_is_available_to_openai_compatible_providers():
+    specs = {row["function"]["name"]: row["function"] for row in ask_cipher._OPENAI_TOOL_SPECS}
+    assert specs["get_workspace_context"]["parameters"] == {
+        "type": "object", "properties": {}, "required": []
+    }
+    result = ask_cipher._dispatch_openai_tool(
+        "get_workspace_context", {}, {"get_workspace_context": lambda: {
+            "ticker": "NVDA", "read_only": True, "execution_capability": False,
+        }}
+    )
+    assert '"ticker": "NVDA"' in result
+    assert '"execution_capability": false' in result
+
+
 class _ProviderRefusal(Exception):
     """Shaped like the OpenAI SDK's error: status_code plus an unwrapped inner body."""
 

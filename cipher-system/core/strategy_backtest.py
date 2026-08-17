@@ -47,6 +47,11 @@ except ImportError:  # Direct core/app.py execution keeps core/ on sys.path.
     )
     from walk_forward import option_pnl_estimate, statistical_significance
 
+try:
+    from .evidence_contract import EvidenceSnapshot, SignalRecord
+except ImportError:
+    from evidence_contract import EvidenceSnapshot, SignalRecord
+
 
 def _utcnow():
     return datetime.now(timezone.utc).isoformat()
@@ -93,6 +98,8 @@ class Trade:
         self.mfe_pct: float | None = None
         self.mae_pct: float | None = None
         self.r_multiple: float | None = None  # P&L in units of initial risk
+        self.evidence_snapshot_id: str | None = None
+        self.signal_record: dict | None = None
 
     def simulate(self, bars: list[dict]) -> None:
         """Simulate the trade against forward bars."""
@@ -170,7 +177,7 @@ class Trade:
                 self.r_multiple = round(self.pnl_pct / risk_pct, 3)
 
     def to_dict(self) -> dict:
-        return {
+        result = {
             "strategy": self.strategy,
             "ticker": self.ticker,
             "direction": self.direction,
@@ -193,6 +200,11 @@ class Trade:
             "reward_pct": round(abs(self.target - self.entry_price) / self.entry_price * 100, 3)
                 if self.target and self.entry_price else None,
         }
+        if self.evidence_snapshot_id:
+            result["evidence_snapshot_id"] = self.evidence_snapshot_id
+        if self.signal_record:
+            result["signal_record"] = self.signal_record
+        return result
 
 
 # ── Strategy Definitions ──────────────────────────────────────────────────
@@ -877,6 +889,19 @@ def run_strategy_backtest(
             if not profile or not spot:
                 continue
 
+            try:
+                evidence = EvidenceSnapshot.from_mapping({
+                    **payload,
+                    "provider": "alpaca",
+                    "event_at": (payload.get("quote") or {}).get("as_of") or payload.get("as_of"),
+                    "captured_at": payload.get("as_of") or (payload.get("quote") or {}).get("as_of"),
+                    "freshness": "current",
+                    "coverage": (payload.get("coverage") or {}).get("status", "unknown"),
+                    "features": {"summary": summary},
+                })
+            except (TypeError, ValueError):
+                evidence = None
+
             # Fetch bars
             bar_payload = bars_fn(ticker, "1d", bars_limit)
             bars = bar_payload.get("bars") or []
@@ -939,6 +964,21 @@ def run_strategy_backtest(
                     else:
                         trades = strat_fn(ticker, profile, spot, summary, bars, **kwargs)
 
+                    for trade in trades:
+                        if evidence is not None:
+                            trade.evidence_snapshot_id = evidence.snapshot_id
+                            try:
+                                trade.signal_record = SignalRecord(
+                                    ticker=ticker, strategy=strat_name,
+                                    direction=trade.direction,
+                                    signal_at=evidence.event_at,
+                                    available_at=evidence.captured_at,
+                                    evidence_snapshot_ids=(evidence.snapshot_id,),
+                                    decision="candidate",
+                                    metadata={"entry_day": trade.entry_day},
+                                ).to_dict()
+                            except (TypeError, ValueError):
+                                trade.signal_record = None
                     all_trades[strat_name].extend(trades)
                 except Exception as exc:
                     errors.append({"ticker": ticker, "strategy": strat_name, "error": str(exc)})

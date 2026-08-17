@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from .config import ExecutorConfig
+from .alpaca_core_market_data import AlpacaCoreMarketData
 from .contract_selector import contracts_from_chain, select_contract, select_debit_spread
 from .database import PaperExecutorDatabase
 from .episode_tracker import EpisodeTracker
@@ -44,7 +45,11 @@ class RuntimeCoordinator:
     ):
         self.cfg = cfg
         self.db = db
-        self.market_data = market_data or TradierMarketData(cfg.market_data)
+        self.market_data = market_data or (
+            AlpacaCoreMarketData(cfg.market_data)
+            if cfg.market_data.provider == "alpaca_core"
+            else TradierMarketData(cfg.market_data)
+        )
         self.quote_manager = QuoteManager(cfg, self.market_data)
         self.forwarder = forwarder or VmForwarder(db, cfg.runtime_root / "queue" / "vm_pending", cfg.vm_forwarding.endpoint)
         self.episodes = EpisodeTracker(db, cfg.scanner.episode_cooldown_minutes)
@@ -154,6 +159,11 @@ class RuntimeCoordinator:
             return False
 
     def promote_to_paper(self) -> tuple[bool, str]:
+        from .promotion_gate import gate_status
+
+        gate = gate_status()
+        if not gate["eligible_count"]:
+            return False, "no strategy has cleared the FAST_BACKTESTED promotion gate"
         if not self.reconciliation_passed or not self.db.integrity_ok():
             return False, "database reconciliation has not passed"
         if self.quote_manager.degraded:
@@ -279,7 +289,7 @@ class RuntimeCoordinator:
             self.cfg.contract,
             self.cfg.portfolio.quantity_per_trade,
             self.cfg.market_data.quote_maximum_age_seconds,
-            selected.quote.timestamp,
+            card.captured_at,
         )
         position_id = sha256_id("position", {"episode_id": episode_id, "symbol": selected.contract.symbol})
         status = "SHADOW_OPEN" if self.mode == Mode.SHADOW else "OPEN"
@@ -314,6 +324,8 @@ class RuntimeCoordinator:
         )
         if not created:
             return {"status": "skipped", "reason": reason}
+        self._record_contract_quote(position_id, episode_id, selected.contract.symbol,
+                                    "long_option", selected.quote, selected.quote.timestamp)
         self.quote_manager.subscribe([selected.contract.symbol, card.ticker])
         return {"status": status, "position_id": position_id, "entry_price": entry.fill_price}
 
@@ -345,7 +357,7 @@ class RuntimeCoordinator:
             self.cfg.contract,
             self.cfg.portfolio.quantity_per_trade,
             self.cfg.market_data.quote_maximum_age_seconds,
-            selected.long_leg.quote.timestamp,
+            card.captured_at,
         )
         position_id = sha256_id("position", {"episode_id": episode_id, "symbol": selected.symbol})
         status = "SHADOW_OPEN" if self.mode == Mode.SHADOW else "OPEN"
@@ -401,6 +413,10 @@ class RuntimeCoordinator:
         )
         if not created:
             return {"status": "skipped", "reason": reason}
+        self._record_contract_quote(position_id, episode_id, selected.long_leg.contract.symbol,
+                                    "spread_long", selected.long_leg.quote, selected.long_leg.quote.timestamp)
+        self._record_contract_quote(position_id, episode_id, selected.short_leg.contract.symbol,
+                                    "spread_short", selected.short_leg.quote, selected.long_leg.quote.timestamp)
         self.quote_manager.subscribe([selected.long_leg.contract.symbol, selected.short_leg.contract.symbol, card.ticker])
         return {"status": status, "position_id": position_id, "entry_price": entry["fill_price"], "instrument_model": "debit_spread"}
 
@@ -450,6 +466,10 @@ class RuntimeCoordinator:
                 "quote_age_seconds": (now - option_quote.timestamp.astimezone(timezone.utc)).total_seconds(),
                 "feed_degraded": self.quote_manager.degraded,
             }
+            self._record_contract_quote(row["id"], row.get("episode_id"), row["symbol"],
+                                        "long_option", option_quote, now)
+            self._record_contract_quote(row["id"], row.get("episode_id"), row["ticker"],
+                                        "underlying", underlying_quote, now)
             self.db.insert_mark(row["id"], mark)
             reason = recovery_reason or exit_reason(position, option_quote, underlying, self.cfg.exit, now)
             if reason:
@@ -504,6 +524,9 @@ class RuntimeCoordinator:
             "short_quote": short_quote,
             "feed_degraded": self.quote_manager.degraded,
         }
+        self._record_contract_quote(row["id"], row.get("episode_id"), long_symbol, "spread_long", long_quote, now)
+        self._record_contract_quote(row["id"], row.get("episode_id"), short_symbol, "spread_short", short_quote, now)
+        self._record_contract_quote(row["id"], row.get("episode_id"), row["ticker"], "underlying", underlying_quote, now)
         self.db.insert_mark(row["id"], mark)
         synthetic_quote = Quote(row["symbol"], spread_bid, spread_ask if spread_ask > spread_bid else spread_bid + 0.01, now)
         reason = recovery_reason or exit_reason(position, synthetic_quote, underlying, self.cfg.exit, now)
@@ -587,6 +610,14 @@ class RuntimeCoordinator:
         from .contract_selector import dte
 
         return dte(expiration, as_of)
+
+    def _record_contract_quote(self, position_id: str, episode_id: str | None, symbol: str,
+                               role: str, quote: Quote, captured_at: datetime) -> None:
+        self.db.insert_contract_mark(
+            position_id=position_id, episode_id=episode_id, symbol=symbol, role=role,
+            quote=quote, captured_at=captured_at,
+            source=type(self.market_data).__name__,
+        )
 
     @staticmethod
     def _symbols_for_position_row(row: dict[str, Any]) -> list[str]:

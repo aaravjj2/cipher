@@ -1,22 +1,28 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { addAlert, deleteAlert, fetchAlerts, fetchQuote, type AlertKind, type AlertRule } from "@/lib/api";
+import { addAlert, deleteAlert, fetchAlerts, fetchQuote, type AlertDelivery, type AlertKind, type AlertRule } from "@/lib/api";
 
 const LABELS: Record<AlertKind, string> = {
   price_above: "Price rises above", price_below: "Price falls below",
   day_change_above: "Day change rises above %", day_change_below: "Day change falls below %",
+  scanner_score_above: "Saved scanner score above", flow_premium_above: "Session flow premium above $",
+  net_gex_above: "Net GEX above", net_gex_below: "Net GEX below",
+  atm_iv_above: "Nearest ATM IV above (decimal; .45 = 45%)", atm_spread_above: "Nearest ATM spread above %",
+  expiration_days_below: "Portfolio expiration within days", portfolio_delta_abs_above: "Absolute portfolio delta above",
+  data_stale_count_above: "Stale/unavailable data count above",
 };
 
 export function Alerts({ ticker }: { ticker: string }) {
   const [rules, setRules] = useState<AlertRule[]>([]);
+  const [deliveries, setDeliveries] = useState<AlertDelivery[]>([]);
   const [kind, setKind] = useState<AlertKind>("price_above");
   const [threshold, setThreshold] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [permission, setPermission] = useState<NotificationPermission | "unsupported">("unsupported");
   const latched = useRef(new Set<string>());
 
-  const reload = useCallback((signal?: AbortSignal) => fetchAlerts(signal).then((value) => setRules(value.rules)), []);
+  const reload = useCallback((signal?: AbortSignal) => fetchAlerts(signal).then((value) => { setRules(value.rules); setDeliveries(value.deliveries); }), []);
   useEffect(() => {
     const controller = new AbortController();
     reload(controller.signal).catch((err: unknown) => { if (!controller.signal.aborted) setError(err instanceof Error ? err.message : "Could not load alerts."); });
@@ -28,10 +34,11 @@ export function Alerts({ ticker }: { ticker: string }) {
     if (!rules.length) return;
     let cancelled = false;
     const evaluate = async () => {
-      const symbols = [...new Set(rules.filter((rule) => rule.enabled).map((rule) => rule.ticker))];
+      const browserRules = rules.filter((rule) => rule.enabled && ["price_above", "price_below", "day_change_above", "day_change_below"].includes(rule.kind));
+      const symbols = [...new Set(browserRules.map((rule) => rule.ticker))];
       const quotes = new Map((await Promise.all(symbols.map(async (symbol) => [symbol, await fetchQuote(symbol)] as const))).map((row) => row));
       if (cancelled) return;
-      for (const rule of rules) {
+      for (const rule of browserRules) {
         const quote = quotes.get(rule.ticker);
         if (!quote) continue;
         const observed = rule.kind.startsWith("price_") ? quote.price_context : quote.day_change_pct;
@@ -82,5 +89,6 @@ export function Alerts({ ticker }: { ticker: string }) {
     <section className="rounded-[var(--radius)] p-4" style={{ background: "var(--panel)", border: "1px solid var(--line)" }}>
       {rules.length === 0 ? <p className="text-[11px]" style={{ color: "var(--text-mute)" }}>No alert rules yet.</p> : rules.map((rule) => <div key={rule.id} className="flex items-center justify-between gap-4 border-b px-2 py-3 last:border-0" style={{ borderColor: "var(--line)" }}><div><span className="font-mono text-[12px]">{rule.ticker}</span><span className="ml-3 text-[11px]" style={{ color: "var(--text-dim)" }}>{LABELS[rule.kind]} <b style={{ color: "var(--text)" }}>{rule.threshold}</b></span></div><button type="button" onClick={() => removeRule(rule.id)} className="text-[10px]" style={{ color: "var(--neg)" }}>Delete</button></div>)}
     </section>
+    <section className="rounded-[var(--radius)] p-4" style={{ background: "var(--panel)", border: "1px solid var(--line)" }}><h3 className="mb-2 text-[12px] font-semibold">Deduplicated delivery ledger</h3>{deliveries.length === 0 ? <p className="text-[11px]" style={{ color: "var(--text-mute)" }}>No server deliveries yet.</p> : deliveries.slice(0, 30).map((row) => <div key={row.delivery_key} className="border-b py-2 text-[10.5px]" style={{ borderColor: "var(--line)" }}><span>{row.created_at} · {row.channel} · {row.status}</span><p style={{ color: "var(--text-dim)" }}>{row.message}</p><p style={{ color: "var(--text-mute)" }}>Observed {row.observed ?? "unknown"} at {row.observed_at ?? "unknown"}</p></div>)}</section>
   </div>;
 }

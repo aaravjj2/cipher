@@ -1,0 +1,37 @@
+# Rotation for Cipher's runtime logs.
+#
+# Added 2026-08-12 after runtime/logs/cipher_signal_only_loop.log reached 3.45 GB with no
+# rotation configured anywhere. The loop that wrote it had already stopped (last write
+# Aug 8), so the file was dead weight rather than active growth -- but nothing bounded it
+# if the loop restarted, and an unattended system that fills its own disk is not
+# unattended.
+#
+# Deploy to /etc/logrotate.d/cipher. The repo copy is not the copy that runs: see
+# infra/gcp-cipher-vm/README.md, "The repo copy is not the copy that runs (2026-08-12)".
+# Verify with:  sudo logrotate --debug /etc/logrotate.d/cipher
+
+/home/aarav/Aarav/cipher/runtime/logs/*.log {
+    daily
+    rotate 7
+    maxsize 200M
+    missingok
+    notifempty
+    compress
+
+    # No delaycompress. It exists for rename-based rotation, where a writer may still hold
+    # the old inode and compressing immediately would truncate a file still being appended
+    # to. Under copytruncate the copy is already complete the moment rotation runs, so
+    # delaying only leaves the full uncompressed size on disk for another day -- which is
+    # the entire problem this config was added to solve.
+
+    # copytruncate, not rename-and-create: these logs are shell redirects from
+    # long-running Python loops (scripts/run_cipher_signal_only_loop.py and friends) that
+    # do not reopen their output on SIGHUP. Renaming the file would leave the writer
+    # appending to an unlinked inode until the next restart, so the "rotated" log would
+    # keep growing invisibly and the new file would stay empty.
+    copytruncate
+
+    # runtime/logs is owned by aarav, not root; logrotate refuses to act on a
+    # user-writable directory without being told whose privileges to drop to.
+    su aarav aarav
+}

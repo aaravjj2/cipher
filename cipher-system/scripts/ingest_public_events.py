@@ -27,7 +27,13 @@ from core.research_platform.artifact_store import ArtifactStore
 from core.research_platform.news import FinBertSentimentProvider, NewsDocument, NewsFeatureService
 from core.research_platform.registry import ResearchRegistry
 
-SYMBOLS = ("SPY", "QQQ", "IWM", "XLF", "XLE", "AAPL", "MSFT", "NVDA", "GE")
+# Match the paper-autopilot foundation universe so advisory context is not
+# accidentally available only for the old nine-name research pilot.
+SYMBOLS = (
+    "SPY", "QQQ", "IWM", "XLF", "XLE", "AAPL", "MSFT", "NVDA", "AMZN",
+    "GOOGL", "META", "TSLA", "AVGO", "AMD", "MU", "SNDK", "NFLX", "PLTR",
+    "COIN", "IBIT", "GE",
+)
 PINNED_CIKS = {
     "AAPL": {"cik_str": 320193, "ticker": "AAPL", "title": "Apple Inc."},
     "MSFT": {"cik_str": 789019, "ticker": "MSFT", "title": "Microsoft Corp."},

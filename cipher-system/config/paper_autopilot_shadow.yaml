@@ -1,0 +1,94 @@
+mode: shadow
+runtime_root: /home/aarav/Aarav/cipher/runtime/data/paper_runtime
+database_path: /home/aarav/Aarav/cipher/runtime/data/paper_runtime/data/paper_trades/autopilot_shadow.sqlite
+
+server:
+  host: 127.0.0.1
+  port: 8787
+  approved_origins: []
+
+scanner:
+  accepted_types: [flash_agentic]
+  episode_cooldown_minutes: 30
+  maximum_signal_age_seconds: 120
+  maximum_level_distance_pct: 12.0
+
+strategy:
+  allowed_tickers: [SPY, QQQ, IWM, AAPL, MSFT, NVDA, AMZN, GOOGL, META, TSLA, AVGO, AMD, MU, SNDK, NFLX, PLTR, COIN, IBIT]
+  entry_window_et_start: "09:35"
+  entry_window_et_end: "11:30"
+  allowed_patterns:
+    - {scanner_type: flash_agentic, setup: triple cluster (3 peaks, above), direction: bullish}
+    - {scanner_type: flash_agentic, setup: triple cluster (3 peaks, above), direction: bearish}
+    - {scanner_type: flash_agentic, setup: triple cluster (3 peaks, below), direction: bullish}
+    - {scanner_type: flash_agentic, setup: triple cluster (3 peaks, below), direction: bearish}
+    - {scanner_type: flash_agentic, setup: quad cluster (4 peaks, above), direction: bullish}
+    - {scanner_type: flash_agentic, setup: quad cluster (4 peaks, above), direction: bearish}
+    - {scanner_type: flash_agentic, setup: quad cluster (4 peaks, below), direction: bullish}
+    - {scanner_type: flash_agentic, setup: quad cluster (4 peaks, below), direction: bearish}
+    - {scanner_type: flash_agentic, setup: golden / top-pull, direction: bullish}
+    - {scanner_type: flash_agentic, setup: golden / top-pull, direction: bearish}
+    - {scanner_type: flash_agentic, setup: battle zone, direction: bullish}
+    - {scanner_type: flash_agentic, setup: battle zone, direction: bearish}
+    - {scanner_type: flash_agentic, setup: call wall, direction: bullish}
+    - {scanner_type: flash_agentic, setup: call wall, direction: bearish}
+    - {scanner_type: flash_agentic, setup: put floor, direction: bullish}
+    - {scanner_type: flash_agentic, setup: put floor, direction: bearish}
+
+instrument:
+  model: long_option
+
+market_data:
+  provider: alpaca_core
+  core_url: http://127.0.0.1:8282
+  request_timeout_seconds: 90
+  chain_expiration_count: 6
+  chain_cache_seconds: 30
+  # Cipher's chain cache is deliberately rate-conscious. Quotes older than this
+  # are rejected by the monitor instead of silently treated as current.
+  quote_maximum_age_seconds: 75
+
+contract:
+  minimum_dte: 1
+  maximum_dte: 3
+  allow_0dte: false
+  preferred_moneyness: atm
+  fallback_moneyness: one_strike_itm
+  minimum_bid: 0.05
+  maximum_spread_pct: 12.0
+  minimum_open_interest: 100
+  minimum_volume: 10
+  maximum_contract_cost: 500.0
+
+portfolio:
+  starting_cash: 25000.0
+  quantity_per_trade: 1
+  maximum_open_positions: 3
+  maximum_positions_per_ticker: 1
+  maximum_new_positions_per_day: 5
+  stop_after_daily_losses: 2
+
+exit:
+  take_profit_pct: 20.0
+  stop_loss_pct: 15.0
+  exit_on_underlying_target: true
+  exit_on_underlying_invalidation: true
+  maximum_hold_minutes: 45
+  force_close_time_et: "15:45"
+  allow_overnight: false
+
+simulation:
+  entry_at_ask: true
+  exit_at_bid: true
+  minimum_slippage_dollars: 0.01
+  slippage_pct: 0.5
+
+vm_forwarding:
+  enabled: false
+  asynchronous: true
+
+safety:
+  live_order_code_present: false
+  default_start_mode: shadow
+  require_reconciliation_after_restart: true
+  close_positions_on_kill: false

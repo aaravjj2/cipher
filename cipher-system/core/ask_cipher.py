@@ -36,11 +36,13 @@ _USAGE_LOCK = threading.Lock()
 
 SYSTEM_PROMPT = (
     "You are Ask Cipher, a research assistant embedded in Cipher, a read-only "
-    "options/equity research tool. You have five tools that read Cipher's real, "
+    "options/equity research tool. Your tools read Cipher's real, "
     "already-computed data: evidence accrual status, open prospective "
     "registrations and shadow positions, the user's manually-entered holdings "
     "marked to market, a live quote for one ticker, and the strategy catalog's "
-    "metadata (which strategies are evaluable vs. blocked, and why).\n\n"
+    "metadata (which strategies are evaluable vs. blocked, and why), plus a bounded "
+    "active-workspace context containing timestamped matrix, flow, option-chain, "
+    "portfolio-risk, journal, and official company/event evidence.\n\n"
     "Hard rule: never state a number, verdict, price, or fact about Cipher's "
     "data unless you called the matching tool this turn. Do not draw on general "
     "market knowledge, training-data facts about specific tickers or companies, "
@@ -188,7 +190,7 @@ def check_and_record_usage() -> None:
 
 
 def _make_tools(tool_impls: dict[str, Callable]) -> list:
-    """Wraps the five injected callables as Claude tool-runner functions.
+    """Wraps the injected callables as Claude tool-runner functions.
     Docstrings become the tool descriptions the model sees; type hints become
     the input schema. Deliberately no try/except here -- the tool runner
     itself catches a tool's exception and reports it to the model as an
@@ -229,12 +231,20 @@ def _make_tools(tool_impls: dict[str, Callable]) -> list:
         requires running an evaluation, which this tool cannot do."""
         return json.dumps(tool_impls["list_strategies"](family), default=str)
 
+    def get_workspace_context() -> str:
+        """The active browser ticker and a bounded, timestamped research bundle:
+        quote, GEX summary and coverage, truthful options flow, option term structure,
+        manual portfolio risk, linked journal entries, and official company/event
+        context. Missing sections and caveats are preserved."""
+        return json.dumps(tool_impls["get_workspace_context"](), default=str)
+
     return [
         beta_tool(get_evidence_status),
         beta_tool(get_standing),
         beta_tool(get_holdings),
         beta_tool(get_quote),
         beta_tool(list_strategies),
+        beta_tool(get_workspace_context),
     ]
 
 
@@ -276,12 +286,20 @@ def _run_chat_job_anthropic(
     append_event({"type": "done", "text": final_text})
 
 
-# OpenAI function-calling shape for the same five tools -- OpenRouter (and any
+# OpenAI function-calling shape for the same tools -- OpenRouter (and any
 # OpenAI-compatible gateway) speaks this format, not Anthropic's block-based
 # tool_use. Hand-authored rather than derived from decorators since the
 # `anthropic` SDK's docstring-based schema inference is Anthropic-specific;
 # these describe exactly the same five injected callables.
 _OPENAI_TOOL_SPECS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "get_workspace_context",
+            "description": "Bounded active-ticker context with timestamps and caveats for matrix, flow, option term structure, manual portfolio risk, journal, and official company/event evidence.",
+            "parameters": {"type": "object", "properties": {}, "required": []},
+        },
+    },
     {
         "type": "function",
         "function": {

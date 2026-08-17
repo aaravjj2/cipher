@@ -7,6 +7,7 @@ import {
   type BacktestJob,
   type BacktestPartition,
   type BacktestStats,
+  type BacktestEvaluation,
 } from "@/lib/api";
 
 /**
@@ -99,12 +100,41 @@ function PartitionRow({ name, part }: { name: string; part: BacktestPartition })
   );
 }
 
+function EvaluationCard({ label, value }: { label: string; value?: BacktestEvaluation }) {
+  const stats = value?.stats || value?.base;
+  if (!value || !stats) {
+    return <div className="rounded-[10px] p-3 text-[11px]" style={{ border: "1px solid var(--line)", color: "var(--text-mute)" }}>{label}: no eligible result</div>;
+  }
+  const interval = value.uncertainty?.interval;
+  const serialInterval = value.serial_uncertainty?.interval;
+  return (
+    <div className="flex min-w-0 flex-col gap-1 rounded-[10px] p-3" style={{ background: "var(--panel-2)", border: "1px solid var(--line)" }}>
+      <span className="text-[10px] font-bold uppercase" style={{ color: "var(--text-mute)", letterSpacing: "0.1em" }}>{label}</span>
+      <div className="flex flex-wrap gap-x-4 gap-y-1 text-[12px]" style={{ color: "var(--text-dim)" }}>
+        <span><strong style={{ color: "var(--text)" }}>{stats.trades}</strong> trades</span>
+        <span><strong style={{ color: stats.avg_return_pct > 0 ? "var(--success)" : "var(--neg)" }}>{pct(stats.avg_return_pct, 4)}</strong> avg</span>
+        <span>{pct(stats.win_rate, 1)} win</span>
+      </div>
+      {interval && <span className="text-[10.5px]" style={{ color: value.uncertainty?.contains_zero ? "var(--warn)" : "var(--text-mute)" }}>
+        IID 95% mean: {pct(interval[0], 4)} to {pct(interval[1], 4)}{value.uncertainty?.contains_zero ? " · includes zero" : ""}
+      </span>}
+      {serialInterval && <span className="text-[10.5px]" style={{ color: value.serial_uncertainty?.contains_zero ? "var(--warn)" : "var(--text-mute)" }}>
+        Block 95% mean ({value.serial_uncertainty?.block_length} trades): {pct(serialInterval[0], 4)} to {pct(serialInterval[1], 4)}{value.serial_uncertainty?.contains_zero ? " · includes zero" : ""}
+      </span>}
+    </div>
+  );
+}
+
 export function Backtest({ ticker }: { ticker?: string }) {
   const [mode, setMode] = useState<"filter" | "standalone">("filter");
   const [symbols, setSymbols] = useState(PRESETS[0].value);
   const [timeframe, setTimeframe] = useState("15Min");
   const [detector, setDetector] = useState("EOD Focus");
   const [lookback, setLookback] = useState(6);
+  const [years, setYears] = useState(1);
+  const [costBps, setCostBps] = useState(2);
+  const [commissionBps, setCommissionBps] = useState(0);
+  const [holdout, setHoldout] = useState(0.3);
   const [job, setJob] = useState<BacktestJob | null>(null);
   const [error, setError] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -122,7 +152,7 @@ export function Backtest({ ticker }: { ticker?: string }) {
     setError(null);
     stopPolling();
     try {
-      const { job_id } = await startBacktest({ mode, symbols, timeframe, detector, lookback });
+      const { job_id } = await startBacktest({ mode, symbols, timeframe, detector, lookback, years, costBps, commissionBps, holdout, seed: 17 });
       pollRef.current = setInterval(async () => {
         try {
           const next = await fetchBacktestJob(job_id);
@@ -136,7 +166,7 @@ export function Backtest({ ticker }: { ticker?: string }) {
     } catch (err) {
       setError((err as Error)?.message || "could not start the backtest");
     }
-  }, [mode, symbols, timeframe, detector, lookback, stopPolling]);
+  }, [mode, symbols, timeframe, detector, lookback, years, costBps, commissionBps, holdout, stopPolling]);
 
   const busy = job?.status === "queued" || job?.status === "running";
   const result = job?.status === "done" ? job.result : null;
@@ -242,6 +272,29 @@ export function Backtest({ ticker }: { ticker?: string }) {
           </div>
         )}
 
+        <details className="w-full rounded-[9px] px-3 py-2" style={{ border: "1px solid var(--line)", background: "var(--panel-1)" }}>
+          <summary className="cursor-pointer text-[11px] font-semibold" style={{ color: "var(--text-dim)" }}>Experiment protocol</summary>
+          <div className="mt-3 flex flex-wrap items-end gap-3">
+            <label className="flex flex-col gap-1 text-[10px] uppercase" style={{ color: "var(--text-mute)" }}>History years
+              <input type="number" min={0.25} max={10} step={0.25} value={years} onChange={(e) => setYears(Number(e.target.value) || 1)} className="w-[88px] rounded-[7px] px-2 py-1.5 text-[12px]" style={{ background: "var(--panel-2)", border: "1px solid var(--line)", color: "var(--text)" }} />
+            </label>
+            <label className="flex flex-col gap-1 text-[10px] uppercase" style={{ color: "var(--text-mute)" }}>Cost / side (bps)
+              <input type="number" min={0} max={100} step={0.5} value={costBps} onChange={(e) => setCostBps(Math.max(0, Number(e.target.value)))} className="w-[100px] rounded-[7px] px-2 py-1.5 text-[12px]" style={{ background: "var(--panel-2)", border: "1px solid var(--line)", color: "var(--text)" }} />
+            </label>
+            <label className="flex flex-col gap-1 text-[10px] uppercase" style={{ color: "var(--text-mute)" }}>Commission / side
+              <input type="number" min={0} max={100} step={0.1} value={commissionBps} onChange={(e) => setCommissionBps(Math.max(0, Number(e.target.value)))} className="w-[100px] rounded-[7px] px-2 py-1.5 text-[12px]" style={{ background: "var(--panel-2)", border: "1px solid var(--line)", color: "var(--text)" }} />
+            </label>
+            <label className="flex flex-col gap-1 text-[10px] uppercase" style={{ color: "var(--text-mute)" }}>Locked holdout
+              <select value={holdout} onChange={(e) => setHoldout(Number(e.target.value))} className="rounded-[7px] px-2 py-1.5 text-[12px]" style={{ background: "var(--panel-2)", border: "1px solid var(--line)", color: "var(--text)" }}>
+                <option value={0.2}>20%</option><option value={0.3}>30%</option><option value={0.4}>40%</option>
+              </select>
+            </label>
+            <span className="max-w-[520px] text-[10.5px] leading-relaxed" style={{ color: "var(--text-mute)" }}>
+              Parameters are hashed before the run. One bar on each side of the split is embargoed. Costs apply on entry and exit; seed 17 makes controls and uncertainty reproducible.
+            </span>
+          </div>
+        </details>
+
         <button type="button" onClick={run} disabled={busy}
           className="rounded-[8px] px-[18px] py-[8px] text-[13px] font-semibold"
           style={{
@@ -275,6 +328,46 @@ export function Backtest({ ticker }: { ticker?: string }) {
             {result.lookback_bars ? ` · ${result.lookback_bars}-bar lookback` : ""} ·
             {" "}{(result.elapsed_ms / 1000).toFixed(1)}s
           </span>
+
+          {result.manifest && (
+            <div className="flex flex-col gap-2 rounded-[10px] p-3" style={{ border: "1px solid var(--line)", background: "var(--panel-1)" }}>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="text-[11px] font-bold uppercase" style={{ color: "var(--text)" }}>Locked experiment</span>
+                <code className="text-[10.5px]" title={result.experiment_id} style={{ color: "var(--accent)" }}>{result.experiment_id?.slice(0, 16)}</code>
+              </div>
+              <div className="flex flex-wrap gap-x-5 gap-y-1 text-[11px]" style={{ color: "var(--text-dim)" }}>
+                <span>{result.manifest.spec.cost_model.slippage_bps_per_side} slippage + {result.manifest.spec.cost_model.commission_bps_per_side} commission bps/side · {result.manifest.spec.cost_model.round_trip_bps} round trip</span>
+                <span>{Math.round(result.manifest.spec.validation.holdout_fraction * 100)}% chronological holdout</span>
+                <span>next-open · stop-first · research only</span>
+                <span title={result.manifest.data_fingerprint}>data {result.manifest.data_fingerprint.slice(0, 10)} · exact input snapshot saved</span>
+              </div>
+              {result.manifest.blocked_symbols.length > 0 && <span className="text-[10.5px]" style={{ color: "var(--warn)" }}>
+                Holdout blocked for: {result.manifest.blocked_symbols.join(", ")} — insufficient bars in one partition.
+              </span>}
+            </div>
+          )}
+
+          {result.validation && (
+            <div className="grid gap-2 sm:grid-cols-2">
+              <EvaluationCard label="Training partition" value={result.validation.train} />
+              <EvaluationCard label="Locked holdout — primary evidence" value={result.validation.holdout} />
+              {result.validation.blocker && <p className="text-[11px] sm:col-span-2" style={{ color: "var(--warn)" }}>{result.validation.blocker}</p>}
+            </div>
+          )}
+
+          {result.portfolio && (
+            <div className="flex flex-wrap items-baseline gap-x-5 gap-y-1 rounded-[10px] p-3 text-[11px]" style={{ background: "var(--panel-2)", border: "1px solid var(--line)", color: "var(--text-dim)" }}>
+              <strong style={{ color: "var(--text)" }}>Portfolio constraint</strong>
+              <span>${result.portfolio.starting_equity.toLocaleString()} → ${result.portfolio.ending_equity.toLocaleString()}</span>
+              <span style={{ color: result.portfolio.profit_loss >= 0 ? "var(--success)" : "var(--neg)" }}>{result.portfolio.profit_loss >= 0 ? "+" : ""}${result.portfolio.profit_loss.toLocaleString()} · {pct(result.portfolio.return_pct, 3)}</span>
+              <span>{result.portfolio.trades_taken} taken · {result.portfolio.trades_skipped_at_capacity} capacity skips · max {result.portfolio.max_concurrent_positions}</span>
+              {result.trade_ledger && <button type="button" className="ml-auto font-semibold" style={{ color: "var(--accent)" }} onClick={() => {
+                const blob = new Blob([JSON.stringify(result.trade_ledger, null, 2)], { type: "application/json" });
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement("a"); link.href = url; link.download = `cipher-backtest-${result.experiment_id?.slice(0, 12) || "ledger"}.json`; link.click(); URL.revokeObjectURL(url);
+              }}>Download trade ledger</button>}
+            </div>
+          )}
 
           {result.mode === "filter" && result.base && result.partitions && (
             <>

@@ -9,6 +9,7 @@ import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from urllib.error import HTTPError
 from urllib.request import urlopen
 
 
@@ -23,6 +24,17 @@ SYSTEMD_SERVICES = (
     "cipher-web.service",
     "cipher-gex.service",
     "cipher-tradier.service",
+)
+REQUIRED_TIMERS = (
+    "cipher-local-backup.timer",
+    "cipher-fronttest-portfolios.timer",
+    "cipher-prospective-fronttests.timer",
+    "cipher-market-research.timer",
+    "cipher-option-history.timer",
+    "cipher-portfolio-discord-daily.timer",
+    "cipher-operational-metrics.timer",
+    "cipher-event-context.timer",
+    "cipher-data-health-alert.timer",
 )
 
 
@@ -93,11 +105,38 @@ def systemd_service(name: str) -> dict[str, Any]:
     }
 
 
+def systemd_timer(name: str) -> dict[str, Any]:
+    result = command([
+        "systemctl", "show", name, "-p", "ActiveState", "-p", "UnitFileState",
+        "-p", "NextElapseUSecRealtime", "-p", "LastTriggerUSec",
+    ])
+    values: dict[str, str] = {}
+    for line in result["stdout"].splitlines():
+        if "=" in line:
+            key, value = line.split("=", 1)
+            values[key] = value
+    return {
+        "name": name,
+        "active_state": values.get("ActiveState"),
+        "unit_file_state": values.get("UnitFileState"),
+        "next": values.get("NextElapseUSecRealtime") or None,
+        "last_trigger": values.get("LastTriggerUSec") or None,
+        "query_returncode": result["returncode"],
+    }
+
+
 def http_json(url: str) -> dict[str, Any]:
     try:
         with urlopen(url, timeout=15) as response:
             payload = json.loads(response.read().decode("utf-8"))
             return {"ok": 200 <= response.status < 300, "status": response.status, "payload": payload}
+    except HTTPError as exc:
+        try:
+            payload = json.loads(exc.read().decode("utf-8"))
+        except (ValueError, OSError):
+            payload = None
+        return {"ok": False, "status": exc.code, "payload": payload,
+                "error": f"HTTPError: {exc.code}"}
     except Exception as exc:
         return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
 
@@ -173,10 +212,12 @@ def atomic_write(path: Path, payload: dict[str, Any]) -> None:
 def build_audit() -> dict[str, Any]:
     canonical = ROOT.resolve()
     services = {name: systemd_service(name) for name in SYSTEMD_SERVICES}
+    timers = {name: systemd_timer(name) for name in REQUIRED_TIMERS}
     health = http_json("http://127.0.0.1:8282/health")
     research_status = http_json("http://127.0.0.1:8282/api/research-status")
     web_health = http_json("http://127.0.0.1:8283/api/health")
     web_research_status = http_json("http://127.0.0.1:8283/api/research-status")
+    operator = http_json("http://127.0.0.1:8282/api/operator-status")
     registry = registry_audit(ROOT / "data" / "governance" / "research_registry.sqlite")
     scheduler = managed_daemon(
         ROOT / "data" / "governance" / "safe_scheduler.pid",
@@ -211,25 +252,34 @@ def build_audit() -> dict[str, Any]:
         "core_health": bool(health.get("ok")),
         "web_health": bool(web_health.get("ok")),
         "core_research_status": bool(research_status.get("ok")),
-        "web_research_status": bool(web_research_status.get("ok")),
+        "web_auth_gate_enforced": web_research_status.get("status") in {401, 403},
         "registry_integrity": registry.get("integrity") == "ok",
         "active_registry_test_contamination_absent": registry.get("active_pytest_raw_records") == 0 and registry.get("active_pytest_audit_records") == 0,
-        "scheduler_running": bool(scheduler.get("running")),
-        "healer_running": bool(healer.get("running")),
+        "required_timers_active": all(
+            item["active_state"] == "active" and item["unit_file_state"] == "enabled"
+            for item in timers.values()
+        ),
+        "restore_verified_backup": bool(
+            operator.get("ok") and (operator.get("payload") or {}).get("backup", {}).get("status") == "VERIFIED"
+        ),
         "live_execution_absent": not bool((health.get("payload") or {}).get("live_execution", False))
         and not bool((research_status.get("payload") or {}).get("live_execution_present", False)),
     }
     complete = all(checks.values())
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "verdict": "COMPLETE" if complete else "INCOMPLETE",
         "unified_product_complete": complete,
         "checks": checks,
         "paths": paths,
         "systemd_services": services,
-        "safe_scheduler": scheduler,
-        "build_healer": healer,
+        "required_timers": timers,
+        "legacy_pid_daemons": {
+            "safe_scheduler": scheduler,
+            "build_healer": healer,
+            "gate_status": "INFORMATIONAL_RETIRED",
+        },
         "core_health": health,
         "web_health": web_health,
         "core_research_status": {
@@ -241,11 +291,18 @@ def build_audit() -> dict[str, Any]:
         "web_research_status": {
             "ok": web_research_status.get("ok"),
             "status": web_research_status.get("status"),
+            "authentication_required": web_research_status.get("status") in {401, 403},
+        },
+        "operator_status": {
+            "ok": operator.get("ok"),
+            "backup": (operator.get("payload") or {}).get("backup"),
+            "execution_capability": (operator.get("payload") or {}).get("execution_capability"),
         },
         "registry": registry,
         "git": git_status(),
         "execution_authority": False,
-        "paper_or_live_execution_enabled": False,
+        "paper_simulation_enabled": True,
+        "live_execution_enabled": False,
     }
 
 

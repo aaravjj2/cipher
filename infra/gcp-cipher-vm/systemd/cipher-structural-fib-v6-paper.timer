@@ -1,0 +1,12 @@
+[Unit]
+Description=Run the Structural Fib V6 paper account every five minutes
+
+[Timer]
+OnCalendar=Mon..Fri *:0/5
+RandomizedDelaySec=15
+AccuracySec=30s
+Persistent=false
+Unit=cipher-structural-fib-v6-paper.service
+
+[Install]
+WantedBy=timers.target

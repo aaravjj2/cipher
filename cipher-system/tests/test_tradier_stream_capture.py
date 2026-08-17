@@ -160,6 +160,11 @@ def test_store_events_classifies_options_and_updates_run_progress(tmp_path: Path
         run_id,
         [
             {"type": "quote", "symbol": "SPY260731C00740000", "bid": "1.20", "ask": "1.25"},
+            {
+                "type": "timesale", "symbol": "SPY260731C00740000",
+                "bid": "1.20", "ask": "1.25", "price": "1.25", "size": "4",
+                "date": "2026-07-27T14:31:02.100Z", "exch": "CBOE",
+            },
             {"type": "trade", "symbol": "SPY", "price": "739.10", "size": "10"},
             {"type": "heartbeat"},
         ],
@@ -176,11 +181,22 @@ def test_store_events_classifies_options_and_updates_run_progress(tmp_path: Path
             from tradier_stream_events where symbol = 'SPY260731C00740000'
             """
         ).fetchone()
-    assert event_count == 3
+        projected = db.execute(
+            """
+            select session_date, underlying, option_type, strike, bid, ask,
+                   price, size, premium, exchange
+            from tradier_option_timesales
+            """
+        ).fetchone()
+    assert event_count == 4
     assert last_event_at
     assert option_row == ("option", "SPY", "2026-07-31", "call", 740.0)
-    assert tradier.finish_run(db_path, run_id, stop_reason="test") == 3
-    assert len(raw_path.read_text(encoding="utf-8").splitlines()) == 3
+    assert projected == (
+        "2026-07-27", "SPY", "call", 740.0, 1.2, 1.25,
+        1.25, 4.0, 500.0, "CBOE",
+    )
+    assert tradier.finish_run(db_path, run_id, stop_reason="test") == 4
+    assert len(raw_path.read_text(encoding="utf-8").splitlines()) == 4
 
 
 def test_reconcile_run_counts_repairs_completed_metadata(tmp_path: Path) -> None:

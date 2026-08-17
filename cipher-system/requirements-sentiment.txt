@@ -1,0 +1,4 @@
+# Optional local, CPU-only sentiment layer. The model itself is revision-pinned
+# in scripts/ingest_public_events.py; no remote inference endpoint is used.
+transformers==4.55.2
+safetensors==0.6.2

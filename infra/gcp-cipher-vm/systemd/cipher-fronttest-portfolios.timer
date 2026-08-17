@@ -1,0 +1,13 @@
+[Unit]
+Description=Monitor six isolated option shadow portfolios every minute
+
+[Timer]
+OnCalendar=Mon..Fri *:*:00
+RandomizedDelaySec=8
+AccuracySec=10s
+# Missed signals must never be manufactured retrospectively.
+Persistent=false
+Unit=cipher-fronttest-portfolios.service
+
+[Install]
+WantedBy=timers.target

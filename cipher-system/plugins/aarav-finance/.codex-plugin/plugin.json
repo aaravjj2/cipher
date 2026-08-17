@@ -1,0 +1,37 @@
+{
+  "name": "aarav-finance",
+  "version": "0.1.0+codex.20260816195726",
+  "description": "Read-only equity, earnings, valuation, options, and Cipher/GEX research workflows.",
+  "author": {
+    "name": "Aarav"
+  },
+  "repository": "https://github.com/openai/codex",
+  "license": "UNLICENSED",
+  "keywords": [
+    "finance",
+    "equity-research",
+    "earnings",
+    "valuation",
+    "options",
+    "gex",
+    "read-only"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Aarav Finance",
+    "shortDescription": "Source-first equity and options research around Cipher.",
+    "longDescription": "A read-only research layer that combines fundamental verification, earnings dislocation analysis, multi-bagger discovery, valuation, and Cipher's local options/GEX analytics.",
+    "developerName": "Aarav",
+    "category": "Finance",
+    "capabilities": [
+      "Interactive",
+      "Research",
+      "Analysis",
+      "Options analytics"
+    ],
+    "defaultPrompt": [
+      "Use the Aarav Finance agent to analyze a stock, options setup, earnings event, or Cipher market-structure signal."
+    ]
+  },
+  "mcpServers": "./.mcp.json"
+}

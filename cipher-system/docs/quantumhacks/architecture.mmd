@@ -1,0 +1,28 @@
+flowchart TD
+    U[Trader objective] --> MB[Morning Brief]
+    MB --> SC[Setup Scanner]
+    SC --> ES[Evidence Snapshot]
+    ES --> NV[Night Vision replay]
+    ES --> OT[Options Terminal]
+    ES --> RA[Research Agent Fleet]
+
+    MD[Alpaca SIP / IEX / OPRA] --> CORE[Read-only Python Core]
+    CORE --> ES
+    OI[Contract OI + OI date] --> CORE
+    NEWS[Yahoo / SEC / Finviz context] --> RA
+
+    RA --> MEM[Bounded research memo]
+    NV --> DEC[Human research decision]
+    OT --> DEC
+    MEM --> DEC
+
+    DEC --> PA[Paper Autopilot]
+    PA -->|premarket watch only| PLAN[Immutable plan]
+    PLAN -->|fresh closed RTH confirmation| PE[Shadow Executor]
+    PE --> LEDGER[(SQLite audit ledgers)]
+    PE -->|hard limits + simulated exits| PP[Paper Portfolios]
+    LEDGER --> PP
+
+    PP --> GATE[Prospective sample gates]
+    GATE --> REVIEW[LIVE_REVIEW_REQUIRED]
+    REVIEW -. no order authority .-> STOP[Human boundary]

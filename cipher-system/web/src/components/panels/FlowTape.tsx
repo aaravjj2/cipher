@@ -47,6 +47,15 @@ function clockTime(iso: string): string {
   });
 }
 
+function marketDateTime(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleString("en-US", {
+    timeZone: "America/New_York", month: "short", day: "numeric",
+    hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false,
+  });
+}
+
 function expLabel(iso: string): string {
   const d = new Date(`${iso}T00:00:00Z`);
   if (Number.isNaN(d.getTime())) return iso;
@@ -59,6 +68,10 @@ export default function FlowTape({ ticker }: { ticker: string }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [asOf, setAsOf] = useState<string | null>(null);
+  const [sessionDate, setSessionDate] = useState<string | null>(null);
+  const [source, setSource] = useState<string | null>(null);
+  const [caveat, setCaveat] = useState<string | null>(null);
+  const [freshness, setFreshness] = useState<{ status: "current" | "stale" | "unknown"; age_seconds: number | null }>({ status: "unknown", age_seconds: null });
   const [live, setLive] = useState(true);
   // Tracks the newest print already seen so arriving rows can be highlighted
   // without re-animating the whole tape on every poll.
@@ -84,6 +97,10 @@ export default function FlowTape({ ticker }: { ticker: string }) {
         setFresh(prints.length === 0 ? new Set() : arrived);
         setPrints(rows);
         setAsOf(res.as_of ?? null);
+        setSessionDate(res.session_date ?? null);
+        setSource(res.source ?? null);
+        setCaveat(res.caveat ?? null);
+        setFreshness(res.freshness ?? { status: res.event_age_seconds == null ? "unknown" : res.event_age_seconds <= 120 ? "current" : "stale", age_seconds: res.event_age_seconds ?? null });
         setError(null);
       } catch (err) {
         if ((err as Error)?.name !== "AbortError") {
@@ -170,7 +187,7 @@ export default function FlowTape({ ticker }: { ticker: string }) {
             border: "1px solid var(--border)",
           }}
         >
-          {live ? "● Live" : "Paused"}
+          {live ? "● Auto refresh" : "Paused"}
         </button>
 
         <span
@@ -178,15 +195,27 @@ export default function FlowTape({ ticker }: { ticker: string }) {
           title="The real panel offers previous session dates. /api/flow serves only the current session and no print history is stored, so those tabs would return today's tape under another day's label."
           style={{ color: "var(--text-mute)", opacity: 0.6 }}
         >
-          history unavailable
+          {sessionDate ? `session ${sessionDate}` : "session unavailable"}
         </span>
 
         <span className="ml-auto text-[10px]" style={{ color: "var(--text-mute)" }}>
           {loading && prints.length === 0
             ? "loading…"
             : `${prints.length} prints · ${money(totalPremium)} · ${calls}C/${prints.length - calls}P`}
-          {asOf ? ` · ${clockTime(asOf)}` : ""}
+          {asOf ? ` · newest ${marketDateTime(asOf)} ET` : ""}
         </span>
+        <span className="rounded px-1.5 py-0.5 text-[9px] font-semibold uppercase" style={{ color: freshness.status === "current" ? "var(--accent)" : freshness.status === "stale" ? "var(--gold)" : "var(--text-mute)", border: "1px solid var(--border)" }} title="Freshness is based on the newest represented event, not the time the browser fetched the response.">
+          {freshness.status}{freshness.age_seconds != null ? ` · ${Math.round(freshness.age_seconds)}s` : ""}
+        </span>
+      </div>
+
+      <div
+        className="border-b px-3 py-1.5 text-[10px]"
+        style={{ borderColor: "var(--border)", color: "var(--text-mute)" }}
+        title={caveat ?? undefined}
+      >
+        {source === "tradier_stream" ? "Captured event timesales" : "Chain snapshot fallback"}
+        {caveat ? ` · ${caveat}` : ""}
       </div>
 
       {error && (
@@ -225,7 +254,7 @@ export default function FlowTape({ ticker }: { ticker: string }) {
             {prints.length === 0 && !loading && !error && (
               <tr>
                 <td colSpan={6} className="px-3 py-4 text-center text-[10px]" style={{ color: "var(--text-mute)" }}>
-                  No prints above {money(minPremium)} for {ticker} this session. Lower the premium threshold or keep Live on for new prints.
+                  No prints above {money(minPremium)} for {ticker} in the captured session. Lower the premium threshold or keep auto refresh on.
                 </td>
               </tr>
             )}
@@ -250,9 +279,9 @@ export default function FlowTape({ ticker }: { ticker: string }) {
                   >
                     {isCall ? "C" : "P"}
                   </td>
-                  <td className="whitespace-nowrap px-3 py-1 uppercase">{p.side}</td>
+                  <td className="whitespace-nowrap px-3 py-1 uppercase">{p.side === "unknown" ? "—" : p.side}</td>
                   <td className="whitespace-nowrap px-3 py-1">{expLabel(p.expiration)}</td>
-                  <td className="whitespace-nowrap px-3 py-1">{clockTime(p.time)}</td>
+                  <td className="whitespace-nowrap px-3 py-1" title={marketDateTime(p.time)}>{clockTime(p.time)}</td>
                 </tr>
               );
             })}

@@ -1,0 +1,23 @@
+[Unit]
+Description=Create and restore-verify Cipher local state backup
+After=cipher-core.service
+
+[Service]
+Type=oneshot
+User=aarav
+Group=aarav
+WorkingDirectory=/home/aarav/Aarav/cipher/cipher-system
+ExecStart=/home/aarav/.venvs/cipher/bin/python scripts/backup_local_state.py
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=/home/aarav/Aarav/cipher/runtime/data/backups/local_state
+# SQLite may create/update its shared-memory sidecar while a mode=ro connection
+# reads an active WAL. The database itself remains protected by the URI's mode=ro.
+ReadWritePaths=/home/aarav/Aarav/cipher/runtime/data/fronttest_portfolios
+ReadWritePaths=/home/aarav/Aarav/cipher/runtime/data/prospective_fronttests
+RestrictAddressFamilies=AF_UNIX
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=cipher-local-backup

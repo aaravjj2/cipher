@@ -20,8 +20,10 @@ const POLL_MS = 1500;
 function printToRow(p: RealFlowPrint): SpyglassRow {
   return {
     ticker: p.ticker,
-    timeEt: new Date(p.time).toLocaleTimeString("en-US", {
+    timeEt: new Date(p.time).toLocaleString("en-US", {
       timeZone: "America/New_York",
+      month: "short",
+      day: "numeric",
       hour: "numeric",
       minute: "2-digit",
       second: "2-digit",
@@ -39,8 +41,8 @@ function printToRow(p: RealFlowPrint): SpyglassRow {
     // Confirmed against the real site: this column shows which side the trade printed at
     // ("BID" = hit the bid / aggressive sell, "ASK" = lifted the ask / aggressive buy),
     // not a bid/ask price pair — that was a real bug in the first pass.
-    bidAsk: p.side === "buy" ? "ASK" : "BID",
-    pctOtm: Math.round(p.otm_pct * 10) / 10,
+    bidAsk: p.side === "buy" ? "ASK" : p.side === "sell" ? "BID" : "—",
+    pctOtm: p.otm_pct == null ? 0 : Math.round(p.otm_pct * 10) / 10,
   };
 }
 
@@ -194,8 +196,16 @@ function ToolbarButton({
  *
  * The date picker survives only in Contract Search, where the backend does accept it.
  */
-function AsOfField({ asOf }: { asOf: string }) {
-  const ms = Date.parse(asOf);
+function AsOfField({
+  asOf,
+  sessionDate,
+  source,
+}: {
+  asOf: string;
+  sessionDate?: string;
+  source?: string;
+}) {
+  const ms = Date.parse(asOf || "");
   const shown =
     asOf && !Number.isNaN(ms)
       ? new Date(ms).toLocaleString("en-US", {
@@ -212,7 +222,7 @@ function AsOfField({ asOf }: { asOf: string }) {
         className="text-[10px] font-bold uppercase"
         style={{ letterSpacing: "0.12em", color: "var(--text-mute)" }}
       >
-        Snapshot
+        {source === "tradier_stream" ? "Captured stream" : source ? "Snapshot fallback" : "Newest event"}
       </span>
       <span
         className="rounded-[8px] px-[10px] py-[6px] text-[12px]"
@@ -223,7 +233,7 @@ function AsOfField({ asOf }: { asOf: string }) {
           fontFamily: "var(--font-mono)",
         }}
       >
-        {shown}
+        {sessionDate ? `${sessionDate} · ` : ""}{shown}
       </span>
     </div>
   );
@@ -463,6 +473,9 @@ function SpyglassView({ ticker }: { ticker: string }) {
 
   const [prints, setPrints] = useState<RealFlowPrint[]>([]);
   const [asOf, setAsOf] = useState("");
+  const [sessionDate, setSessionDate] = useState("");
+  const [source, setSource] = useState("");
+  const [caveat, setCaveat] = useState("");
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [errorMessage, setErrorMessage] = useState("");
 
@@ -483,7 +496,10 @@ function SpyglassView({ ticker }: { ticker: string }) {
       try {
         const res = await fetchFlow(ticker, filters, signal);
         setPrints(res.prints);
-        setAsOf(res.as_of);
+        setAsOf(res.as_of ?? "");
+        setSessionDate(res.session_date ?? "");
+        setSource(res.source ?? "");
+        setCaveat(res.caveat ?? "");
         setStatus("ready");
         setErrorMessage("");
       } catch (err) {
@@ -515,13 +531,19 @@ function SpyglassView({ ticker }: { ticker: string }) {
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-row flex-wrap items-end gap-2">
-        <AsOfField asOf={asOf} />
+        <AsOfField asOf={asOf} sessionDate={sessionDate} source={source} />
         <PillGroup options={PREMIUM_OPTIONS} value={premium} onChange={setPremium} />
         <PillGroup options={SIZE_OPTIONS} value={size} onChange={setSize} />
         <PillGroup options={CALL_PUT_OPTIONS} value={callPut} onChange={setCallPut} />
         <PillGroup options={BID_ASK_OPTIONS} value={bidAsk} onChange={setBidAsk} />
         <PillGroup options={MONEYNESS_OPTIONS} value={moneyness} onChange={setMoneyness} />
       </div>
+
+      {caveat && (
+        <div className="rounded-[8px] px-3 py-2 text-[11px]" style={{ background: "var(--panel-2)", color: "var(--text-mute)", border: "1px solid var(--line)" }}>
+          {caveat}
+        </div>
+      )}
 
       {/* Real distinct-expiration count from the current print set — confirmed against the
           real site's "Expirations (N/N)" label. No per-expiration filter is wired (the

@@ -27,7 +27,6 @@ type IconComponent = ComponentType<SVGProps<SVGSVGElement>>;
 export type NavItem = {
   label: string;
   icon: IconComponent;
-  cipherX?: boolean;
 };
 
 export type NavSection = {
@@ -39,50 +38,66 @@ export type NavSection = {
  *  so a panel added here shows up in the palette without a second edit. */
 export const NAV_SECTIONS: NavSection[] = [
   {
-    label: "WORKSPACE",
+    label: "TODAY",
     items: [
-      { label: "Strike Matrix", icon: GridIcon },
-      { label: "Night Vision", icon: NightVisionIcon },
-      { label: "Spyglass", icon: SearchIcon },
-      { label: "News", icon: NewsIcon },
+      { label: "Morning Brief", icon: GridIcon },
+      { label: "Research Desk", icon: SearchIcon },
+    ],
+  },
+  {
+    label: "DISCOVER",
+    items: [
+      { label: "Setup Scanner", icon: ScannerIcon },
       { label: "My Watchlists", icon: StarIcon },
-      { label: "Standing", icon: JournalIcon },
-      { label: "Holdings", icon: PortfolioIcon },
+      { label: "News", icon: NewsIcon },
+    ],
+  },
+  {
+    label: "ANALYZE",
+    items: [
+      { label: "Ticker Workbench", icon: GridIcon },
+      { label: "Night Vision", icon: NightVisionIcon },
+      { label: "Options Terminal", icon: OptionsBacktestIcon },
+      { label: "Strike Matrix", icon: GridIcon },
+      { label: "Spyglass", icon: SearchIcon },
+      { label: "Company Context", icon: NewsIcon },
       { label: "Ask Cipher", icon: ChatIcon },
     ],
   },
   {
-    label: "CIPHER X",
+    label: "PLAN",
     items: [
-      { label: "Trident", icon: TridentIcon, cipherX: true },
-      { label: "Chart Saves", icon: BookmarkIcon, cipherX: true },
-      { label: "Setup Scanner", icon: ScannerIcon, cipherX: true },
-      { label: "Backtest", icon: ScannerIcon, cipherX: true },
-      { label: "Options Backtest", icon: OptionsBacktestIcon, cipherX: true },
-      { label: "GEX Replay", icon: ReplayIcon, cipherX: true },
-      { label: "Alerts", icon: AlertIcon, cipherX: true },
-      { label: "Strategies", icon: ScannerIcon, cipherX: true },
+      { label: "Chart Workbench", icon: JournalIcon },
+      { label: "Portfolio Risk", icon: PortfolioIcon },
+      { label: "Holdings", icon: PortfolioIcon },
+      { label: "Alerts", icon: AlertIcon },
     ],
   },
   {
-    label: "ACCOUNT",
-    items: [{ label: "Settings", icon: SettingsIcon }],
+    label: "REVIEW",
+    items: [
+      { label: "Paper Portfolios", icon: PortfolioIcon },
+      { label: "Trader Journal", icon: JournalIcon },
+      { label: "Standing", icon: JournalIcon },
+      { label: "Strategies", icon: ScannerIcon },
+    ],
+  },
+  {
+    label: "LABS",
+    items: [
+      { label: "Backtest", icon: ScannerIcon },
+      { label: "Options Backtest", icon: OptionsBacktestIcon },
+      { label: "GEX Replay", icon: ReplayIcon },
+      { label: "Trident", icon: TridentIcon },
+      { label: "Chart Saves", icon: BookmarkIcon },
+      { label: "Beliefs", icon: JournalIcon },
+    ],
+  },
+  {
+    label: "SYSTEM",
+    items: [{ label: "Operator Status", icon: SettingsIcon }, { label: "Settings", icon: SettingsIcon }],
   },
 ];
-
-function CipherXBadge() {
-  return (
-    <span
-      className="text-[8px] font-semibold px-1 py-[1px] rounded-full whitespace-nowrap"
-      style={{
-        background: "color-mix(in srgb, var(--gold) 25%, transparent)",
-        color: "var(--gold)",
-      }}
-    >
-      CIPHER X
-    </span>
-  );
-}
 
 type SidebarNavProps = {
   collapsed: boolean;
@@ -91,19 +106,23 @@ type SidebarNavProps = {
 };
 
 function SidebarNav({ collapsed, activePanel, onSelect }: SidebarNavProps) {
+  const [openSections, setOpenSections] = useState(() => new Set(["TODAY", "SYSTEM"]));
   return (
-    <nav className="flex flex-col gap-[2px]" aria-label="Primary">
-      {NAV_SECTIONS.map((section) => (
-        <div key={section.label}>
-          {!collapsed && (
-            <div
-              className="text-[9px] font-semibold uppercase px-[11px] pt-[2px] pb-[7px]"
-              style={{ letterSpacing: "0.16em", color: "var(--text-mute)" }}
-            >
-              {section.label}
-            </div>
-          )}
-          {section.items.map((item) => {
+    <nav className="flex flex-col gap-1" aria-label="Primary">
+      {NAV_SECTIONS.map((section) => {
+        const containsActive = section.items.some((item) => item.label === activePanel);
+        const expanded = collapsed || containsActive || openSections.has(section.label);
+        return <div key={section.label}>
+          {!collapsed && <button
+            type="button"
+            aria-expanded={expanded}
+            onClick={() => setOpenSections((current) => { const next = new Set(current); if (next.has(section.label)) next.delete(section.label); else next.add(section.label); return next; })}
+            className="flex w-full items-center justify-between rounded-md px-2.5 py-2 text-[9px] font-bold uppercase hover:bg-white/[0.03]"
+            style={{ letterSpacing: "0.14em", color: containsActive ? "var(--text-dim)" : "var(--text-mute)" }}
+          >
+            <span>{section.label}</span><ChevronLeftIcon width={12} height={12} className={cn("transition-transform", expanded ? "-rotate-90" : "rotate-180")} />
+          </button>}
+          {expanded && <div className="space-y-0.5 pb-1">{section.items.map((item) => {
             const Icon = item.icon;
             const isActive = activePanel === item.label;
             return (
@@ -114,17 +133,15 @@ function SidebarNav({ collapsed, activePanel, onSelect }: SidebarNavProps) {
                 aria-current={isActive ? "page" : undefined}
                 title={collapsed ? item.label : undefined}
                 className={cn(
-                  // min-h, not a fixed h: the CIPHER X rows stack a badge under the
-                  // label and would otherwise be clipped by the 34px box.
-                  "flex flex-row items-center gap-[10px] w-full min-h-[34px] py-[4px] rounded-[8px]",
-                  "text-[12.5px] font-semibold transition-colors duration-150 ease-in-out",
+                  "flex flex-row items-center gap-[10px] w-full min-h-[32px] py-[4px] rounded-[7px]",
+                  "text-[12px] font-medium transition-colors duration-150 ease-in-out",
                   collapsed ? "justify-center px-0" : "px-[11px]",
                   isActive
                     ? "text-[var(--text)]"
                     : "text-[var(--text-dim)] hover:text-[var(--text)] hover:bg-[color-mix(in_srgb,var(--panel-2)_60%,transparent)]"
                 )}
                 style={{
-                  letterSpacing: "0.03em",
+                  letterSpacing: "0.01em",
                   backgroundColor: isActive ? "var(--nav-active)" : "transparent",
                 }}
               >
@@ -134,23 +151,12 @@ function SidebarNav({ collapsed, activePanel, onSelect }: SidebarNavProps) {
                   className="shrink-0"
                   style={{ color: isActive ? "var(--text)" : "var(--text-mute)" }}
                 />
-                {!collapsed && (
-                  // Badge stacks UNDER the label rather than beside it. Inline, the
-                  // 45px badge left only ~64px for the label inside a 161px button,
-                  // which clipped "Chart Saves" (needs 76px) and "Setup Scanner"
-                  // (94px) to "Chart Sa…" / "Setup S…". The real product's own nav
-                  // text reads "Chart Saves\nCIPHER X" — a newline, i.e. stacked —
-                  // so this matches it and removes the truncation at the same time.
-                  <span className="flex flex-col items-start min-w-0 flex-1 leading-tight">
-                    <span className="truncate max-w-full">{item.label}</span>
-                    {item.cipherX && <CipherXBadge />}
-                  </span>
-                )}
+                {!collapsed && <span className="min-w-0 flex-1 truncate text-left">{item.label}</span>}
               </button>
             );
-          })}
-        </div>
-      ))}
+          })}</div>}
+        </div>;
+      })}
     </nav>
   );
 }
@@ -364,7 +370,9 @@ export function Sidebar({
           </button>
         </div>
 
-        <SidebarNav collapsed={collapsed} activePanel={activePanel} onSelect={setActivePanel} />
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <SidebarNav collapsed={collapsed} activePanel={activePanel} onSelect={setActivePanel} />
+        </div>
         <SidebarFooter
           collapsed={collapsed}
           tiledMode={tiledMode}
@@ -397,14 +405,16 @@ export function Sidebar({
           </button>
         </div>
 
-        <SidebarNav
-          collapsed={false}
-          activePanel={activePanel}
-          onSelect={(label) => {
-            setActivePanel(label);
-            setMobileOpen(false);
-          }}
-        />
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <SidebarNav
+            collapsed={false}
+            activePanel={activePanel}
+            onSelect={(label) => {
+              setActivePanel(label);
+              setMobileOpen(false);
+            }}
+          />
+        </div>
         <SidebarFooter
           collapsed={false}
           tiledMode={tiledMode}

@@ -20,6 +20,7 @@ const TOOL_LABELS: Record<string, string> = {
   get_holdings: "checking your holdings…",
   get_quote: "checking a live quote…",
   list_strategies: "checking the strategy catalog…",
+  get_workspace_context: "assembling the active ticker workspace with timestamps…",
 };
 
 type ChatMessage = AskChatMessage;
@@ -50,7 +51,7 @@ function MessageBubble({ role, content }: ChatMessage) {
   );
 }
 
-export function AskCipher() {
+export function AskCipher({ ticker }: { ticker: string }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
@@ -83,7 +84,7 @@ export function AskCipher() {
 
     let job;
     try {
-      job = await startAskJob(message, history);
+      job = await startAskJob(message, history, ticker);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to reach Cipher");
       setSending(false);
@@ -155,8 +156,7 @@ export function AskCipher() {
         className="text-[11.5px] leading-relaxed rounded-[8px] px-3 py-2"
         style={{ background: "var(--panel-2)", border: "1px solid var(--line)", color: "var(--text-mute)" }}
       >
-        Answers are grounded only in tool calls Cipher makes this turn against its own evidence status, open
-        registrations and positions, your holdings, live quotes, and the strategy catalog. No fresh backtests, no
+        Answers are grounded only in tool calls Cipher makes this turn against its own timestamped evidence, including the active {ticker} workspace, truthful flow, matrix, option term structure, portfolio risk, journal, company context, and strategy catalog. No fresh backtests, no
         general market opinions, no buy/sell recommendations — if something isn&rsquo;t covered, it says so.
       </p>
 

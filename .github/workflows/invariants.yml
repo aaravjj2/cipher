@@ -1,0 +1,81 @@
+# Cipher's invariants, run without anyone remembering to.
+#
+# Until now the repository had no CI and no pre-commit config: 606 tests that executed only
+# when a human typed the command. The research-only guard added on 2026-08-12 has the same
+# problem as everything it protects -- a check nobody runs is a comment.
+#
+# Deliberately not doing here: linting the whole tree, building the frontend, or anything
+# that talks to the network. This workflow answers one question -- are the invariants still
+# true -- and a slow or flaky answer is one people learn to ignore.
+name: invariants
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: invariants-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  research-only:
+    # Its own job, ahead of the rest, because "Cipher cannot place an order" is the property
+    # that must never quietly go red inside a wall of 606 dots.
+    name: no live-order authority
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: pip install -r requirements.txt
+      - name: Scan the tree for order-placing terms
+        working-directory: cipher-system
+        run: python -m pytest tests/test_research_only_guard.py -q
+
+  python:
+    name: pytest (${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.12 matches the .venv-research-py312 the suite is developed against. 3.11 is here
+        # because the VM's system python3 is 3.11 and some scripts run under it directly, so
+        # a 3.12-only guarantee would not cover what actually executes in production.
+        python-version: ["3.12", "3.11"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: requirements.txt
+      - name: Install
+        run: pip install -r requirements.txt
+      - name: pytest
+        working-directory: cipher-system
+        run: python -m pytest -q
+
+  node:
+    name: node --test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: app suite
+        working-directory: cipher-system
+        # The glob form is mandatory: `node --test app/test` discovers nothing here.
+        # No npm install step -- these suites import only relative paths, so a bare checkout
+        # is enough, and adding `npm ci` would make the job depend on a lockfile it does not
+        # need.
+        run: node --test app/test/*.test.mjs
+      - name: web suite
+        working-directory: cipher-system
+        run: node --test web/test/*.test.mjs

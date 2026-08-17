@@ -1,0 +1,2 @@
+# Isolated hackathon runtime. Keep this out of Cipher core's minimal dependency set.
+google-adk==2.7.0

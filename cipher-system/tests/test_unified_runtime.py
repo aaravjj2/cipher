@@ -205,15 +205,29 @@ def test_unified_product_audit_passes_only_when_every_runtime_boundary_agrees(tm
     monkeypatch.setattr(
         module,
         "http_json",
-        lambda url: {
-            "ok": True,
-            "status": 200,
-            "payload": {
-                "initialized": True,
-                "read_only": True,
-                "live_execution": False,
-                "live_execution_present": False,
-            },
+        lambda url: (
+            {"ok": False, "status": 401, "payload": {"error": "authentication required"}}
+            if url == "http://127.0.0.1:8283/api/research-status" else
+            {
+                "ok": True,
+                "status": 200,
+                "payload": {
+                    "initialized": True,
+                    "read_only": True,
+                    "live_execution": False,
+                    "live_execution_present": False,
+                    "execution_capability": False,
+                    "backup": {"status": "VERIFIED"},
+                },
+            }
+        ),
+    )
+    monkeypatch.setattr(
+        module,
+        "systemd_timer",
+        lambda name: {
+            "name": name, "active_state": "active", "unit_file_state": "enabled",
+            "next": "soon", "last_trigger": "recent", "query_returncode": 0,
         },
     )
     monkeypatch.setattr(
@@ -240,7 +254,8 @@ def test_unified_product_audit_passes_only_when_every_runtime_boundary_agrees(tm
     assert audit["unified_product_complete"] is True
     assert all(audit["checks"].values())
     assert audit["execution_authority"] is False
-    assert audit["paper_or_live_execution_enabled"] is False
+    assert audit["paper_simulation_enabled"] is True
+    assert audit["live_execution_enabled"] is False
 
 
 def test_live_option_chain_health_uses_project_relative_data(tmp_path: Path):

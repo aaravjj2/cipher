@@ -25,6 +25,8 @@ import numpy as np
 from scipy.signal import find_peaks
 
 import agentic_episodes
+import evidence_snapshot
+import evidence_contract
 
 # Cap-tier universe from data/optionable_universe_by_cap.json.
 # Confirmed against the real product's own Setup Scanner (paired comparison, 2026-08-06):
@@ -151,6 +153,7 @@ def _load_scan_universe():
     meta["raw_count"] = raw_count
     meta["as_of"] = payload.get("as_of")
     meta["thresholds_usd"] = payload.get("thresholds_usd") or {}
+    meta["validation"] = payload.get("validation") or {}
 
     included = []
     for tier in _UNIVERSE_INCLUDED_TIERS:
@@ -898,7 +901,7 @@ def classify_setup(profile, peaks, summary, spot, extra_zones=None):
     # Zone-based cluster detection (AO-style spatial walk).
     # Replaces the old peak-based approach which missed adjacent high-GEX strikes.
     cluster_zones = _detect_cluster_zones(profile, spot)
-    
+
     # Merge with multi-expiration zones if provided
     if extra_zones:
         # Prefer multi-exp zones (they have persistence info)
@@ -908,7 +911,7 @@ def classify_setup(profile, peaks, summary, spot, extra_zones=None):
             if zone.get("side") not in multi_exp_sides:
                 extra_zones.append(zone)
         cluster_zones = extra_zones
-    
+
     setups = [
         {
             "kind": "golden",
@@ -1072,13 +1075,68 @@ def _signal_geometry(spot, direction, target, invalidation, *, minimum_reward_ri
     )
     if geometry_valid and not actionable:
         errors.append(f"reward_risk_below_{minimum_reward_risk:.2f}")
-    return {
+    result = {
         "geometry_valid": geometry_valid,
         "actionable": actionable,
         "validation_errors": errors,
         "target_distance_pct": target_distance,
         "risk_distance_pct": risk_distance,
         "reward_risk": reward_risk,
+    }
+    return result
+
+
+def _research_quality(item, strategy="cipher"):
+    """Gate ranking eligibility before score is allowed to dominate.
+
+    Scanner score describes structure; it does not describe whether the inputs were usable.
+    Keeping those axes separate prevents a visually impressive score from laundering missing
+    OPRA coverage or invalid target geometry into a high-confidence setup.
+    """
+    reasons = []
+    evidence = item.get("evidence_snapshot") or {}
+    shared_coverage = evidence.get("coverage") or {}
+    shared_missing = set(evidence.get("missing_reasons") or [])
+    cells = shared_coverage.get("calculated_cells", item.get("coverage_cells"))
+    contracts = shared_coverage.get("contracts", item.get("contracts"))
+    coverage = shared_coverage.get("status")
+    if coverage not in {"sufficient", "limited", "unknown"}:
+        coverage = None
+    if coverage is None:
+        if cells is None or contracts is None:
+            coverage = "unknown"
+        elif float(cells) < 8 or float(contracts) < 20:
+            coverage = "limited"
+        else:
+            coverage = "sufficient"
+    if coverage == "unknown" or "options_coverage_unknown" in shared_missing:
+        reasons.append("options_coverage_unknown")
+    elif coverage == "limited" or "options_coverage_thin" in shared_missing:
+        reasons.append("options_coverage_thin")
+    if item.get("spot") is None or "spot_unknown" in shared_missing:
+        reasons.append("spot_unknown")
+    if item.get("direction") not in {"BULLISH", "BEARISH"}:
+        reasons.append("direction_unknown")
+    # Cluster is an exposure-zone observation and may intentionally have no directional
+    # invalidation. Other strategies claim a target path and must supply valid geometry.
+    if strategy != "cluster" and item.get("geometry_valid") is not True:
+        reasons.append("invalid_or_incomplete_geometry")
+    feed = str(evidence.get("feed") or item.get("feed") or "").lower()
+    if (feed and feed != "opra") or "options_feed_not_opra" in shared_missing:
+        reasons.append("options_feed_not_opra")
+
+    eligible = not reasons
+    score = float(item.get("score") or 0.0)
+    actionable = item.get("actionable") is True
+    confidence = "insufficient"
+    if eligible:
+        confidence = "higher" if score >= 75 and (strategy == "cluster" or actionable) else "developing"
+    return {
+        "rank_eligible": eligible,
+        "confidence": confidence,
+        "coverage_status": coverage,
+        "quality_reasons": reasons,
+        "confidence_caveat": "Evidence-quality label, not a win probability.",
     }
 
 
@@ -1464,6 +1522,7 @@ def analyze_ticker(matrix_fn, ticker, feed, mode, strategy, cluster_exp=None, ba
         force=False,
         chain_pages=cfg.get("pages", 2),
     )
+    evidence = evidence_snapshot.build(payload, view="setup_scanner")
     spot = (payload.get("quote") or {}).get("price_context")
     summary = payload.get("summary") or {}
     expirations = payload.get("expirations") or []
@@ -1474,14 +1533,14 @@ def analyze_ticker(matrix_fn, ticker, feed, mode, strategy, cluster_exp=None, ba
     )
     peaks = _local_peaks(profile)
     model = cipher_model_from_profile(ticker, profile, peaks, summary, spot)
-    
+
     # Clusters come from the 0DTE profile alone. The multi-expiration union that used
     # to run here contradicted the ground-truth capture (every real cluster row is
     # 0DTE), and unioning a later expiration's zone in would replace the correct
     # 0DTE cluster with one the real product never reports. _detect_multi_exp_clusters
     # is retained for callers that specifically want persistence across expirations.
     setups, primary = classify_setup(profile, peaks, summary, spot)
-    
+
     day_chg = (payload.get("quote") or {}).get("day_change_pct")
 
     if not model:
@@ -1495,14 +1554,18 @@ def analyze_ticker(matrix_fn, ticker, feed, mode, strategy, cluster_exp=None, ba
         # signal it stopped using.
         cluster_zones = _detect_cluster_zones(profile, spot) if strategy == "cluster" else []
         if not cluster_zones:
-            return {
+            result = {
                 "ticker": ticker,
                 "spot": spot,
                 "score": 0.0,
                 "abs_score": 0.0,
                 "direction": "NEUTRAL",
                 "setup_kind": None,
+                "evidence_snapshot": evidence,
+                "_matrix_snapshot": payload,
             }
+            result.update(evidence_contract.attach_contracts(result))
+            return result
         primary_zone = sorted(
             cluster_zones, key=lambda z: (0 if z["kind"] == "quad" else 1, -z["strength"])
         )[0]
@@ -1715,7 +1778,7 @@ def analyze_ticker(matrix_fn, ticker, feed, mode, strategy, cluster_exp=None, ba
         or ("FLASH" if flash_mode else ("CLUSTER" if strategy == "cluster" else "CIPHER MODEL"))
     )
 
-    return {
+    result = {
         "ticker": ticker,
         "spot": spot,
         "day_change_pct": day_chg,
@@ -1766,7 +1829,15 @@ def analyze_ticker(matrix_fn, ticker, feed, mode, strategy, cluster_exp=None, ba
         "flash": flash,
         "cluster_exp": cluster_exp,
         "score_source": score_source,
+        "evidence_snapshot": evidence,
+        # Private handoff consumed by run_scan before any job/history/API payload is
+        # emitted. Keeping the frozen source beside a qualified candidate makes exact
+        # exposure replay possible without re-querying Alpaca later.
+        "_matrix_snapshot": payload,
     }
+    result.update(_research_quality(result, strategy))
+    result.update(evidence_contract.attach_contracts(result))
+    return result
 
 
 def build_cluster_groups(picks):
@@ -1920,6 +1991,7 @@ def run_scan(
     progress_cb=None,
     cluster_exp=None,
     bars_fn=None,
+    save_history=True,
 ):
     mode = mode if mode in MODE_CONFIG else "short"
     strategy = (
@@ -1932,13 +2004,16 @@ def run_scan(
 
 
     if strategy == "flash":
-        universe = list(FLASH_UNIVERSE)
+        if universe is None:
+            universe = list(FLASH_UNIVERSE)
         mode = "short"
     elif strategy == "flash_index":
-        universe = list(FLASH_INDEX_UNIVERSE)
+        if universe is None:
+            universe = list(FLASH_INDEX_UNIVERSE)
         mode = "short"
     elif strategy == "flash_agentic":
-        universe = list(FLASH_UNIVERSE)
+        if universe is None:
+            universe = list(FLASH_UNIVERSE)
         mode = "short"
 
     # Setup Scanner always uses nearest (lowest) DTE unless an explicit ISO date is passed.
@@ -1953,13 +2028,14 @@ def run_scan(
             seen.add(t)
             tickers.append(t)
 
-    cache_key = (mode, strategy, feed, tuple(tickers), int(limit), cluster_exp or "nearest", "v10-nearest-1exp")
+    cache_key = (mode, strategy, feed, tuple(tickers), int(limit), cluster_exp or "nearest", "v11-quality-gated")
     cached = _SCAN_CACHE.get(cache_key)
     if cached and time.time() - cached[0] < cache_seconds and not job_id:
         return deepcopy(cached[1])
 
     started = time.time()
-    results, errors = [], []
+    results, errors, rejected = [], [], []
+    replay_sources = {}
     attempted = len(tickers)
     done = 0
 
@@ -2005,12 +2081,36 @@ def run_scan(
             matrix_fn, ticker, feed, mode, strategy, cluster_exp, bars_fn=bars_fn
         )
 
+    def _consider(ticker, item):
+        matrix_snapshot = item.pop("_matrix_snapshot", None)
+        # Ranking cannot rescue unusable evidence. Recompute here even though the normal
+        # analyzer attaches the same envelope, because adapters/test doubles can bypass it.
+        item.update(_research_quality(item, strategy))
+        # Attach the canonical evidence record at the scanner boundary while
+        # preserving the legacy envelope consumed by existing clients.
+        item.update(evidence_contract.attach_contracts(item))
+        reasons = list(item.get("quality_reasons") or [])
+        if float(item.get("score") or 0.0) < 45:
+            reasons.append("score_below_45")
+        if item.get("supports") is None:
+            reasons.append("structure_unavailable")
+        if reasons:
+            rejected.append({
+                "ticker": ticker,
+                "reasons": sorted(set(reasons)),
+                "evidence_snapshot": item.get("evidence_snapshot"),
+                "evidence_contract": item.get("evidence_contract"),
+            })
+        else:
+            results.append(item)
+            if isinstance(matrix_snapshot, dict):
+                replay_sources[ticker] = matrix_snapshot
+
     if worker_count == 1:
         for ticker in tickers:
             try:
                 _, item = _analyze(ticker)
-                if item.get("score", 0) >= 45 and item.get("supports") is not None:
-                    results.append(item)
+                _consider(ticker, item)
             except Exception as exc:
                 errors.append({"ticker": ticker, "error": str(exc)})
             done += 1
@@ -2022,8 +2122,7 @@ def run_scan(
                 ticker = futures[future]
                 try:
                     _, item = future.result()
-                    if item.get("score", 0) >= 45 and item.get("supports") is not None:
-                        results.append(item)
+                    _consider(ticker, item)
                 except Exception as exc:
                     errors.append({"ticker": ticker, "error": str(exc)})
                 done += 1
@@ -2031,6 +2130,14 @@ def run_scan(
 
     results = _apply_strategy_filter(results, strategy)
     ranked, top = _rank_and_slice(results, limit, strategy)
+
+    # Persist only the bounded final leaderboard, not every ticker in a broad scan.
+    # A partial leaderboard never advertises replay until its artifact exists.
+    for item in top:
+        snapshot = item.get("evidence_snapshot") or {}
+        source = replay_sources.get(item.get("ticker"))
+        available = bool(source and evidence_snapshot.persist_matrix(source, snapshot))
+        snapshot["replay_available"] = available
 
     if strategy == "flash":
         hint = FLASH_HINT
@@ -2043,13 +2150,25 @@ def run_scan(
     else:
         hint = MODE_CONFIG[mode].get("hint", "")
 
+    rejection_counts = {}
+    for row in rejected:
+        for reason in row["reasons"]:
+            rejection_counts[reason] = rejection_counts.get(reason, 0) + 1
+
+    snapshot_rows = [item.get("evidence_snapshot") or {} for item in results]
+    snapshot_rows += [item.get("evidence_snapshot") or {} for item in rejected]
+    evidence_ids = list(dict.fromkeys(
+        snapshot["snapshot_id"] for snapshot in snapshot_rows if snapshot.get("snapshot_id")
+    ))
     payload = {
         "as_of": _utcnow(),
+        "evidence_schema_version": evidence_snapshot.SCHEMA_VERSION,
+        "evidence_snapshot_ids": evidence_ids,
         "mode": mode,
         "strategy": strategy,
         "feed": feed,
         "cluster_exp": cluster_exp or "nearest",
-        "concurrency": 1,
+        "concurrency": worker_count,
         "universe_size": len(tickers),
         "universe_meta": {
             "cutoff": UNIVERSE_META.get("cutoff"),
@@ -2060,6 +2179,9 @@ def run_scan(
         },
         "scanned": attempted,
         "qualified": len(results),
+        "rejected": len(rejected),
+        "rejection_counts": dict(sorted(rejection_counts.items())),
+        "rejected_examples": rejected[:20],
         "actionable": sum(bool(item.get("actionable")) for item in results),
         "invalid_geometry": sum(item.get("geometry_valid") is False for item in results),
         "failed": len(errors),
@@ -2085,12 +2207,13 @@ def run_scan(
         ),
     }
     _SCAN_CACHE[cache_key] = (time.time(), payload)
-    try:
-        import scan_history
+    if save_history:
+        try:
+            import scan_history
 
-        scan_history.save_scan(payload)
-    except Exception:
-        pass  # Auto-save is best-effort; never fail a scan over it.
+            scan_history.save_scan(payload)
+        except Exception:
+            pass  # Auto-save is best-effort; never fail a scan over it.
     return deepcopy(payload)
 
 

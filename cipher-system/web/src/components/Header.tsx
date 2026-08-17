@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { MenuIcon, SearchIcon } from "@/components/icons";
 import { addToWatchlist } from "@/lib/watchlist";
-import { fetchScanUniverse } from "@/lib/api";
+import { fetchProductStatus, fetchScanUniverse, type ProductStatus } from "@/lib/api";
 
 type HeaderProps = {
   /** Current panel name, rendered uppercase in `.brand-sub` (e.g. "SETUP SCANNER"). */
@@ -136,6 +136,7 @@ export function Header({
   const [searchFocused, setSearchFocused] = useState(false);
   const [inputValue, setInputValue] = useState(ticker);
   const [watchlistAdded, setWatchlistAdded] = useState(false);
+  const [productStatus, setProductStatus] = useState<ProductStatus | null>(null);
   const isPositive = (changePct ?? 0) >= 0;
 
   // Ticker suggestions come from the scanner's own optionable universe (580 names
@@ -152,6 +153,16 @@ export function Header({
       .catch(() => {});
     return () => ctrl.abort();
   }, []);
+
+  useEffect(() => {
+    const ctrl = new AbortController();
+    const load = () => fetchProductStatus(ticker, ctrl.signal).then(setProductStatus).catch(() => {
+      if (!ctrl.signal.aborted) setProductStatus(null);
+    });
+    void load();
+    const id = setInterval(load, 60_000);
+    return () => { ctrl.abort(); clearInterval(id); };
+  }, [ticker]);
 
   const query = inputValue.trim().toUpperCase();
   const suggestions = useMemo(() => {
@@ -487,6 +498,13 @@ export function Header({
           — core/research_platform/seven_layer_stack.py fails the boundary audit if any
           order-submitting symbol appears in the tree.
         */}
+        <span
+          className="shrink-0 rounded-[8px] px-[10px] py-2 text-[10px] font-bold uppercase"
+          style={{ border: "1px solid var(--line)", color: productStatus?.healthy ? "var(--positive)" : productStatus ? "var(--gold)" : "var(--text-mute)" }}
+          title={productStatus ? productStatus.items.map((item) => `${item.name}: ${item.state} (${item.source})`).join("\n") : "Freshness status unavailable"}
+        >
+          {productStatus ? `${productStatus.session.phase} · ${productStatus.exceptions.length ? `${productStatus.exceptions.length} stale` : "fresh"}` : "data —"}
+        </span>
         <span
           className="ml-auto min-[1850px]:ml-0 shrink-0 rounded-[8px] px-[14px] py-2 text-[11px] font-bold uppercase"
           style={{ border: "1px solid var(--line)", color: "var(--text-mute)", letterSpacing: "0.1em" }}

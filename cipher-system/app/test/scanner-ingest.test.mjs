@@ -290,3 +290,38 @@ test("logs an empty scan in JSONL without manufacturing a CSV row", async () => 
     await rm(dataDir, { recursive: true, force: true });
   }
 });
+
+test("best-effort forwards normalized cards to the local shadow executor", async () => {
+  const dataDir = await mkdtemp(join(tmpdir(), "cipher-ingest-forward-"));
+  const calls = [];
+  try {
+    const handler = createScannerIngestHandler({
+      dataDir,
+      ingestToken: "secret-token",
+      forwardUrl: "http://127.0.0.1:8787/api/scanner-ingest",
+      forwarder: async (url, options) => {
+        calls.push({ url, options, body: JSON.parse(options.body) });
+        return { ok: true, status: 202 };
+      },
+      logger: { info() {}, error() {} },
+    });
+    const response = mockResponse();
+    await handler(mockRequest({
+      token: "secret-token",
+      body: {
+        scan_type: "Flash BETA",
+        captured_at: "2026-08-13T14:00:00Z",
+        cards: [{ ticker: "NVDA", direction: "bullish", setup_type: "floor bounce",
+          spot: 180, target: 183, invalidation: 178 }],
+      },
+    }), response);
+    assert.equal(response.status, 202);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].body.scan_type, "flash");
+    assert.equal(calls[0].body.cards[0].scanner_type, "flash");
+    assert.equal(calls[0].body.cards[0].ticker, "NVDA");
+    assert.equal(JSON.parse(response.body).shadow_forwarded, true);
+  } finally {
+    await rm(dataDir, { recursive: true, force: true });
+  }
+});

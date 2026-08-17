@@ -1,0 +1,12 @@
+[Unit]
+Description=Run Cipher shadow Flash observations every 15 minutes
+
+[Timer]
+OnCalendar=Mon..Fri *-*-* *:0/15:00
+RandomizedDelaySec=20
+AccuracySec=1min
+Persistent=false
+Unit=cipher-shadow-scan.service
+
+[Install]
+WantedBy=timers.target

@@ -26,6 +26,7 @@ const scannerIngest = createScannerIngestHandler({
     process.env.CIPHER_SCANNER_INGEST_DIR || join(root, "..", "data", "browser_ingest"),
   ),
   ingestToken: scannerIngestToken,
+  forwardUrl: process.env.CIPHER_PAPER_EXECUTOR_URL || "",
 });
 const authGate = createAuthGate();
 if (authGate.enabled && !authGate.configured) {
@@ -127,9 +128,28 @@ const routes = {
   "/api/workspace-layouts": "/api/workspace-layouts",
   "/api/ask": "/api/ask",
   "/api/research-status": "/api/research-status",
+  // The Beliefs panel. This map is an explicit allowlist, not a prefix rule, so adding the
+  // endpoint to core/app.py is not enough — without an entry here the panel renders empty
+  // against a 404 from this layer, which is exactly how it first shipped.
+  "/api/research-ranking": "/api/research-ranking",
+  "/api/product-status": "/api/product-status",
+  "/api/morning-brief": "/api/morning-brief",
+  "/api/research-desk": "/api/research-desk",
+  "/api/paper-portfolios": "/api/paper-portfolios",
+  "/api/prospective-fronttests": "/api/prospective-fronttests",
+  "/api/autopilot-status": "/api/autopilot-status",
+  "/api/options-chain": "/api/options-chain",
+  "/api/options-builder": "/api/options-builder",
+  "/api/portfolio-risk": "/api/portfolio-risk",
+  "/api/watchlists": "/api/watchlists",
+  "/api/screens": "/api/screens",
+  "/api/journal": "/api/journal",
+  "/api/company-context": "/api/company-context",
+  "/api/operator-status": "/api/operator-status",
   "/api/options-backtest": "/api/options-backtest",
   "/api/gex-replay": "/api/gex-replay",
   "/api/alerts": "/api/alerts",
+  "/api/alert-metric": "/api/alert-metric",
   "/api/evidence-status": "/api/evidence-status",
   "/api/signal-backtest": "/api/signal-backtest",
   "/api/strategies": "/api/strategies",
@@ -367,9 +387,10 @@ createServer(async (req, res) => {
       });
     }
   }
+  const publicDir = join(root, "public");
   const requestPath = url.pathname === "/" ? "/index.html" : url.pathname;
-  const target = normalize(join(root, "public", requestPath));
-  if (!target.startsWith(join(root, "public"))) return sendJson(res, 403, { error: "forbidden" });
+  const target = normalize(join(publicDir, requestPath));
+  if (target !== publicDir && !target.startsWith(publicDir + "/")) return sendJson(res, 403, { error: "forbidden" });
   try {
     const file = await readFile(target);
     res.writeHead(200, {

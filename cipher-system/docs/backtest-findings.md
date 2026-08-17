@@ -273,7 +273,99 @@ statement rather than a directional one — is the only path that changes the an
 
 ---
 
+# Structural Fib, re-tested faithfully (2026-08-13): the 98% claim is real, unprofitable, and the same phenomenon
+
+**This supersedes the section immediately below.** That run was not wrong, but it tested a
+different strategy than the one taught, in two ways that mattered. It pinned the anchor to the
+opening 5-minute candle for the whole session, where the method trails it ("keep moving up my
+anchor to follow the high"), and it reported one `1->2` leg where the method has two distinct
+setups that both trigger at the 1 level — an early-session continuation, and a **reversal**
+anchored on the trailed high of day, whose 98% rate is the claim the strategy is actually sold
+on and which had never been tested.
+
+`core/structural_fib_lab.py` + `scripts/run_structural_fib_lab.py`, on local Alpaca SIP
+1-minute bars resampled to 5 minutes in exchange local time. 173 sessions per symbol,
+2025-12-02 → 2026-08-11, extended hours included. 1,304 signals.
+
+```
+setup / leg           n   touch          ci95      claimed   verdict    race     avg%
+continuation 0.5->1  575  83.7%  [80.4%, 86.4%]      96.5%   REFUTED   76.9%  -0.057%
+continuation 1->2    325  57.2%  [51.8%, 62.5%]      63.5%   REFUTED   49.8%  -0.038%
+reversal     1->2    302  44.0%  [38.6%, 49.7%]      98.0%   REFUTED   38.7%  -0.035%
+reversal     2->3    102  45.1%  [35.8%, 54.8%]         --        --   40.2%  -0.054%
+```
+
+**The strongest claim is the weakest result.** The reversal is advertised at 98% — "only 2% of
+the days did it go through one and not end up hitting two" — and measures **44.0%**. It holds
+at 42–45% whether the precondition for "rolled over from a high" is 0R, 0.5R or 1.0R of prior
+advance, and a stricter precondition makes it slightly worse. On AAPL it is 33.8%.
+
+**The pre-market filter is inverted, not merely useless.** Scored against a trend definition
+it played no part in constructing (does the session close in the outer third of its own
+range?), days the filter calls trending trended **66.7%** [60.1, 72.6] and days it calls
+choppy trended **80.0%** [72.3, 86.0]. Non-overlapping intervals: the 1.5% gate is worth
+**−13.3 points**, against a claimed ~90% identification rate. The earlier run saw this
+directionally (77.6% vs 80.0%); with the trailed anchor the gap is decisive.
+
+## Why the 98% is honestly believed and still loses money
+
+The levels are not noise. Against a matched random-entry control — identical target and stop
+distances, same session, entry time drawn at random, 20 replicates per signal — the
+continuation legs beat random entry on touch rate by **+14.2** and **+13.6 points**. Something
+real is being measured.
+
+It does not survive the entry rule. Waiting for a body close past the level, which is what
+makes the signal look reliable, fills a median **0.244%** beyond the level. That moves the
+target nearer and the stop further on every trade, turning a nominally symmetric setup into
+reward:risk of **0.36** on the first leg. Sorting the 0.5→1 leg into quartiles by how far past
+the level the entry filled:
+
+```
+quartile    slippage    win%   avg ret
+Q1 least      0.060%   58.0%   +0.014%
+Q2            0.178%   67.1%   +0.011%
+Q3            0.319%   85.3%   +0.027%
+Q4 most       0.760%   96.6%   -0.274%
+```
+
+The win rate rises monotonically with slippage and reaches **96.6%** — essentially the claimed
+98% — in exactly the quartile that loses the most. The advertised hit rate and the losses are
+not in tension; they are the same fact. A trade is won because the target was already close,
+and the trades that win have *smaller* reward distances (0.285%) than the trades that lose
+(0.358%) on every leg. The source method notices the mechanism without naming it: "if you wait
+for full closes, you're going to miss half of the move sometimes."
+
+Removing the confirmation rule — a resting limit at the level instead — does flip the
+continuation legs from −0.057% to **+0.019%** per trade. But the random-entry control makes
++0.007% on the same geometry, so the edge over random is ~1 basis point of underlying, and the
+reversal stays negative (−0.073%) in both entry modes.
+
+## The hurdle that closes it
+
+That ~1 bp of underlying edge has to pay an option round trip, because the method trades
+0DTE/1DTE contracts. Measured from the local capture (~2M quotes per symbol), median option
+half-spread as a share of premium is **NVDA 0DTE 2.375%** (p95 19.875%) and **AAPL 0DTE
+2.875%** (p95 14.625%); sampled live ATM 1DTE quotes are tighter, 0.2–1.8% of premium. A real
+NVDA ATM 1DTE call on 2026-08-13 cost 1.08% of spot at delta 0.55, so the best-case +0.019%
+underlying move converts to roughly **1% of premium gross** — at or below the ATM round-trip
+spread alone, before theta, before any fill worse than mid, and in the entry mode the method
+does *not* teach. In the mode it does teach, the underlying expectancy is already negative
+before any cost is applied.
+
+**Standing: REJECTED**, evidence tier 4, cost basis `not-applicable:price-level-claim` —
+whether price reaches a level is a fact about the price path and takes no cost model, which is
+why it can be settled cleanly. Every published claim tested falls outside its own 95%
+interval. What would change it: nothing available. The open items the agenda now lists
+(re-resolving the target/stop race on the 1-minute bars already on disk, allowing intraday
+re-entries) narrow a conservative bias and raise n; neither closes a 54-point gap.
+
+---
+
 # Structural Fib: the published rates do not hold on the symbols it is claimed for
+
+> **Superseded by the section above (2026-08-13).** Kept because its numbers are correct for
+> what it measured — a fixed opening-candle anchor, continuation legs only. It did not test
+> the reversal setup, which is the strategy's headline claim.
 
 `scripts/backtest_structural_fib.py --symbols NVDA,AAPL --days 365`, run 2026-08-08.
 Restricted to NVDA and AAPL because those are the two names the strategy is said to

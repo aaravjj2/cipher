@@ -1,0 +1,11 @@
+[Unit]
+Description=Send Cipher portfolio changes after the market close
+
+[Timer]
+OnCalendar=Mon..Fri *-*-* 16:10:00 America/New_York
+Persistent=true
+RandomizedDelaySec=30
+Unit=cipher-portfolio-discord-daily.service
+
+[Install]
+WantedBy=timers.target

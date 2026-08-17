@@ -4,6 +4,10 @@ This file records repository-side status corrections to the external master
 checklist. Sections not reproduced here retain their prior wording and status.
 The machine-readable architecture audit remains separate from this checklist.
 
+For implementation order and acceptance gates, use the [consolidated Cipher
+execution roadmap](cipher_product_and_hackathon_roadmap_2026-08-17.md#consolidated-execution-plan--revision-2). This checklist is an evidence mirror,
+not a second competing backlog.
+
 ## 2. Research evidence and data readiness
 
 ### 2c. Current-era price-only Holdout C

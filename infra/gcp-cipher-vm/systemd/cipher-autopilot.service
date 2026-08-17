@@ -1,0 +1,58 @@
+[Unit]
+# Reads every adaptable research report, ranks it by evidence quality, asks what is worth
+# running next, and reports what changed since the last pass.
+#
+# What it cannot do, by construction: run an engine, promote a finding, or place an order.
+# Its highest output is a proposal a human reads. Every report it writes asserts
+# live_order_authority=False, and the tree-level guarantee is
+# cipher-system/tests/test_research_only_guard.py, which fails the build if an order-placing
+# term or broker SDK appears anywhere in the source.
+Description=Rank Cipher's research evidence and report what changed
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=aarav
+Group=aarav
+# This path is a symlink to cipher-github/cipher-system, so there is no second copy to keep
+# in sync here -- unlike infra/bin scripts, which really are copied to /usr/local/lib and
+# where committing a fix does not deploy it.
+WorkingDirectory=/home/aarav/Aarav/cipher/cipher-system
+# --summary keeps the journal readable; the full JSON goes to the artifact for anything that
+# wants to diff two passes. Exit 3 means "something changed", which is why SuccessExitStatus
+# lists it: a changed evidence base is not a failed run.
+ExecStart=/home/aarav/.venvs/cipher/bin/python \
+    /home/aarav/Aarav/cipher/cipher-system/scripts/run_autopilot.py \
+    --summary \
+    --out /home/aarav/Aarav/cipher/runtime/governance/autopilot_last_run.json
+SuccessExitStatus=0 3
+
+# Reads a lot of small JSON files across runtime/data and competes with the live collector
+# for IO, so it yields rather than slowing capture.
+Nice=15
+IOSchedulingClass=idle
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=cipher-autopilot
+
+# It reads research reports and writes two files. Nothing else is needed.
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=read-only
+# The state file and the last-run report. ProtectHome=read-only would otherwise let the pass
+# read every report and then die writing its own state -- the failure that took the MCP
+# bridge down on 2026-08-12 with "Read-only file system", which no unit test reproduces
+# because tests write to an unsandboxed tmp dir.
+ReadWritePaths=/home/aarav/Aarav/cipher/runtime/governance
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+
+[Install]
+WantedBy=multi-user.target

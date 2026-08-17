@@ -7,7 +7,8 @@ CORE = Path(__file__).resolve().parents[1] / "core"
 if str(CORE) not in sys.path:
     sys.path.insert(0, str(CORE))
 
-from scanner import _flash_components, _signal_geometry  # noqa: E402
+import scanner  # noqa: E402
+from scanner import _flash_components, _research_quality, _signal_geometry  # noqa: E402
 
 
 def test_signal_geometry_requires_directional_levels_and_one_to_one_reward_risk() -> None:
@@ -69,3 +70,81 @@ def test_flash_score_is_normalized_instead_of_saturating_at_99() -> None:
     assert result["geometry_valid"] is True
     assert result["actionable"] is True
     assert result["reward_risk"] >= 1.0
+
+
+def test_flash_scan_preserves_an_explicit_rate_limited_universe(monkeypatch) -> None:
+    visited: list[str] = []
+
+    def fake_analyze(_matrix, ticker, *_args, **_kwargs):
+        visited.append(ticker)
+        return {
+            "ticker": ticker,
+            "score": 60.0,
+            "abs_score": 60.0,
+            "supports": [99.0],
+            "geometry_valid": True,
+            "actionable": True,
+        }
+
+    monkeypatch.setattr(scanner, "analyze_ticker", fake_analyze)
+    result = scanner.run_scan(
+        lambda *_args, **_kwargs: {},
+        strategy="flash",
+        universe=["NVDA", "AAPL"],
+        workers=1,
+        save_history=False,
+    )
+
+    assert visited == ["NVDA", "AAPL"]
+    assert result["universe_size"] == 2
+
+
+def test_quality_gate_keeps_score_separate_from_evidence_confidence() -> None:
+    rich = {
+        "spot": 100, "direction": "BULLISH", "score": 83, "actionable": True,
+        "geometry_valid": True, "coverage_cells": 30, "contracts": 200, "feed": "opra",
+    }
+    sparse = {**rich, "coverage_cells": None, "contracts": None}
+    assert _research_quality(rich)["confidence"] == "higher"
+    quality = _research_quality(sparse)
+    assert quality["rank_eligible"] is False
+    assert quality["confidence"] == "insufficient"
+    assert "options_coverage_unknown" in quality["quality_reasons"]
+
+
+def test_quality_gate_uses_shared_evidence_coverage_when_present() -> None:
+    item = {
+        "spot": 100, "direction": "BULLISH", "score": 83, "actionable": True,
+        "geometry_valid": True, "coverage_cells": 99, "contracts": 999, "feed": "opra",
+        "evidence_snapshot": {
+            "feed": "opra",
+            "coverage": {"status": "limited", "calculated_cells": 4, "contracts": 10},
+            "missing_reasons": ["options_coverage_thin"],
+        },
+    }
+    quality = _research_quality(item)
+    assert quality["coverage_status"] == "limited"
+    assert quality["rank_eligible"] is False
+    assert quality["quality_reasons"] == ["options_coverage_thin"]
+
+
+def test_run_scan_reports_rejection_funnel(monkeypatch) -> None:
+    def fake_analyze(_matrix, ticker, *_args, **_kwargs):
+        base = {
+            "ticker": ticker, "spot": 100.0, "score": 90.0, "direction": "BULLISH",
+            "supports": [99.0], "geometry_valid": True, "actionable": True,
+            "coverage_cells": 20, "contracts": 80, "feed": "opra",
+        }
+        if ticker == "THIN":
+            base["contracts"] = 2
+        return base
+
+    monkeypatch.setattr(scanner, "analyze_ticker", fake_analyze)
+    result = scanner.run_scan(
+        lambda *_args, **_kwargs: {}, universe=["GOOD", "THIN"],
+        cache_seconds=0, save_history=False,
+    )
+    assert [row["ticker"] for row in result["top"]] == ["GOOD"]
+    assert result["rejected"] == 1
+    assert result["rejection_counts"]["options_coverage_thin"] == 1
+    assert result["rejected_examples"][0]["ticker"] == "THIN"

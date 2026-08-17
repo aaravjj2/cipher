@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "equibles": {
+      "type": "http",
+      "url": "https://mcp.equibles.com/mcp"
+    },
+    "flashalpha-gex": {
+      "type": "http",
+      "url": "https://lab.flashalpha.com/mcp/gex"
+    },
+    "flashalpha-earnings": {
+      "type": "http",
+      "url": "https://lab.flashalpha.com/mcp/earnings"
+    }
+  }
+}

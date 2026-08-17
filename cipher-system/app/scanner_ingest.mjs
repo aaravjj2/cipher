@@ -618,6 +618,8 @@ export function createScannerIngestHandler({
   allowedOrigins = process.env.CIPHER_INGEST_ALLOWED_ORIGINS,
   ingestToken = process.env.CIPHER_SCANNER_INGEST_TOKEN || "",
   maxBytes = Number(process.env.CIPHER_SCANNER_INGEST_MAX_BYTES || 1_048_576),
+  forwardUrl = process.env.CIPHER_PAPER_EXECUTOR_URL || "",
+  forwarder = globalThis.fetch,
   logger = console,
 } = {}) {
   if (!dataDir) throw new Error("scanner ingest dataDir is required");
@@ -669,6 +671,46 @@ export function createScannerIngestHandler({
     try {
       const payload = await readJsonBody(req, maxBytes);
       const result = await persistScannerPayload({ payload, dataDir });
+      let shadowForwarded = false;
+      let shadowForwardError = null;
+      if (forwardUrl && typeof forwarder === "function") {
+        const shadowPayload = {
+          source: "cipher_scanner_ingest_v2",
+          scan_type: result.cards[0]?.scanType || normalizeScannerPayload(payload).scanType,
+          captured_at: result.receivedAt,
+          cards: result.cards.map((card) => ({
+            scanner_type: card.scanType,
+            captured_at: card.cardTimestamp || result.receivedAt,
+            ticker: card.ticker,
+            direction: card.direction,
+            setup_type: card.setupType,
+            score: card.score,
+            rank: card.rank,
+            spot: card.spot,
+            target: card.target,
+            invalidation: card.invalidation,
+            state: card.state,
+            signal_id: card.signalId,
+            actionable: card.actionable,
+            geometry_valid: card.geometryValid,
+          })),
+        };
+        try {
+          const response = await forwarder(forwardUrl, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(shadowPayload),
+            signal: AbortSignal.timeout(2_000),
+          });
+          shadowForwarded = Boolean(response?.ok);
+          if (!shadowForwarded) shadowForwardError = `HTTP ${response?.status || "unknown"}`;
+        } catch (error) {
+          // Scanner capture is the primary record and must not be lost because the
+          // optional shadow book is restarting or unavailable.
+          shadowForwardError = String(error?.message || error);
+          logger.error?.("[scanner-ingest] shadow forward failed", shadowForwardError);
+        }
+      }
       logger.info?.(
         `[scanner-ingest] accepted request=${result.requestId} records=${result.recordsWritten} new=${result.newSignals} invalid=${result.invalidRecords}`,
       );
@@ -688,6 +730,8 @@ export function createScannerIngestHandler({
           ledger: result.ledgerName,
         },
         trading_actions: false,
+        shadow_forwarded: shadowForwarded,
+        shadow_forward_error: shadowForwardError,
       }, cors);
     } catch (error) {
       const status = Number(error?.statusCode || 500);

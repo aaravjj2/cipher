@@ -9,12 +9,14 @@ import {
   ApiError,
   fetchBars,
   fetchNightVision,
+  fetchNightVisionReplay,
   type RealBar,
   type RealLevel,
   type RealNightVisionResponse,
   type RealXrayRung,
 } from "@/lib/api";
 import { addChartSave } from "@/lib/chartSaves";
+import { buildNightVisionGeometry, isRegularSessionBar, nearestBarIndex, visibleTail } from "@/lib/nightVisionGeometry";
 import type { ExposureMetric } from "@/types/cipher";
 
 /**
@@ -52,14 +54,25 @@ const INTRADAY_TIMEFRAMES = new Set<Timeframe>(["1m", "5m", "15m", "1H", "4H"]);
 
 type OverlayKey = "sp" | "spyQqq" | "ts" | "vp" | "xray";
 const OVERLAY_DEFS: { key: OverlayKey; label: string }[] = [
-  { key: "sp", label: "SP" },
+  { key: "sp", label: "Exposure" },
   { key: "spyQqq", label: "SPY/QQQ" },
-  { key: "ts", label: "TS" },
-  { key: "vp", label: "VP" },
+  { key: "ts", label: "Flow" },
+  { key: "vp", label: "Profile" },
   { key: "xray", label: "X-Ray" },
 ];
 
-const CHART_BAR_COUNT = 60;
+const RANGE_OPTIONS = [30, 60, 120] as const;
+
+function linkedReplayId(ticker: string): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = sessionStorage.getItem("cipher:night-vision-replay");
+    const linked = raw ? JSON.parse(raw) as { ticker?: string; snapshot_id?: string } : null;
+    return linked?.ticker === ticker && linked.snapshot_id ? linked.snapshot_id : null;
+  } catch {
+    return null;
+  }
+}
 
 function formatDollar(value: number): string {
   const abs = Math.abs(value);
@@ -82,8 +95,8 @@ function gexCellColor(value: number, maxAbs: number): string {
 function barDateLabel(iso: string, intraday: boolean): string {
   const d = new Date(iso);
   return intraday
-    ? d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
-    : d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    ? d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" })
+    : d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "America/New_York" });
 }
 
 /** Volume-by-price approximation: bins real bar volume by each bar's close price. Real
@@ -191,6 +204,86 @@ function LegendDot({ color, label }: { color: string; label: string }) {
       <span className="inline-block w-[7px] h-[7px] rounded-full shrink-0" style={{ background: color }} />
       {label}
     </span>
+  );
+}
+
+function EvidenceDrawer({
+  snapshot,
+  dataStatus,
+  providerError,
+  cacheNote,
+  onClose,
+}: {
+  snapshot: NonNullable<RealNightVisionResponse["evidence_snapshot"]>;
+  dataStatus?: RealNightVisionResponse["data_status"];
+  providerError?: string;
+  cacheNote?: string;
+  onClose: () => void;
+}) {
+  const freshnessColor = snapshot.freshness.status === "current" ? "var(--accent)" : "var(--gold)";
+  const timeline = [
+    { label: "Observed", value: snapshot.event_at ?? "Unknown" },
+    { label: "Captured", value: snapshot.captured_at },
+    { label: "Session", value: `${snapshot.session.market_date ?? "Unknown"} · ${snapshot.session.phase}` },
+  ];
+  return (
+    <aside
+      role="dialog"
+      aria-label="Night Vision evidence details"
+      className="rounded-[10px] p-3"
+      style={{ border: "1px solid var(--line)", background: "var(--panel-2)" }}
+    >
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h3 className="text-[11px] font-bold uppercase tracking-[0.12em]">Evidence timeline</h3>
+          <p className="mt-1 text-[10px]" style={{ color: "var(--text-mute)" }}>
+            {snapshot.ticker} · {snapshot.snapshot_id.slice(0, 16)}
+          </p>
+        </div>
+        <button type="button" onClick={onClose} className="rounded-md border px-2 py-1 text-[10px]" style={{ borderColor: "var(--line)", color: "var(--text-dim)" }}>
+          Close
+        </button>
+      </div>
+      <div className="mt-3 grid gap-2 sm:grid-cols-3">
+        {timeline.map((item) => (
+          <div key={item.label} className="rounded-md border px-2 py-2" style={{ borderColor: "var(--line)", background: "var(--panel)" }}>
+            <span className="block text-[9px] uppercase" style={{ color: "var(--text-mute)" }}>{item.label}</span>
+            <span className="mt-1 block break-words text-[10px] font-mono" style={{ color: "var(--text-dim)" }}>{item.value}</span>
+          </div>
+        ))}
+      </div>
+      <div className="mt-2 grid gap-2 sm:grid-cols-3">
+        <div className="rounded-md border px-2 py-2" style={{ borderColor: "var(--line)", background: "var(--panel)" }}>
+          <span className="block text-[9px] uppercase" style={{ color: "var(--text-mute)" }}>Freshness</span>
+          <strong className="text-[11px]" style={{ color: freshnessColor }}>{snapshot.freshness.status}</strong>
+          <span className="ml-1 text-[10px]" style={{ color: "var(--text-mute)" }}>{snapshot.freshness.age_seconds == null ? "age unknown" : `${Math.round(snapshot.freshness.age_seconds)}s old`}</span>
+        </div>
+        <div className="rounded-md border px-2 py-2" style={{ borderColor: "var(--line)", background: "var(--panel)" }}>
+          <span className="block text-[9px] uppercase" style={{ color: "var(--text-mute)" }}>Coverage</span>
+          <strong className="text-[11px]">{snapshot.coverage.status}</strong>
+          <span className="ml-1 text-[10px]" style={{ color: "var(--text-mute)" }}>{snapshot.coverage.calculated_cells ?? "?"}/{snapshot.coverage.listed_cells ?? "?"} cells</span>
+        </div>
+        <div className="rounded-md border px-2 py-2" style={{ borderColor: "var(--line)", background: "var(--panel)" }}>
+          <span className="block text-[9px] uppercase" style={{ color: "var(--text-mute)" }}>Source</span>
+          <strong className="text-[11px]">{snapshot.provider} · {snapshot.feed}</strong>
+          <span className="block text-[10px]" style={{ color: "var(--text-mute)" }}>{dataStatus === "stale_cache" ? "cached replay" : "provider response"}</span>
+        </div>
+      </div>
+      {(providerError || cacheNote) && (
+        <div className="mt-2 rounded-md border px-2 py-2 text-[10px]" style={{ borderColor: "color-mix(in srgb, var(--gold) 40%, var(--line))", color: "var(--gold)" }}>
+          {providerError && <p>Provider note: {providerError}</p>}
+          {cacheNote && <p className={providerError ? "mt-1" : undefined}>{cacheNote}</p>}
+        </div>
+      )}
+      <div className="mt-2">
+        <span className="block text-[9px] uppercase" style={{ color: "var(--text-mute)" }}>Caveats and missing inputs</span>
+        <ul className="mt-1 list-disc space-y-0.5 pl-4 text-[10px]" style={{ color: "var(--text-dim)" }}>
+          {snapshot.missing_reasons.length ? snapshot.missing_reasons.map((reason) => <li key={reason}>{reason}</li>) : <li>No missing-input flags.</li>}
+          {snapshot.caveats.slice(0, 2).map((caveat) => <li key={caveat}>{caveat}</li>)}
+        </ul>
+      </div>
+      <p className="mt-2 text-[9px]" style={{ color: "var(--text-mute)" }}>Read-only evidence · no execution authority</p>
+    </aside>
   );
 }
 
@@ -329,32 +422,43 @@ export function NightVision({
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
-  const [bars, setBars] = useState<RealBar[]>([]);
+  const [allBars, setAllBars] = useState<RealBar[]>([]);
+  const [visibleBarCount, setVisibleBarCount] = useState<number>(60);
+  const [sessionView, setSessionView] = useState<"rth" | "extended">("rth");
   /** SPY/QQQ benchmark bars for the comparison overlay (fetched only when toggled). */
   const [benchBars, setBenchBars] = useState<Record<string, RealBar[]>>({});
   /** Strike highlighted by clicking an X-Ray rung — links the ladder to the chart. */
   const [selectedStrike, setSelectedStrike] = useState<number | null>(null);
   /** Crosshair position in SVG space, plus the price under the cursor. */
-  const [hover, setHover] = useState<{ x: number; y: number; price: number } | null>(null);
+  const [hover, setHover] = useState<{ x: number; y: number; price: number; bar: RealBar } | null>(null);
   /** Seconds until the next auto-refresh, mirroring the real product's countdown. */
   const [secondsToRefresh, setSecondsToRefresh] = useState(Math.round(AUTO_REFRESH_MS / 1000));
   const [nightVision, setNightVision] = useState<RealNightVisionResponse | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [errorMessage, setErrorMessage] = useState("");
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [replayId, setReplayId] = useState<string | null>(null);
+  const [evidenceOpen, setEvidenceOpen] = useState(false);
 
   const apiTimeframe = timeframe.toLowerCase();
+
+  useEffect(() => {
+    setReplayId(linkedReplayId(ticker));
+  }, [ticker]);
 
   const load = useCallback(
     async (signal?: AbortSignal, background = false) => {
       if (background) setIsRefreshing(true);
       else setStatus("loading");
       try {
+        const effectiveReplayId = replayId ?? linkedReplayId(ticker);
         const [barsRes, nvRes] = await Promise.all([
           fetchBars(ticker, apiTimeframe, signal),
-          fetchNightVision(ticker, signal, EXPIRATION_COUNTS[expirationMode]),
+          effectiveReplayId
+            ? fetchNightVisionReplay(ticker, effectiveReplayId, signal)
+            : fetchNightVision(ticker, signal, EXPIRATION_COUNTS[expirationMode]),
         ]);
-        setBars(barsRes.bars.slice(-CHART_BAR_COUNT));
+        setAllBars(barsRes.bars);
         setNightVision(nvRes);
         setStatus("ready");
         setErrorMessage("");
@@ -366,7 +470,7 @@ export function NightVision({
         if (background) setIsRefreshing(false);
       }
     },
-    [ticker, apiTimeframe, expirationMode]
+    [ticker, apiTimeframe, expirationMode, replayId]
   );
 
   useEffect(() => {
@@ -376,7 +480,7 @@ export function NightVision({
   }, [load]);
 
   useEffect(() => {
-    if (!autoRefresh) {
+    if (!autoRefresh || replayId) {
       setSecondsToRefresh(Math.round(AUTO_REFRESH_MS / 1000));
       return;
     }
@@ -391,7 +495,7 @@ export function NightVision({
       clearInterval(id);
       clearInterval(tick);
     };
-  }, [autoRefresh, load]);
+  }, [autoRefresh, load, replayId]);
 
   useEffect(() => {
     if (!toast) return;
@@ -400,6 +504,14 @@ export function NightVision({
   }, [toast]);
 
   const intraday = INTRADAY_TIMEFRAMES.has(timeframe);
+  const bars = useMemo(() => {
+    const replayCutoff = nightVision?.replay?.event_at ? Date.parse(nightVision.replay.event_at) : null;
+    const replayBars = replayCutoff == null || Number.isNaN(replayCutoff)
+      ? allBars
+      : allBars.filter((bar) => Date.parse(bar.time) <= replayCutoff);
+    const sessionBars = intraday && sessionView === "rth" ? replayBars.filter((bar) => isRegularSessionBar(bar.time)) : replayBars;
+    return visibleTail(sessionBars, visibleBarCount);
+  }, [allBars, visibleBarCount, intraday, sessionView, nightVision?.replay?.event_at]);
   const spot = nightVision?.quote.price_context ?? 0;
   const changePct = nightVision?.quote.day_change_pct ?? 0;
 
@@ -438,6 +550,7 @@ export function NightVision({
     return best?.strike;
   }, [gexRows]);
   const gexRowsWithSpot = useMemo(() => {
+    if (!gexRows.length) return [];
     const idx = gexRows.findIndex((r) => r.strike <= spot);
     const insertAt = idx === -1 ? gexRows.length : idx;
     const out: (typeof gexRows[number] | "spot")[] = [...gexRows];
@@ -455,40 +568,24 @@ export function NightVision({
 
   // --- chart geometry -------------------------------------------------------
   const VIEW_W = 1200;
-  const VIEW_H = 560;
-  const MARGIN = { top: 24, right: 86, bottom: 40, left: 8 };
+  const VIEW_H = 640;
+  const MARGIN = { top: 28, right: 86, bottom: 28, left: 8 };
   const plotW = VIEW_W - MARGIN.left - MARGIN.right;
-  const plotH = VIEW_H - MARGIN.top - MARGIN.bottom;
-  // Widen the price domain so the meaningful GEX levels are actually on screen.
-  // On an intraday timeframe the bar range can be well under 2% (AAPL 5m: 310.4-315.1)
-  // while the levels that matter span 297-332, so bands for everything but the two
-  // nearest strikes fell outside the plot entirely and the chart looked empty of
-  // structure. Include levels within LEVEL_DOMAIN_PCT of spot, then pad.
-  // Balance: include enough levels to show structure, but never widen so far that the
-  // candles collapse into a sliver. Expansion is capped at MAX_DOMAIN_STRETCH times
-  // the actual bar range — on a quiet 5m session the levels span ±5% while the bars
-  // span 1.5%, and honouring all of them made the price action unreadable.
-  const LEVEL_DOMAIN_PCT = 0.035;
-  const MAX_DOMAIN_STRETCH = 2.2;
-  const barRange = Math.max(maxPrice - minPrice, spot * 0.001);
-  const stretchCap = (barRange * MAX_DOMAIN_STRETCH - barRange) / 2;
-  const levelPrices = (nightVision?.levels ?? [])
-    .map((l) => l.price)
-    .filter((p) => spot > 0 && Math.abs(p - spot) / spot <= LEVEL_DOMAIN_PCT);
-  const rawMax = Math.min(
-    Math.max(maxPrice, ...(levelPrices.length ? levelPrices : [maxPrice])),
-    maxPrice + stretchCap
+  const plotH = 420;
+  const volumeTop = MARGIN.top + plotH + 26;
+  const volumeH = 110;
+  const geometry = useMemo(
+    () => buildNightVisionGeometry(
+      bars, spot,
+      [...(nightVision?.levels ?? []).map((level) => level.price), ...(nightVision?.session_levels?.levels ?? []).map((level) => level.price)],
+      MARGIN.top, plotH,
+    ),
+    [bars, spot, nightVision, MARGIN.top, plotH],
   );
-  const rawMin = Math.max(
-    Math.min(minPrice, ...(levelPrices.length ? levelPrices : [minPrice])),
-    minPrice - stretchCap
-  );
-  const domainPad = (rawMax - rawMin) * 0.08 || 1;
-  const domainMax = rawMax + domainPad;
-  const domainMin = rawMin - domainPad;
+  const { domainMax, domainMin } = geometry;
   const priceToY = useCallback(
-    (p: number) => MARGIN.top + ((domainMax - p) / (domainMax - domainMin)) * plotH,
-    [MARGIN.top, domainMax, domainMin, plotH]
+    (p: number) => geometry.priceToY(p),
+    [geometry]
   );
   const slot = plotW / Math.max(bars.length, 1);
   const xAt = useCallback((i: number) => MARGIN.left + i * slot + slot / 2, [MARGIN.left, slot]);
@@ -499,6 +596,7 @@ export function NightVision({
     return { price: p, y: priceToY(p) };
   });
   const xLabelEvery = Math.max(1, Math.ceil(bars.length / 6));
+  const maxVolume = Math.max(...bars.map((bar) => bar.volume || 0), 1);
 
   // SPY/QQQ comparison overlay. This toggle previously rendered only an "overlay
   // active" badge and drew nothing. Benchmarks are fetched lazily and normalised to
@@ -515,7 +613,7 @@ export function NightVision({
         if (cancelled) return;
         const next: Record<string, RealBar[]> = {};
         wanted.forEach((t, i) => {
-          next[t] = res[i].bars.slice(-CHART_BAR_COUNT);
+            next[t] = res[i].bars;
         });
         setBenchBars(next);
       } catch {
@@ -537,7 +635,8 @@ export function NightVision({
       .map(([key, series]) => {
         if (!series.length) return null;
         const b0 = series[0].close || 1;
-        const pts = series.slice(0, bars.length).map((bar, i) => {
+        const sessionSeries = intraday && sessionView === "rth" ? series.filter((bar) => isRegularSessionBar(bar.time)) : series;
+        const pts = visibleTail(sessionSeries, bars.length).map((bar, i) => {
           const pct = (bar.close - b0) / b0;
           return { x: xAt(i), y: priceToY(base * (1 + pct)) };
         });
@@ -549,7 +648,7 @@ export function NightVision({
         };
       })
       .filter(Boolean) as { key: string; color: string; d: string }[];
-  }, [spyQqqOn, benchBars, bars, priceToY, xAt]);
+  }, [spyQqqOn, benchBars, bars, priceToY, xAt, intraday, sessionView]);
 
   const gammaFlip = nightVision?.summary?.gamma_flip_level ?? null;
 
@@ -588,6 +687,19 @@ export function NightVision({
       }
     }
     return { coveragePct, calculated, listed, oiDate, oiAgeDays };
+  }, [nightVision]);
+
+  const regime = useMemo(() => {
+    const levels = nightVision?.levels ?? [];
+    const known = levels.filter((level) => Number.isFinite(level.net_gex));
+    const net = known.length ? known.reduce((sum, level) => sum + level.net_gex, 0) : null;
+    return {
+      label: net == null ? "Exposure unavailable" : net >= 0 ? "Positive gamma / pin risk" : "Negative gamma / expansion risk",
+      net,
+      flip: nightVision?.summary?.gamma_flip_level ?? null,
+      pull: nightVision?.peak?.price ?? null,
+      pmRange: nightVision?.premarket_range_pct ?? null,
+    };
   }, [nightVision]);
 
   /** Ghost path projected forward of the last bar, clamped to the visible domain. */
@@ -821,6 +933,14 @@ export function NightVision({
           </div>
         </div>
 
+        <div role="group" className="flex items-center gap-1 rounded-lg border p-1" style={{ borderColor: "var(--line)", background: "var(--panel-2)" }} aria-label="Visible chart range">
+          {RANGE_OPTIONS.map((count) => <button key={count} type="button" aria-pressed={visibleBarCount === count} onClick={() => setVisibleBarCount(count)} className="rounded-md px-2 py-1 text-[10px] font-bold" style={{ background: visibleBarCount === count ? "var(--nav-active)" : "transparent", color: visibleBarCount === count ? "var(--text)" : "var(--text-mute)" }}>{count} bars</button>)}
+        </div>
+
+        {intraday && <div role="group" className="flex items-center gap-1 rounded-lg border p-1" style={{ borderColor: "var(--line)", background: "var(--panel-2)" }} aria-label="Chart session">
+          {(["rth", "extended"] as const).map((value) => <button key={value} type="button" aria-pressed={sessionView === value} onClick={() => setSessionView(value)} className="rounded-md px-2 py-1 text-[10px] font-bold uppercase" style={{ background: sessionView === value ? "var(--nav-active)" : "transparent", color: sessionView === value ? "var(--text)" : "var(--text-mute)" }}>{value === "rth" ? "RTH" : "All sessions"}</button>)}
+        </div>}
+
         <span className="text-[11px]" style={{ color: "var(--text-mute)" }}>
           {ticker} · {timeframe} · sniper {expLabel}
         </span>
@@ -843,6 +963,11 @@ export function NightVision({
             {provenance.coveragePct != null ? ` · ${provenance.coveragePct}% cells` : ""}
           </span>
         )}
+        {nightVision?.evidence_snapshot && (
+          <button type="button" onClick={() => setEvidenceOpen((open) => !open)} className="rounded-md border px-2 py-1 text-[10px] font-mono" style={{ borderColor: nightVision.evidence_snapshot.freshness.status === "current" ? "var(--line)" : "var(--gold)", color: nightVision.evidence_snapshot.freshness.status === "current" ? "var(--text-mute)" : "var(--gold)" }} aria-expanded={evidenceOpen}>
+            Evidence {nightVision.evidence_snapshot.snapshot_id.slice(0, 12)} · {nightVision.evidence_snapshot.freshness.status}
+          </button>
+        )}
 
         <div className="flex flex-row flex-wrap items-center gap-3 lg:ml-auto">
           <LegendDot color="var(--gold)" label="Top pull" />
@@ -863,7 +988,8 @@ export function NightVision({
             type="button"
             onClick={() => setAutoRefresh((v) => !v)}
             aria-pressed={autoRefresh}
-            className="rounded-[7px] px-2.5 py-1 text-[11px] font-semibold whitespace-nowrap"
+            disabled={Boolean(replayId)}
+            className="rounded-[7px] px-2.5 py-1 text-[11px] font-semibold whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-40"
             style={{
               background: autoRefresh ? "var(--nav-active)" : "var(--panel-2)",
               border: "1px solid var(--line)",
@@ -883,6 +1009,36 @@ export function NightVision({
           )}
         </div>
       </div>
+
+      {evidenceOpen && nightVision?.evidence_snapshot && (
+        <EvidenceDrawer
+          snapshot={nightVision.evidence_snapshot}
+          dataStatus={nightVision.data_status}
+          providerError={nightVision.provider_error}
+          cacheNote={nightVision.cache_note}
+          onClose={() => setEvidenceOpen(false)}
+        />
+      )}
+
+      {nightVision?.replay && (
+        <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border px-3 py-2" style={{ borderColor: "var(--gold)", background: "color-mix(in srgb, var(--gold) 8%, var(--panel))" }}>
+          <div>
+            <strong className="text-[11px]" style={{ color: "var(--gold)" }}>Frozen scanner replay</strong>
+            <p className="mt-0.5 text-[9px]" style={{ color: "var(--text-dim)" }}>
+              Exposure and chart cutoff are locked to {nightVision.replay.event_at ?? "an unknown event time"}. Session levels were not captured and remain unavailable.
+            </p>
+          </div>
+          <button type="button" onClick={() => { sessionStorage.removeItem("cipher:night-vision-replay"); setReplayId(null); setAutoRefresh(false); }} className="rounded-md border px-2.5 py-1 text-[10px]" style={{ borderColor: "var(--line)", color: "var(--text)" }}>Return to live</button>
+        </div>
+      )}
+
+      {status === "ready" && <div role="region" className="grid grid-cols-2 gap-2 lg:grid-cols-4" aria-label="Night Vision regime summary">
+        <div className="rounded-lg border px-3 py-2" style={{ borderColor: "var(--line)", background: "var(--panel)" }}><span className="block text-[9px] uppercase" style={{ color: "var(--text-mute)" }}>Regime</span><strong className="text-[11px]">{regime.label}</strong></div>
+        <div className="rounded-lg border px-3 py-2" style={{ borderColor: "var(--line)", background: "var(--panel)" }}><span className="block text-[9px] uppercase" style={{ color: "var(--text-mute)" }}>Gamma flip</span><strong className="text-[11px]">{regime.flip?.toFixed(2) ?? "unavailable"}</strong></div>
+        <div className="rounded-lg border px-3 py-2" style={{ borderColor: "var(--line)", background: "var(--panel)" }}><span className="block text-[9px] uppercase" style={{ color: "var(--text-mute)" }}>Top pull</span><strong className="text-[11px]">{regime.pull?.toFixed(2) ?? "unavailable"}</strong></div>
+        <div className="rounded-lg border px-3 py-2" style={{ borderColor: "var(--line)", background: "var(--panel)" }}><span className="block text-[9px] uppercase" style={{ color: "var(--text-mute)" }}>PM range / coverage</span><strong className="text-[11px]">{regime.pmRange == null ? "PM unknown" : `${regime.pmRange.toFixed(2)}%`} · {provenance?.coveragePct == null ? "coverage unknown" : `${provenance.coveragePct}% cells`}</strong></div>
+      </div>}
+      {status === "ready" && <p className="text-[9px] leading-relaxed" style={{ color: "var(--text-mute)" }}>Filled bands = public-OI GEX heuristic, not verified dealer positioning · gray dashes = traded session levels · gold dotted path = short-horizon hedge-surface heuristic, not a forecast · missing gamma/OI stays unavailable.</p>}
 
       {status === "loading" && (
         // The night-vision payload measured 742 KB and 4.2 seconds warm, so this state is
@@ -927,9 +1083,14 @@ export function NightVision({
                 const rect = e.currentTarget.getBoundingClientRect();
                 const x = ((e.clientX - rect.left) / rect.width) * VIEW_W;
                 const y = ((e.clientY - rect.top) / rect.height) * VIEW_H;
-                if (y < MARGIN.top || y > MARGIN.top + plotH) return setHover(null);
-                const price = domainMax - ((y - MARGIN.top) / plotH) * (domainMax - domainMin);
-                setHover({ x, y, price });
+                const index = nearestBarIndex(x, MARGIN.left, plotW, bars.length);
+                if (index == null || y < MARGIN.top || y > volumeTop + volumeH) return setHover(null);
+                const bar = bars[index];
+                const inPricePlot = y <= MARGIN.top + plotH;
+                const price = inPricePlot
+                  ? domainMax - ((y - MARGIN.top) / plotH) * (domainMax - domainMin)
+                  : bar.close;
+                setHover({ x: xAt(index), y: inPricePlot ? y : priceToY(bar.close), price, bar });
               }}
             >
               <defs>
@@ -960,6 +1121,11 @@ export function NightVision({
                 </text>
               </g>
 
+              {/* Shared price grid. Every price-derived mark uses priceToY above. */}
+              <g opacity={0.45}>
+                {yAxisLabels.map((tick, index) => <line key={`grid-${index}`} x1={MARGIN.left} x2={MARGIN.left + plotW} y1={tick.y} y2={tick.y} stroke="var(--line)" strokeWidth={1} />)}
+              </g>
+
               {/* VP overlay: volume-profile histogram along the chart's right edge (real bar volume, approximate binning) */}
               {vpOn &&
                 volumeProfile.map((b, i) => {
@@ -978,6 +1144,16 @@ export function NightVision({
                     />
                   );
                 })}
+
+              {/* True time-volume panel sharing the exact candle x slots. */}
+              <g aria-label="Volume bars">
+                <line x1={MARGIN.left} x2={MARGIN.left + plotW} y1={volumeTop} y2={volumeTop} stroke="var(--line)" />
+                <text x={MARGIN.left + 4} y={volumeTop + 12} fontSize={9} fill="var(--text-mute)" fontFamily="var(--font-mono)">VOLUME</text>
+                {bars.map((bar, index) => {
+                  const height = Math.max(1, ((bar.volume || 0) / maxVolume) * (volumeH - 16));
+                  return <rect key={`volume-${bar.time}`} x={xAt(index) - slot * 0.28} y={volumeTop + volumeH - height} width={Math.max(slot * 0.56, 1)} height={height} fill={bar.close >= bar.open ? "var(--accent)" : "var(--neg)"} opacity={0.35} />;
+                })}
+              </g>
 
               {/* Candlesticks — purple up / red down, NOT green, per this app's convention */}
               {bars.map((bar, i) => {
@@ -1132,7 +1308,7 @@ export function NightVision({
                   <text
                     key={i}
                     x={xAt(i)}
-                    y={VIEW_H - 14}
+                    y={VIEW_H - 8}
                     textAnchor="middle"
                     fontSize={11}
                     fill="var(--text-mute)"
@@ -1174,7 +1350,7 @@ export function NightVision({
               {hover && (
                 <g pointerEvents="none">
                   <line x1={MARGIN.left} x2={MARGIN.left + plotW} y1={hover.y} y2={hover.y} stroke="var(--text-dim)" strokeWidth={0.8} strokeDasharray="2 3" opacity={0.8} />
-                  <line x1={hover.x} x2={hover.x} y1={MARGIN.top} y2={MARGIN.top + plotH} stroke="var(--text-dim)" strokeWidth={0.8} strokeDasharray="2 3" opacity={0.8} />
+                  <line x1={hover.x} x2={hover.x} y1={MARGIN.top} y2={volumeTop + volumeH} stroke="var(--text-dim)" strokeWidth={0.8} strokeDasharray="2 3" opacity={0.8} />
                   <rect x={MARGIN.left + plotW + 2} y={hover.y - 9} width={62} height={18} rx={4} fill="var(--panel-2)" stroke="var(--line)" />
                   <text
                     x={MARGIN.left + plotW + 33}
@@ -1190,6 +1366,11 @@ export function NightVision({
                 </g>
               )}
             </svg>
+
+            {hover && <div className="pointer-events-none absolute left-3 top-3 rounded-lg border px-3 py-2 text-[10px] shadow-lg" style={{ borderColor: "var(--line)", background: "color-mix(in srgb, var(--panel) 94%, transparent)", color: "var(--text-dim)" }}>
+              <div className="mb-1 font-bold" style={{ color: "var(--text)" }}>{barDateLabel(hover.bar.time, intraday)}</div>
+              <div className="grid grid-cols-5 gap-2"><span>O {hover.bar.open.toFixed(2)}</span><span>H {hover.bar.high.toFixed(2)}</span><span>L {hover.bar.low.toFixed(2)}</span><span>C {hover.bar.close.toFixed(2)}</span><span>V {Math.round(hover.bar.volume).toLocaleString()}</span></div>
+            </div>}
 
             {/*
               SPY/QQQ, TS: no corresponding real-data field is exposed by /api/night-vision —
@@ -1235,6 +1416,7 @@ export function NightVision({
               onSelectStrike={setSelectedStrike}
             />
           )}
+          {xrayOn && !(nightVision?.xray?.length ?? 0) && <aside className="flex w-full items-center justify-center rounded-[10px] border p-6 text-[11px] lg:w-[250px]" style={{ borderColor: "var(--line)", color: "var(--text-mute)" }}>Strike X-Ray unavailable: no calculable exposure rungs.</aside>}
 
           {/* SP overlay: docked right-side single-column heatmap panel (Strike-Matrix style), real GEX/VEX */}
           {spOn && (
@@ -1265,6 +1447,7 @@ export function NightVision({
                 />
               </div>
               <div className="flex flex-col overflow-y-auto" style={{ maxHeight: 420 }}>
+                {!gexRowsWithSpot.length && <div className="p-4 text-[11px]" style={{ color: "var(--text-mute)" }}>Exposure unavailable. Missing gamma/OI remains unknown.</div>}
                 {gexRowsWithSpot.map((item) =>
                   item === "spot" ? (
                     <div
