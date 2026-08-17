@@ -69,6 +69,8 @@ test("morning brief prioritizes integrity and prospective truth before market co
   assert.ok(attention >= 0 && attention < observations);
   assert.ok(observations < setups && setups < market && market < portfolios);
   assert.match(morning, /No backfill, broker connection, or execution authority/);
+  assert.match(morning, /Provider refresh pending; flow is unknown, not zero/);
+  assert.match(morning, /Flow unavailable; no observations are being represented/);
   assert.match(home, /p-3 sm:p-6/);
 });
 
@@ -87,6 +89,8 @@ test("scanner leads with jobs and compares quality-gated evidence compactly", ()
   assert.match(scanner, /raw\.evidence_snapshot\.snapshot_id\.slice\(0, 12\)/);
   assert.match(nightVision, /nightVision\.evidence_snapshot\.snapshot_id\.slice\(0, 12\)/);
   assert.match(nightVision, /Frozen scanner replay/);
+  assert.match(nightVision, /full matrix checksum verified/);
+  assert.match(nightVision, /legacy artifact without a stored full-matrix checksum/);
   assert.match(nightVision, /fetchNightVisionReplay/);
   assert.match(scanner, /cipher:night-vision-replay/);
   assert.match(api, /export type EvidenceSnapshot/);

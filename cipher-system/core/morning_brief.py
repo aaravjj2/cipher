@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError, as_completed
 from pathlib import Path
 import sqlite3
 from typing import Callable
@@ -16,6 +17,8 @@ from core import (
 
 GEX_DB = Path(__file__).resolve().parents[1] / "data" / "gex_history.sqlite"
 ALERT_STATE = Path(__file__).resolve().parents[1] / "data" / "alerts" / "market_alert_state.json"
+BRIEF_MARKET_BUDGET_SECONDS = 2.0
+_MARKET_EXECUTOR = ThreadPoolExecutor(max_workers=4, thread_name_prefix="cipher-brief")
 
 
 def _gex_change(ticker: str) -> dict:
@@ -59,28 +62,50 @@ def _alert_states() -> dict:
 
 def build(*, ticker: str, quote_fn: Callable[[str], dict], flow_fn: Callable[..., dict],
           status_payload: dict) -> dict:
-    market = []
+    market_by_symbol = {}
     errors = []
-    for symbol in ("SPY", "QQQ", "IWM"):
-        try:
-            q = quote_fn(symbol)
-            market.append({
-                "ticker": symbol, "price": q.get("price_context"),
-                "day_change_pct": q.get("day_change_pct"), "as_of": q.get("as_of"),
-                "feed": q.get("feed"),
-            })
-        except Exception as exc:
-            errors.append({"section": "market", "ticker": symbol, "error": str(exc)})
+    symbols = ("SPY", "QQQ", "IWM")
+    pending = {_MARKET_EXECUTOR.submit(quote_fn, symbol): symbol for symbol in symbols}
+    try:
+        for future in as_completed(pending, timeout=BRIEF_MARKET_BUDGET_SECONDS):
+            symbol = pending[future]
+            try:
+                q = future.result()
+                market_by_symbol[symbol] = {
+                    "ticker": symbol, "price": q.get("price_context"),
+                    "day_change_pct": q.get("day_change_pct"), "as_of": q.get("as_of"),
+                    "feed": q.get("feed"), "availability": q.get("availability"),
+                }
+            except Exception as exc:
+                errors.append({"section": "market", "ticker": symbol, "error": str(exc)})
+    except FutureTimeoutError:
+        pass
+    for future, symbol in pending.items():
+        if symbol not in market_by_symbol:
+            future.cancel()
+            market_by_symbol[symbol] = {
+                "ticker": symbol, "price": None, "day_change_pct": None,
+                "as_of": None, "feed": "unavailable",
+                "availability": {"status": "refreshing", "reason": "refresh_pending"},
+            }
+    market = [market_by_symbol[symbol] for symbol in symbols]
     try:
         flow = flow_fn(ticker, None, min_premium=100_000)
         significant_flow = {
             "ticker": ticker.upper(), "as_of": flow.get("as_of"),
             "source": flow.get("source"), "session_date": flow.get("session_date"),
             "prints": (flow.get("prints") or [])[:8], "caveat": flow.get("caveat"),
+            "freshness": flow.get("freshness"),
+            "availability": flow.get("availability") or {"status": "available"},
+            "coverage": flow.get("coverage"),
         }
     except Exception as exc:
         errors.append({"section": "flow", "ticker": ticker.upper(), "error": str(exc)})
-        significant_flow = {"ticker": ticker.upper(), "prints": []}
+        significant_flow = {
+            "ticker": ticker.upper(), "prints": [],
+            "availability": {"status": "unavailable", "reason": "provider_error"},
+            "freshness": {"status": "unknown", "age_seconds": None},
+        }
     try:
         paper = paper_portfolio_api.snapshot()
     except Exception as exc:

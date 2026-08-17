@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+import json
 
 from core import evidence_snapshot
 from core import app
@@ -104,6 +105,9 @@ def test_frozen_matrix_store_is_bounded_to_valid_snapshot_ids(tmp_path, monkeypa
     artifact = evidence_snapshot.load_matrix(snapshot["snapshot_id"])
     assert artifact is not None
     assert artifact["matrix"] == payload
+    assert artifact["integrity"]["snapshot_identity"] == "verified"
+    assert artifact["integrity"]["matrix_checksum"] == "verified"
+    assert len(artifact["integrity"]["matrix_sha256"]) == 64
     assert artifact["execution_capability"] is False
     assert evidence_snapshot.load_matrix("../../auth.json") is None
 
@@ -111,6 +115,19 @@ def test_frozen_matrix_store_is_bounded_to_valid_snapshot_ids(tmp_path, monkeypa
     assert replay["evidence_snapshot"]["snapshot_id"] == snapshot["snapshot_id"]
     assert replay["session_levels"]["levels"] == []
     assert "not captured" in replay["session_levels"]["note"].lower()
+
+
+def test_frozen_matrix_rejects_cell_or_identity_tampering(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(evidence_snapshot, "STORE_DIR", tmp_path)
+    payload = _matrix_payload()
+    snapshot = evidence_snapshot.build(payload, view="setup_scanner")
+    assert evidence_snapshot.persist_matrix(payload, snapshot) is True
+    path = tmp_path / f"{snapshot['snapshot_id']}.json"
+    artifact = json.loads(path.read_text(encoding="utf-8"))
+    artifact["matrix"]["rows"][0]["strike"] = 999.0
+    path.write_text(json.dumps(artifact), encoding="utf-8")
+
+    assert evidence_snapshot.load_matrix(snapshot["snapshot_id"]) is None
 
 
 def test_scan_persists_only_qualified_leaderboard_source(monkeypatch) -> None:

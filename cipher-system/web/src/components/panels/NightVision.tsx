@@ -1027,6 +1027,9 @@ export function NightVision({
             <p className="mt-0.5 text-[9px]" style={{ color: "var(--text-dim)" }}>
               Exposure and chart cutoff are locked to {nightVision.replay.event_at ?? "an unknown event time"}. Session levels were not captured and remain unavailable.
             </p>
+            <p className="mt-0.5 text-[9px]" style={{ color: "var(--text-mute)" }}>
+              Snapshot identity verified · {nightVision.replay.integrity?.matrix_checksum === "verified" ? "full matrix checksum verified" : "legacy artifact without a stored full-matrix checksum"}
+            </p>
           </div>
           <button type="button" onClick={() => { sessionStorage.removeItem("cipher:night-vision-replay"); setReplayId(null); setAutoRefresh(false); }} className="rounded-md border px-2.5 py-1 text-[10px]" style={{ borderColor: "var(--line)", color: "var(--text)" }}>Return to live</button>
         </div>

@@ -22,4 +22,4 @@ Scope: options-flow freshness contract and trader-facing tape status.
 
 ## Follow-up
 
-The AAPL flow fallback can still be slow when no captured Tradier session exists and the Alpaca chain path is cold. This is now a visible freshness/data-availability issue rather than a false live tape; the next runtime slice should add a hard response budget and a non-blocking unavailable state for that fallback.
+The AAPL flow fallback can still be slow when no captured Tradier session exists and the Alpaca chain path is cold. This is now a visible freshness/data-availability issue rather than a false live tape. Phase V5.5 closes that follow-up with a bounded asynchronous refresh; see `phase_v5_5_response_budget_2026-08-17.md`.

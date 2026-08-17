@@ -128,9 +128,14 @@ Gate:
 
 Status on 2026-08-17: shared evidence identity, quality/rejection funnel,
 three-setup comparison, and frozen scanner-to-Night-Vision exposure replay are
-implemented and deployed. Bar-derived session-level capture, provider-backed
-expected move/catalyst/spread evidence, and recorded performance budgets remain
-open; see `docs/audits/phase_v4_2_shared_evidence_and_comparison_2026-08-17.md`.
+implemented and deployed. Replay artifacts now verify snapshot identity and,
+for new captures, a complete normalized-matrix SHA-256 checksum. Flow and
+Morning Brief provider refreshes are bounded and explicit. Bar-derived
+session-level capture, provider-backed expected move/catalyst/spread evidence,
+and recorded 500-name performance budgets remain open; see
+`docs/audits/phase_v4_2_shared_evidence_and_comparison_2026-08-17.md`,
+`docs/audits/phase_v5_5_response_budget_2026-08-17.md`, and
+`docs/audits/phase_v5_6_replay_integrity_2026-08-17.md`.
 
 Deliver:
 

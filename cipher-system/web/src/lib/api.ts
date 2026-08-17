@@ -359,9 +359,22 @@ export type MorningBriefResponse = {
   ticker: string;
   session: ProductStatus["session"];
   freshness: ProductStatus;
-  market: Array<{ ticker: string; price: number | null; day_change_pct: number | null; as_of: string | null; feed: string }>;
+  market: Array<{
+    ticker: string; price: number | null; day_change_pct: number | null;
+    as_of: string | null; feed: string; availability?: RealFlowResponse["availability"];
+  }>;
   recent_scans: Array<{ id: string; as_of: string; strategy: string; qualified: number; top_ticker?: string | null }>;
-  significant_flow: { ticker: string; as_of?: string | null; source?: string; session_date?: string; prints: RealFlowPrint[]; caveat?: string };
+  significant_flow: {
+    ticker: string;
+    as_of?: string | null;
+    source?: string;
+    session_date?: string | null;
+    prints: RealFlowPrint[];
+    caveat?: string;
+    freshness?: RealFlowResponse["freshness"];
+    availability?: RealFlowResponse["availability"];
+    coverage?: RealFlowResponse["coverage"];
+  };
   alerts: { rules: Array<Record<string, unknown>> };
   gex_change?: {
     ticker: string; available: boolean; change?: number | null;
@@ -626,6 +639,11 @@ export type RealNightVisionResponse = RealMatrixResponse & {
     captured_at: string;
     exposure_frozen: true;
     session_levels_captured: boolean;
+    integrity?: {
+      snapshot_identity: "verified";
+      matrix_checksum: "verified" | "legacy_unavailable";
+      matrix_sha256: string;
+    };
     read_only: true;
     execution_capability: false;
   };
@@ -690,16 +708,24 @@ export type RealFlowResponse = {
   capture_mode?: "event_timesales" | "latest_trade_per_contract" | string;
   caveat?: string;
   coverage?: {
+    status?: "complete" | "partial" | "stale" | "missing" | "unknown";
     scope?: string;
     captured_events?: number;
     captured_contracts?: number;
     contracts_with_matching_session?: number;
   };
   feed: string;
-  quote: RealQuote;
+  quote: RealQuote | null;
   min_premium: number;
   count: number;
   prints: RealFlowPrint[];
+  availability?: {
+    status: "refreshing" | "unavailable" | "available";
+    reason?: "refresh_pending" | "provider_error" | string;
+    response_budget_seconds?: number;
+    retry_after_seconds?: number;
+    detail?: string | null;
+  };
   read_only?: boolean;
 };
 

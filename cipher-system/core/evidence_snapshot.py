@@ -24,6 +24,14 @@ MAX_STORED = 500
 _STORE_LOCK = Lock()
 
 
+def _matrix_digest(payload: dict[str, Any]) -> str:
+    """Hash the complete normalized matrix, including every strike cell."""
+    encoded = json.dumps(
+        payload, sort_keys=True, separators=(",", ":"), allow_nan=False, default=str
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
 def _stamp(value: Any) -> datetime | None:
     if not value:
         return None
@@ -200,6 +208,7 @@ def persist_matrix(payload: dict[str, Any], snapshot: dict[str, Any]) -> bool:
         "captured_at": snapshot.get("captured_at"),
         "evidence_snapshot": snapshot,
         "matrix": payload,
+        "matrix_sha256": _matrix_digest(payload),
         "read_only": True,
         "execution_capability": False,
     }
@@ -232,6 +241,24 @@ def load_matrix(snapshot_id: str) -> dict[str, Any] | None:
         artifact = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return None
-    if artifact.get("snapshot_id") != safe or not isinstance(artifact.get("matrix"), dict):
+    matrix = artifact.get("matrix")
+    frozen = artifact.get("evidence_snapshot")
+    if artifact.get("snapshot_id") != safe or not isinstance(matrix, dict):
         return None
+    if not isinstance(frozen, dict) or frozen.get("snapshot_id") != safe:
+        return None
+    # The evidence identity covers the provider event, feed, coverage, spot and
+    # declared levels. Recomputing it protects even older artifacts that predate
+    # the complete-matrix checksum.
+    if build(matrix, view="integrity_check").get("snapshot_id") != safe:
+        return None
+    recorded_digest = artifact.get("matrix_sha256")
+    calculated_digest = _matrix_digest(matrix)
+    if recorded_digest is not None and recorded_digest != calculated_digest:
+        return None
+    artifact["integrity"] = {
+        "snapshot_identity": "verified",
+        "matrix_checksum": "verified" if recorded_digest is not None else "legacy_unavailable",
+        "matrix_sha256": calculated_digest,
+    }
     return artifact

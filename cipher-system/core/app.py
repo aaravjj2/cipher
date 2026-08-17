@@ -15,6 +15,7 @@ import threading
 import time
 import uuid
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
 from copy import deepcopy
 from datetime import date, datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -151,6 +152,26 @@ QUOTE_CACHE: dict = {}
 # therefore be re-entrant; a plain Lock deadlocks on every warm-cache read.
 _CACHE_LOCK = threading.RLock()
 _CACHE_METRICS = {name: {"hits": 0, "misses": 0} for name in ("quote", "chain", "matrix", "bars", "flow", "oi")}
+
+# A cold flow fallback can require a stock quote, several option-snapshot pages,
+# and contract metadata. Provider calls are intentionally allowed to finish and
+# warm their normal caches, but an HTTP request must not wait through that whole
+# sequence. Two workers bound provider pressure, while the keyed future map
+# deduplicates repeated browser polls for the same view.
+FLOW_RESPONSE_BUDGET_SECONDS = 2.5
+_FLOW_REFRESH_EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix="cipher-flow")
+# add_done_callback may run synchronously when a very fast local captured-tape
+# lookup finishes before registration completes, so this must be re-entrant.
+_FLOW_REFRESH_LOCK = threading.RLock()
+_FLOW_REFRESH_INFLIGHT: dict[tuple, object] = {}
+
+# Quotes are cheap when cached but can fan out across SIP/IEX plus daily bars on
+# a cold provider path. Morning Brief uses this bounded adapter so the landing
+# page reports an explicit unknown quote rather than blocking on that fan-out.
+QUOTE_RESPONSE_BUDGET_SECONDS = 1.5
+_QUOTE_REFRESH_EXECUTOR = ThreadPoolExecutor(max_workers=4, thread_name_prefix="cipher-quote")
+_QUOTE_REFRESH_LOCK = threading.RLock()
+_QUOTE_REFRESH_INFLIGHT: dict[str, object] = {}
 
 
 def _cache_event(name: str, hit: bool) -> None:
@@ -695,6 +716,44 @@ def quote(ticker):
     with _CACHE_LOCK:
         QUOTE_CACHE[ticker] = (time.time(), result)
     return deepcopy(result)
+
+
+def bounded_quote(ticker):
+    """Return a quote within the operator-surface response budget."""
+    symbol = str(ticker).upper()
+    with _QUOTE_REFRESH_LOCK:
+        future = _QUOTE_REFRESH_INFLIGHT.get(symbol)
+        if future is None:
+            future = _QUOTE_REFRESH_EXECUTOR.submit(quote, symbol)
+            _QUOTE_REFRESH_INFLIGHT[symbol] = future
+
+            def release(done, *, refresh_key=symbol):
+                with _QUOTE_REFRESH_LOCK:
+                    if _QUOTE_REFRESH_INFLIGHT.get(refresh_key) is done:
+                        _QUOTE_REFRESH_INFLIGHT.pop(refresh_key, None)
+
+            future.add_done_callback(release)
+    try:
+        result = future.result(timeout=QUOTE_RESPONSE_BUDGET_SECONDS)
+        return {**result, "availability": {"status": "available"}}
+    except FutureTimeoutError:
+        reason, detail = "refresh_pending", None
+    except Exception as exc:
+        reason, detail = "provider_error", str(exc)[:240]
+    return {
+        "ticker": symbol,
+        "bid": None, "ask": None, "mid": None, "last": None,
+        "price_context": None, "price_context_kind": "unavailable",
+        "prior_close": None, "day_change_pct": None, "as_of": None,
+        "feed": "unavailable",
+        "availability": {
+            "status": "refreshing" if reason == "refresh_pending" else "unavailable",
+            "reason": reason,
+            "response_budget_seconds": QUOTE_RESPONSE_BUDGET_SECONDS,
+            "retry_after_seconds": 5,
+            "detail": detail,
+        },
+    }
 
 
 def option_chain(ticker, feed, force=False, max_pages=8, expiration_gte=None, expiration_lte=None):
@@ -1683,7 +1742,7 @@ def contract_search(ticker, feed, strike, option_type, expiration=None, trade_da
     }
 
 
-def flow(ticker, feed, min_premium=5000, max_price=None, option_type="all", side="all", moneyness="all", force=False):
+def _flow_unbounded(ticker, feed, min_premium=5000, max_price=None, option_type="all", side="all", moneyness="all", force=False):
     """Return a truthful, session-bounded options-flow view.
 
     Captured Tradier timesales are preferred because each event carries its
@@ -1824,6 +1883,99 @@ def flow(ticker, feed, min_premium=5000, max_price=None, option_type="all", side
     }
 
 
+def _flow_unavailable(ticker, feed, min_premium, *, reason, detail=None):
+    """Truthful non-blocking response while a cold provider refresh is pending."""
+    return {
+        "ticker": str(ticker).upper(),
+        "generated_at": utcnow(),
+        "as_of": None,
+        "oldest_event_at": None,
+        "newest_event_at": None,
+        "event_age_seconds": None,
+        "freshness": {"status": "unknown", "age_seconds": None},
+        "session_date": None,
+        "source": "unavailable",
+        "capture_mode": "bounded_async_refresh",
+        "feed": resolve_options_feed(feed),
+        "quote": None,
+        "min_premium": float(min_premium),
+        "count": 0,
+        "prints": [],
+        "availability": {
+            "status": "refreshing" if reason == "refresh_pending" else "unavailable",
+            "reason": reason,
+            "response_budget_seconds": FLOW_RESPONSE_BUDGET_SECONDS,
+            "retry_after_seconds": 5,
+            "detail": detail,
+        },
+        "coverage": {
+            "status": "unknown",
+            "scope": "No event-time tape was captured and the provider-backed snapshot is not yet available.",
+            "contracts_with_matching_session": 0,
+        },
+        "caveat": (
+            "No captured session is available. A bounded background refresh is in progress; "
+            "missing flow remains unknown and is not represented as zero."
+            if reason == "refresh_pending"
+            else "The provider-backed fallback failed. No flow observations are being represented."
+        ),
+        "read_only": True,
+    }
+
+
+def flow(ticker, feed, min_premium=5000, max_price=None, option_type="all", side="all", moneyness="all", force=False):
+    """Return flow within a hard browser-response budget.
+
+    The underlying refresh continues in a bounded worker after a timeout so its
+    normal quote/chain caches can warm. Repeated identical polls share one
+    in-flight refresh instead of multiplying provider calls.
+    """
+    key = (
+        str(ticker).upper(),
+        str(feed or ""),
+        float(min_premium),
+        float(max_price) if max_price is not None else None,
+        str(option_type),
+        str(side),
+        str(moneyness),
+        bool(force),
+    )
+    with _FLOW_REFRESH_LOCK:
+        future = _FLOW_REFRESH_INFLIGHT.get(key)
+        if future is None:
+            future = _FLOW_REFRESH_EXECUTOR.submit(
+                _flow_unbounded,
+                ticker,
+                feed,
+                min_premium,
+                max_price,
+                option_type,
+                side,
+                moneyness,
+                force,
+            )
+            _FLOW_REFRESH_INFLIGHT[key] = future
+
+            def release(done, *, refresh_key=key):
+                with _FLOW_REFRESH_LOCK:
+                    if _FLOW_REFRESH_INFLIGHT.get(refresh_key) is done:
+                        _FLOW_REFRESH_INFLIGHT.pop(refresh_key, None)
+
+            future.add_done_callback(release)
+    try:
+        return future.result(timeout=FLOW_RESPONSE_BUDGET_SECONDS)
+    except FutureTimeoutError:
+        return _flow_unavailable(ticker, feed, min_premium, reason="refresh_pending")
+    except Exception as exc:
+        return _flow_unavailable(
+            ticker,
+            feed,
+            min_premium,
+            reason="provider_error",
+            detail=str(exc)[:240],
+        )
+
+
 # Curated pharma/biotech/medtech universe for the Bio flow scan — no GICS/sector feed is
 # wired into this service, so this is a hand-picked list (cross-checked against names
 # actually surfaced in a real Bio scan capture: AMGN, BSX, UTHR, INSM, BMY, LLY, MRNA,
@@ -1849,7 +2001,9 @@ def flow_bulk(tickers, feed, job_id=None, **filters):
     errors = []
     for i, ticker in enumerate(tickers):
         try:
-            result = flow(ticker, feed, **filters)
+            # Bulk scans are already asynchronous jobs with progress reporting;
+            # they need the completed result rather than 54 refresh-pending rows.
+            result = _flow_unbounded(ticker, feed, **filters)
             all_prints.extend(result.get("prints") or [])
         except Exception as exc:
             errors.append({"ticker": ticker, "error": str(exc)})
@@ -2095,7 +2249,7 @@ class Handler(BaseHTTPRequestHandler):
                     universe_meta=UNIVERSE_META,
                 )
             elif parsed.path == "/api/morning-brief":
-                current_quote = quote(ticker)
+                current_quote = bounded_quote(ticker)
                 freshness = product_status.status(
                     ticker=ticker,
                     quote=current_quote,
@@ -2103,7 +2257,7 @@ class Handler(BaseHTTPRequestHandler):
                     universe_meta=UNIVERSE_META,
                 )
                 data = morning_brief.build(
-                    ticker=ticker, quote_fn=quote, flow_fn=flow,
+                    ticker=ticker, quote_fn=bounded_quote, flow_fn=flow,
                     status_payload=freshness,
                 )
             elif parsed.path == "/api/research-desk":
@@ -2256,6 +2410,7 @@ class Handler(BaseHTTPRequestHandler):
                     "captured_at": artifact.get("captured_at"),
                     "exposure_frozen": True,
                     "session_levels_captured": False,
+                    "integrity": artifact.get("integrity"),
                     "read_only": True,
                     "execution_capability": False,
                 }

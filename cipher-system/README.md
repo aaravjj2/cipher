@@ -102,6 +102,12 @@ automatic paper-trading promotion is enabled.
 - **Spyglass** — latest option prints with inferred bid/ask aggressor and premium tiers
 - **Flow freshness** — event age and current/stale/unknown status are shown instead
   of presenting a cold chain snapshot as a live tape
+- **Bounded operator surfaces** — cold quote/flow refreshes return within a hard
+  budget, deduplicate in the background, and report refreshing/unavailable rather
+  than blocking or displaying zero
+- **Frozen replay integrity** — Scanner → Night Vision artifacts verify the
+  snapshot identity and, for new captures, the complete normalized-matrix SHA-256
+  checksum; legacy artifacts are labelled when the full checksum is absent
 - **Trident / Scanner / Watchlists / Journal / Saves** — research utilities (local-only)
 - **Paper Autopilot** — premarket plan, RTH confirmation, simulated fills/exits,
   hard risk locks, decision traces, and leakage-safe learning manifests

@@ -71,6 +71,7 @@ export default function FlowTape({ ticker }: { ticker: string }) {
   const [sessionDate, setSessionDate] = useState<string | null>(null);
   const [source, setSource] = useState<string | null>(null);
   const [caveat, setCaveat] = useState<string | null>(null);
+  const [availability, setAvailability] = useState<"available" | "refreshing" | "unavailable">("available");
   const [freshness, setFreshness] = useState<{ status: "current" | "stale" | "unknown"; age_seconds: number | null }>({ status: "unknown", age_seconds: null });
   const [live, setLive] = useState(true);
   // Tracks the newest print already seen so arriving rows can be highlighted
@@ -100,6 +101,7 @@ export default function FlowTape({ ticker }: { ticker: string }) {
         setSessionDate(res.session_date ?? null);
         setSource(res.source ?? null);
         setCaveat(res.caveat ?? null);
+        setAvailability(res.availability?.status ?? "available");
         setFreshness(res.freshness ?? { status: res.event_age_seconds == null ? "unknown" : res.event_age_seconds <= 120 ? "current" : "stale", age_seconds: res.event_age_seconds ?? null });
         setError(null);
       } catch (err) {
@@ -214,7 +216,13 @@ export default function FlowTape({ ticker }: { ticker: string }) {
         style={{ borderColor: "var(--border)", color: "var(--text-mute)" }}
         title={caveat ?? undefined}
       >
-        {source === "tradier_stream" ? "Captured event timesales" : "Chain snapshot fallback"}
+        {source === "tradier_stream"
+          ? "Captured event timesales"
+          : source === "alpaca_chain_snapshot"
+            ? "Chain snapshot fallback"
+            : availability === "refreshing"
+              ? "Provider refresh pending"
+              : "Flow unavailable"}
         {caveat ? ` · ${caveat}` : ""}
       </div>
 
