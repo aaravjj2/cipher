@@ -1,7 +1,10 @@
 from pathlib import Path
 
 
-ROOT = Path(__file__).resolve().parents[3]
+# The checkout root is two levels above this file (`cipher-system/tests`). Using
+# parents[3] only worked in the local symlinked workspace, where it resolved to
+# a sibling directory that happened to contain infra/.
+ROOT = Path(__file__).resolve().parents[2]
 SERVICE = ROOT / "infra/gcp-cipher-vm/systemd/cipher-market-research.service"
 TIMER = ROOT / "infra/gcp-cipher-vm/systemd/cipher-market-research.timer"
 
