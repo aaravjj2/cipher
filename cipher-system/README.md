@@ -65,8 +65,11 @@ Default ports: core `8282`, web `8283` (override with `CIPHER_CORE_PORT` / `PORT
 Copy `.env.example` to `app/.env` and fill the local credentials. Cipher loads only
 the repository `.env`; the file is ignored by Git and is never sent to the
 browser. The active market-data provider is Alpaca: OPRA for options and SIP
-with IEX fallback for stocks. Do not place credentials in source files,
-screenshots, reports, logs, or generated data.
+with IEX fallback for stocks. Inspect the read-only compatibility summary at
+`/api/provider-capabilities`; see [`docs/provider-compatibility.md`](docs/provider-compatibility.md)
+for standard-account degraded mode, Tradier capture-only scope, and Webull's
+unsupported status. Do not place credentials in source files, screenshots,
+reports, logs, or generated data.
 
 ## Verification and release checks
 

@@ -15,6 +15,7 @@ Health: `http://127.0.0.1:8282/health`
 | Path | Purpose |
 |------|---------|
 | `/health` | Credential status (no secrets) |
+| `/api/provider-capabilities` | Read-only feed mode and provider compatibility (no secrets, no entitlement probe) |
 | `/api/quote` | Underlying quote (SIP preferred) |
 | `/api/matrix` | Strike × expiration GEX/VEX surface |
 | `/api/heatmap` | Columnar heatmap contract |

@@ -201,6 +201,91 @@ def utcnow():
     return datetime.now(timezone.utc).isoformat()
 
 
+def _provider_env_values() -> dict[str, str]:
+    values: dict[str, str] = {}
+    if ENV.is_file():
+        for line in ENV.read_text(encoding="utf-8").splitlines():
+            if "=" in line and not line.lstrip().startswith("#"):
+                key, value = line.split("=", 1)
+                values[key.strip()] = value.strip().strip('"').strip("'")
+    for key in (
+        "ALPACA_ALGO_KEY", "ALPACA_ALGO_SECRET", "ALPACA_ALGO_PLUS_KEY",
+        "ALPACA_ALGO_PLUS_SECRET", "ALPACA_API_KEY", "ALPACA_API_SECRET",
+        "ALPACA_DATA_FEED", "ALPACA_STOCK_FEED", "TRADIER_ACCESS_TOKEN",
+        "TRADIER_TOKEN", "TRADIER_PRODUCTION_TOKEN", "TRADIER_SANDBOX_TOKEN",
+    ):
+        if os.environ.get(key):
+            values[key] = os.environ[key]
+    return values
+
+
+def provider_capabilities(values: dict[str, str] | None = None) -> dict:
+    """Describe configured read-only data modes without probing or exposing secrets."""
+    config = dict(values) if values is not None else _provider_env_values()
+    options_feed = str(config.get("ALPACA_DATA_FEED") or "opra").strip().lower()
+    stock_feed = str(config.get("ALPACA_STOCK_FEED") or "sip").strip().lower()
+    has_key = any(config.get(name) for name in (
+        "ALPACA_ALGO_PLUS_KEY", "ALPACA_ALGO_KEY", "ALPACA_API_KEY",
+    ))
+    has_secret = any(config.get(name) for name in (
+        "ALPACA_ALGO_PLUS_SECRET", "ALPACA_ALGO_SECRET", "ALPACA_API_SECRET",
+    ))
+    credentials_configured = has_key and has_secret
+    options_state = (
+        None if not credentials_configured
+        else "full" if options_feed == "opra"
+        else "degraded" if options_feed == "indicative"
+        else "unsupported"
+    )
+    stock_state = (
+        None if not credentials_configured
+        else "full" if stock_feed == "sip"
+        else "degraded" if stock_feed == "iex"
+        else "unsupported"
+    )
+    if not credentials_configured:
+        mode = "unconfigured"
+    elif options_feed == "opra" and stock_feed == "sip":
+        mode = "alpaca_opra_sip"
+    elif options_feed == "indicative" and stock_feed == "iex":
+        mode = "alpaca_indicative_iex"
+    else:
+        mode = "alpaca_custom"
+    return {
+        "as_of": utcnow(),
+        "active_provider": "alpaca",
+        "mode": mode,
+        "read_only": True,
+        "live_execution_present": False,
+        "alpaca": {
+            "credentials_configured": credentials_configured,
+            "options_feed": options_feed,
+            "stock_feed": stock_feed,
+            "options_chain": options_state,
+            "stock_quotes_bars": stock_state,
+            "caveat": (
+                "Feed selection is configuration evidence only; this endpoint does not "
+                "probe account entitlements. Indicative options and IEX stock data are "
+                "degraded research inputs, and missing fields remain unknown."
+            ),
+        },
+        "tradier": {
+            "credentials_configured": any(config.get(name) for name in (
+                "TRADIER_ACCESS_TOKEN", "TRADIER_TOKEN", "TRADIER_PRODUCTION_TOKEN",
+                "TRADIER_SANDBOX_TOKEN",
+            )),
+            "status": "capture_supplement_only",
+            "capabilities": ["local_read_only_flow_history"],
+            "not_a_replacement_for": ["quote", "options_chain", "matrix", "bars"],
+        },
+        "webull": {
+            "credentials_configured": False,
+            "status": "unsupported",
+            "capabilities": [],
+        },
+    }
+
+
 def governance_status():
     """Read governance state without mutating or migrating the registry."""
 
@@ -2197,6 +2282,8 @@ class Handler(BaseHTTPRequestHandler):
                     "read_only": True,
                     "as_of": utcnow(),
                 }
+            elif parsed.path == "/api/provider-capabilities":
+                data = provider_capabilities()
             elif parsed.path == "/api/governance":
                 data = governance_status()
             elif parsed.path == "/api/standing":
@@ -2843,6 +2930,7 @@ class Handler(BaseHTTPRequestHandler):
                             "/health",
                             "/api/health",
                             "/api/quote",
+                            "/api/provider-capabilities",
                             "/api/governance",
                             "/api/standing",
                             "/api/holdings",
