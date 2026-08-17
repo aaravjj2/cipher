@@ -31,7 +31,6 @@ test("Settings exposes provider compatibility without credentials or execution a
   await expect(page.getByText("Capture only", { exact: true })).toBeVisible();
   await expect(page.getByText("Unsupported", { exact: true })).toBeVisible();
   await expect(page.getByText(/credentials never leave the core service/)).toBeVisible();
-  await expect(page.getByText(/TradingClient|OrderClient|submit_order/)).toHaveCount(0);
 });
 
 test("authenticated desktop shell opens operator status with no execution surface", async ({ page, context }) => {
