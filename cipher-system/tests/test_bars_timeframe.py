@@ -34,6 +34,13 @@ def asked(monkeypatch):
         return {"bars": [{"t": "2026-08-10T13:30:00Z", "o": 1, "h": 2, "l": 1, "c": 2, "v": 10}]}
 
     monkeypatch.setattr(core_app, "alpaca", fake_alpaca)
+    # Keep this unit test independent of local .env files and CI secrets. The request
+    # itself is stubbed above; credentials are not part of the timeframe contract.
+    monkeypatch.setattr(
+        core_app,
+        "local_settings",
+        lambda: ("test-key", "test-secret", "opra", "sip"),
+    )
     # A shared 20s cache would let one case answer another's question.
     with core_app._CACHE_LOCK:
         core_app.BARS_CACHE.clear()

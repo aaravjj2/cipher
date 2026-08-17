@@ -69,6 +69,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+      - name: Install web test dependencies
+        working-directory: cipher-system/web
+        run: npm ci
       - name: app suite
         working-directory: cipher-system
         # The glob form is mandatory: `node --test app/test` discovers nothing here.

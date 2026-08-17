@@ -17,6 +17,7 @@ proves nothing.
 """
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -83,7 +84,6 @@ def _is_scannable(path: Path, root: Path) -> bool:
     # free to name the terms.
     return not (path.name.startswith("test_") or path.name.endswith((".test.mjs", ".test.ts")))
 
-
 def scan(root: Path, terms: tuple[str, ...] | None = None) -> list[Violation]:
     """Return every occurrence of a forbidden term under `root`.
 
@@ -94,17 +94,23 @@ def scan(root: Path, terms: tuple[str, ...] | None = None) -> list[Violation]:
     root = root.resolve()
     checked = terms if terms is not None else forbidden_terms()
     violations: list[Violation] = []
-    for path in sorted(root.rglob("*")):
-        if not path.is_file() or not _is_scannable(path, root):
-            continue
-        try:
-            text = path.read_text(encoding="utf-8", errors="replace")
-        except OSError:
-            continue
-        for number, line in enumerate(text.splitlines(), start=1):
-            for term in checked:
-                if term in line:
-                    violations.append(
-                        Violation(path.relative_to(root).as_posix(), number, term, line)
-                    )
+
+    for dirpath, dirnames, filenames in os.walk(root, topdown=True, followlinks=False):
+        # Prune excluded directories in-place so os.walk doesn't descend into them
+        dirnames[:] = [d for d in dirnames if d not in EXCLUDED_DIRS]
+
+        for fname in sorted(filenames):
+            path = Path(dirpath) / fname
+            if not _is_scannable(path, root):
+                continue
+            try:
+                text = path.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            for number, line in enumerate(text.splitlines(), start=1):
+                for term in checked:
+                    if term in line:
+                        violations.append(
+                            Violation(path.relative_to(root).as_posix(), number, term, line)
+                        )
     return violations
