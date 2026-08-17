@@ -128,6 +128,7 @@ const routes = {
   "/api/workspace-layouts": "/api/workspace-layouts",
   "/api/ask": "/api/ask",
   "/api/research-status": "/api/research-status",
+  "/api/provider-capabilities": "/api/provider-capabilities",
   // The Beliefs panel. This map is an explicit allowlist, not a prefix rule, so adding the
   // endpoint to core/app.py is not enough — without an entry here the panel renders empty
   // against a 404 from this layer, which is exactly how it first shipped.

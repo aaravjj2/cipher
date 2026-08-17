@@ -21,6 +21,19 @@ async function authenticate(context: BrowserContext) {
   await context.addCookies([{ name: SESSION_COOKIE, value: signSession(secret), url: "http://127.0.0.1:8283", httpOnly: true, sameSite: "Lax" }]);
 }
 
+test("Settings exposes provider compatibility without credentials or execution authority", async ({ page, context }) => {
+  await authenticate(context);
+  await page.goto("/");
+  await page.getByRole("button", { name: "Settings" }).click();
+  await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Provider compatibility" })).toBeVisible();
+  await expect(page.getByText(/ALPACA (OPRA \/ SIP|INDICATIVE \/ IEX|CUSTOM|UNCONFIGURED)/)).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText("Capture only", { exact: true })).toBeVisible();
+  await expect(page.getByText("Unsupported", { exact: true })).toBeVisible();
+  await expect(page.getByText(/credentials never leave the core service/)).toBeVisible();
+  await expect(page.getByText(/TradingClient|OrderClient|submit_order/)).toHaveCount(0);
+});
+
 test("authenticated desktop shell opens operator status with no execution surface", async ({ page, context }) => {
   await authenticate(context);
   await page.goto("/");

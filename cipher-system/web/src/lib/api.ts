@@ -1880,6 +1880,37 @@ export type RealResearchStatus = {
   as_of: string;
 };
 
+export type ProviderCapabilities = {
+  as_of: string;
+  active_provider: "alpaca";
+  mode: "alpaca_opra_sip" | "alpaca_indicative_iex" | "alpaca_custom" | "unconfigured";
+  read_only: true;
+  live_execution_present: false;
+  alpaca: {
+    credentials_configured: boolean;
+    options_feed: string;
+    stock_feed: string;
+    options_chain: "full" | "degraded" | "unsupported" | null;
+    stock_quotes_bars: "full" | "degraded" | "unsupported" | null;
+    caveat: string;
+  };
+  tradier: {
+    credentials_configured: boolean;
+    status: "capture_supplement_only";
+    capabilities: string[];
+    not_a_replacement_for: string[];
+  };
+  webull: {
+    credentials_configured: false;
+    status: "unsupported";
+    capabilities: string[];
+  };
+};
+
+export function fetchProviderCapabilities(signal?: AbortSignal): Promise<ProviderCapabilities> {
+  return getJson<ProviderCapabilities>("/api/provider-capabilities", signal);
+}
+
 /** Operator/research status. Backs the Settings disclosure that Cipher has no execution authority. */
 export function fetchResearchStatus(signal?: AbortSignal): Promise<RealResearchStatus> {
   return getJson<RealResearchStatus>("/api/research-status", signal);

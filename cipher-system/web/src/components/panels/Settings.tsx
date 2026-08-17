@@ -6,10 +6,12 @@ import {
   fetchHealth,
   fetchEvidenceStatus,
   fetchResearchStatus,
+  fetchProviderCapabilities,
   fetchWeightLabStatus,
   type RealHealth,
   type EvidenceStatus,
   type RealResearchStatus,
+  type ProviderCapabilities,
   type RealWeightLabStatus,
 } from "@/lib/api";
 import { readLocal, writeLocal } from "@/lib/localStorage";
@@ -230,6 +232,70 @@ function ConnectionCard() {
  * a missing file, which read like a stale test rather than a removed guarantee.
  * The API (/api/research-status) never went away, so the surface is rebuilt here.
  */
+function ProviderCompatibilityCard() {
+  const [data, setData] = useState<ProviderCapabilities | null>(null);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchProviderCapabilities(controller.signal)
+      .then(setData)
+      .catch(() => setError(true));
+    return () => controller.abort();
+  }, []);
+
+  const modeLabel = data?.mode === "alpaca_opra_sip"
+    ? "ALPACA OPRA / SIP"
+    : data?.mode === "alpaca_indicative_iex"
+      ? "ALPACA INDICATIVE / IEX"
+      : data?.mode === "unconfigured"
+        ? "UNCONFIGURED"
+        : data?.mode?.replaceAll("_", " ").toUpperCase() || "CHECKING…";
+  const modeGood = data?.mode === "alpaca_opra_sip";
+  const modeColor = modeGood ? "var(--success)" : "var(--gold)";
+
+  return (
+    <Card>
+      <CardHeading
+        icon={KeyIcon}
+        title="Provider compatibility"
+        right={
+          <span
+            className="text-[11px] font-bold px-3 py-[6px] rounded-full uppercase shrink-0"
+            style={{
+              background: `color-mix(in srgb, ${modeColor} 18%, transparent)`,
+              color: modeColor,
+              border: `1px solid color-mix(in srgb, ${modeColor} 35%, transparent)`,
+              letterSpacing: "0.08em",
+            }}
+          >
+            {modeLabel}
+          </span>
+        }
+      />
+      <p className="text-[13px] leading-relaxed" style={{ color: "var(--text-dim)" }}>
+        Read-only configuration status from the local core. It does not probe entitlements;
+        credentials never leave the core service.
+      </p>
+
+      {error && <p className="text-[12px]" style={{ color: "var(--text-mute)" }}>Provider compatibility unavailable — the core service may not be running.</p>}
+
+      {data && (
+        <div className="flex flex-col gap-1.5">
+          <StatRow label="Alpaca options" value={`${data.alpaca.options_feed.toUpperCase()} · ${data.alpaca.options_chain ?? "unknown"}`} />
+          <StatRow label="Alpaca stocks" value={`${data.alpaca.stock_feed.toUpperCase()} · ${data.alpaca.stock_quotes_bars ?? "unknown"}`} />
+          <StatRow label="Tradier" value="Capture only" />
+          <StatRow label="Webull" value="Unsupported" />
+        </div>
+      )}
+      <p className="text-[11px]" style={{ color: "var(--text-mute)" }}>
+        Indicative options and IEX stock data are degraded research inputs; missing fields remain unknown.
+        GEX remains a public-OI heuristic, not verified dealer positioning.
+      </p>
+    </Card>
+  );
+}
+
 function ResearchStatusCard() {
   const [status, setStatus] = useState<RealResearchStatus | null>(null);
   const [error, setError] = useState(false);
@@ -424,6 +490,7 @@ export function Settings() {
       <YourPlanCard />
       <PreferencesCard />
       <ConnectionCard />
+      <ProviderCompatibilityCard />
       <ResearchStatusCard />
       <EvidenceStatusCard />
       <WeightLabCard />

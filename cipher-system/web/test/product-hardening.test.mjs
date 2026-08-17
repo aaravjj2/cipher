@@ -12,6 +12,7 @@ const workbench = readFileSync(new URL("../src/components/panels/TickerWorkbench
 const morning = readFileSync(new URL("../src/components/panels/MorningBrief.tsx", import.meta.url), "utf8");
 const home = readFileSync(new URL("../src/app/page.tsx", import.meta.url), "utf8");
 const nightVision = readFileSync(new URL("../src/components/panels/NightVision.tsx", import.meta.url), "utf8");
+const settings = readFileSync(new URL("../src/components/panels/Settings.tsx", import.meta.url), "utf8");
 
 test("all typed GET helpers pass through the shared request coordinator", () => {
   assert.match(api, /return coordinatedGet\(path/);
@@ -95,6 +96,18 @@ test("scanner leads with jobs and compares quality-gated evidence compactly", ()
   assert.match(scanner, /cipher:night-vision-replay/);
   assert.match(api, /export type EvidenceSnapshot/);
   assert.match(api, /api\/night-vision-replay/);
+});
+
+test("settings exposes provider compatibility without credentials or execution authority", () => {
+  assert.match(api, /export type ProviderCapabilities/);
+  assert.match(api, /fetchProviderCapabilities/);
+  assert.match(api, /api\/provider-capabilities/);
+  assert.match(settings, /Provider compatibility/);
+  assert.match(settings, /ALPACA OPRA \/ SIP/);
+  assert.match(settings, /label="Tradier"[\s\S]*Capture only/);
+  assert.match(settings, /label="Webull"[\s\S]*Unsupported/);
+  assert.match(settings, /credentials never leave the core service/);
+  assert.doesNotMatch(settings, /submit_order|place_order|TradingClient|OrderClient/);
 });
 
 test("paper portfolios distinguish blocked opportunity paths from option P&L", () => {
