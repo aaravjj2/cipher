@@ -71,6 +71,42 @@ for standard-account degraded mode, Tradier capture-only scope, and Webull's
 unsupported status. Do not place credentials in source files, screenshots,
 reports, logs, or generated data.
 
+## Hosted multi-user deployment (manual setup)
+
+The hosted mode keeps the Python core on the existing GCP VM while Vercel serves
+this Next.js export and Supabase provides Auth plus RLS-protected user state.
+Create the Vercel and Supabase projects manually; do not send their account
+secrets to the repository or agent.
+
+Set these **public Vercel** variables:
+
+```env
+NEXT_PUBLIC_SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+NEXT_PUBLIC_CIPHER_API_ORIGIN=https://api.example.com
+```
+
+The API origin must be a stable HTTPS hostname for the Node proxy; never point it
+at core port 8282. Supabase login is exchanged for an opaque secure HttpOnly
+`cipher_session` cookie; login tokens are not persisted in browser storage, and
+passwords are never handled by the Cipher backend. On the VM, configure `CIPHER_HOSTED=1`,
+`CIPHER_INTERNAL_PROXY_TOKEN`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and
+`CIPHER_HOSTED_ORIGINS` with the exact Vercel production/preview origins. Apply
+the SQL migrations in [`supabase/`](supabase/), then verify two disposable
+users cannot read or mutate one another's rows.
+
+Hosted users enter their own Alpaca key and secret in Settings for a
+**session-only** connection. The backend keeps those values only in bounded
+process memory and clears them on disconnect, logout, expiry, or restart; they
+are never stored in Supabase, Vercel, browser storage, logs, or URLs. Cipher
+uses them only for read-only market data and has no broker-order capability.
+
+The current Tailscale deployment remains a private pilot/rollback surface. A
+Vercel deployment is not production-ready until its API origin is reachable over
+HTTPS and the hosted Auth/RLS/security gates pass. See
+[`docs/provider-compatibility.md`](docs/provider-compatibility.md) and
+[`supabase/README.md`](supabase/README.md).
+
 ## Verification and release checks
 
 ```bash
@@ -111,7 +147,7 @@ automatic paper-trading promotion is enabled.
 - **Frozen replay integrity** — Scanner → Night Vision artifacts verify the
   snapshot identity and, for new captures, the complete normalized-matrix SHA-256
   checksum; legacy artifacts are labelled when the full checksum is absent
-- **Trident / Scanner / Watchlists / Journal / Saves** — research utilities (local-only)
+- **Trident / Scanner / Watchlists / Journal / Saves** — research utilities; hosted user-owned records use Supabase RLS, while local mode keeps the existing local stores
 - **Paper Autopilot** — premarket plan, RTH confirmation, simulated fills/exits,
   hard risk locks, decision traces, and leakage-safe learning manifests
 - **Paper Portfolios** — six isolated studies, prospective cohorts, marked and
@@ -132,15 +168,22 @@ post-hackathon roadmap are in [`docs/cipher_product_and_hackathon_roadmap_2026-0
 The current local build has a captured trader workflow showing the dashboard,
 Night Vision, the evidence timeline, paper portfolios, and Setup Scanner:
 
-- [Dashboard](release-artifacts/01-home.png)
-- [Night Vision](release-artifacts/02-night-vision.png)
-- [Evidence timeline](release-artifacts/03-evidence-timeline.png)
-- [Paper portfolios](release-artifacts/04-paper-portfolios.png)
-- [Setup Scanner](release-artifacts/05-setup-scanner.png)
+- [Morning Brief](release-artifacts/01-morning-brief.png)
+- [Research Desk](release-artifacts/02-research-desk.png)
+- [Setup Scanner](release-artifacts/03-setup-scanner.png)
+- [Night Vision evidence](release-artifacts/04-night-vision-evidence.png)
+- [Options Terminal](release-artifacts/05-options-terminal.png)
+- [Paper Portfolios](release-artifacts/06-paper-portfolios.png)
+- [Settings and security](release-artifacts/07-settings-security.png)
 - [Walkthrough video](release-artifacts/cipher-release-walkthrough.webm)
 
 These artifacts are generated from the local authenticated browser session and
 must be regenerated after a material UI release. They contain no provider keys.
+
+For a complete feature-by-feature visual reference, see the separate
+[detailed signed-in visual index](release-artifacts/detailed/README.md). It includes
+one capture for every sidebar panel plus expanded Scanner, Night Vision evidence,
+Options Terminal, Spyglass, and Paper Portfolio states.
 
 ## QuantumHacks
 
