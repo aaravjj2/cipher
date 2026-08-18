@@ -6,15 +6,28 @@ import argparse
 import json
 import os
 from pathlib import Path
-import subprocess
 import sys
+import urllib.request
+import urllib.error
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from core import portfolio_daily_report as report  # noqa: E402
 
-NOTIFIER = Path("/home/aarav/Aarav/agent-stack/discord-notify.sh")
+
+def send_webhook(message: str, webhook_url: str) -> None:
+    """Post a plain-text message to a Discord webhook via the standard library."""
+    payload = json.dumps({"content": message}).encode("utf-8")
+    req = urllib.request.Request(
+        webhook_url,
+        data=payload,
+        headers={"Content-Type": "application/json", "User-Agent": "Cipher-Portfolio-Digest/1.0"},
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=15) as response:
+        if response.getcode() not in (200, 204):
+            raise RuntimeError(f"Discord webhook returned HTTP {response.getcode()}")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -27,13 +40,12 @@ def main(argv: list[str] | None = None) -> int:
     if args.preview:
         print(json.dumps(report.preview(args.db, prospective_db_path=args.prospective_db), indent=2))
         return 0
-    if not os.environ.get("DISCORD_PROGRESS_WEBHOOK"):
+    webhook_url = os.environ.get("DISCORD_PROGRESS_WEBHOOK") or os.environ.get("DISCORD_WEBHOOK_URL")
+    if not webhook_url:
         raise SystemExit("DISCORD_PROGRESS_WEBHOOK is not configured")
-    if not NOTIFIER.is_file():
-        raise SystemExit(f"existing Discord notifier is missing: {NOTIFIER}")
 
     def sender(message: str) -> None:
-        subprocess.run(["/usr/bin/bash", str(NOTIFIER), message], check=True, timeout=30)
+        send_webhook(message, webhook_url)
 
     result = report.deliver(
         sender, db_path=args.db, prospective_db_path=args.prospective_db, force=args.force
