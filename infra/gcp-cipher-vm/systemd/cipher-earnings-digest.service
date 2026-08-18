@@ -11,10 +11,12 @@ WorkingDirectory=/home/aarav/Aarav/cipher/cipher-github
 # DISCORD_PROGRESS_WEBHOOK lives in the server env file. The research venv is
 # used because earnings_model requires joblib, which the main cipher venv lacks.
 EnvironmentFile=-/etc/cipher/cipher.env
-# Radar refreshes the upcoming-earnings universe; the digest posts the weekly
-# preview and active paper book to Discord. A radar failure must not block the
-# digest, so the steps are chained with ';' not '&&'.
-ExecStart=/bin/bash -c '/home/aarav/Aarav/cipher/cipher-github/.venv-research-py312/bin/python -m earnings_model radar; /home/aarav/Aarav/cipher/cipher-github/.venv-research-py312/bin/python -m earnings_model notify-discord --type all'
+# Radar refreshes the upcoming-earnings universe, paper-enter books new
+# defined-risk paper positions (idempotent per symbol+report-date, never
+# deletes open positions), and the digest posts the weekly preview and active
+# paper book to Discord. A failure in one step must not block the rest, so the
+# steps are chained with ';' not '&&'.
+ExecStart=/bin/bash -c '/home/aarav/Aarav/cipher/cipher-github/.venv-research-py312/bin/python -m earnings_model radar; /home/aarav/Aarav/cipher/cipher-github/.venv-research-py312/bin/python -m earnings_model paper-enter; /home/aarav/Aarav/cipher/cipher-github/.venv-research-py312/bin/python -m earnings_model notify-discord --type all'
 NoNewPrivileges=true
 PrivateTmp=true
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6

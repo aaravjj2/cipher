@@ -275,6 +275,7 @@ export type PaperPortfolioSummary = {
   closed_trades: number;
   wins: number;
   open_positions: number;
+  enabled: boolean;
   config: Record<string, unknown>;
   positions: Array<Record<string, unknown>>;
   signals: Array<Record<string, unknown>>;

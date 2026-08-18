@@ -12,6 +12,7 @@ import json
 import os
 import sys
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
@@ -29,6 +30,35 @@ DEFAULT_TICKERS = (
     "GOOGL,AVGO,COIN,PLTR,BABA,NFLX"
 )
 SIGNAL_KINDS = {"quad", "triple", "battle"}
+
+# Hosted-mode responses that mean the alert pass is currently dormant rather
+# than broken: the core demands an internal token we should present, and/or a
+# user-entered Alpaca provider session that a scheduler service cannot own.
+# In that state the pass records a suspension and exits 0 instead of spamming
+# failure alerts every cycle.
+SUSPENDED_MARKERS = (
+    "internal authentication required",
+    "internal authentication failed",
+    "user context required",
+    "alpaca provider session is required",
+)
+
+
+def _core_request_headers() -> dict[str, str]:
+    """Headers for the local core: internal token plus an operator/guest context.
+
+    The core requires X-Cipher-Internal-Token when CIPHER_INTERNAL_PROXY_TOKEN
+    is configured (hosted mode). The guest context is not a user session; it
+    just lets the request reach the provider-session check so the pass can
+    report an honest suspended state instead of a bare 401.
+    """
+    headers = {"Accept": "application/json"}
+    token = os.environ.get("CIPHER_INTERNAL_PROXY_TOKEN")
+    if token:
+        headers["X-Cipher-Internal-Token"] = token
+        headers["X-Cipher-Guest"] = "1"
+        headers["X-Cipher-User-Id"] = "guest"
+    return headers
 
 
 def utcnow() -> str:
@@ -66,7 +96,7 @@ def fetch_scan(core_url: str, *, tickers: str, limit: int, timeout: int) -> dict
         "fresh": "1",
     }
     url = f"{core_url.rstrip('/')}/api/scan?{urllib.parse.urlencode(params)}"
-    req = urllib.request.Request(url, headers={"Accept": "application/json"})
+    req = urllib.request.Request(url, headers=_core_request_headers())
     with urllib.request.urlopen(req, timeout=timeout) as resp:
         return json.loads(resp.read().decode("utf-8"))
 
@@ -211,6 +241,35 @@ def main() -> int:
                     }
                 )
             )
+    except urllib.error.HTTPError as exc:
+        body = ""
+        try:
+            body = exc.read().decode("utf-8", "replace")
+        except Exception:
+            pass
+        if exc.code in (401, 422) and any(marker in body.lower() for marker in SUSPENDED_MARKERS):
+            run.update({"ok": True, "completed_at": utcnow(), "status": "suspended_provider_session",
+                        "http_code": exc.code, "detail": body[:200]})
+            if not args.dry_run:
+                state.setdefault("runs", []).append(run)
+                save_state(args.state, state)
+            print(json.dumps({"ok": True, "status": "suspended_provider_session",
+                              "reason": "hosted core has no provider session; alerting suspended"},
+                             sort_keys=True))
+            return 0
+        run.update({"ok": False, "completed_at": utcnow(), "error": f"HTTP {exc.code}: {body[:200]}"})
+        message = f"Cipher cluster scan alert error at {run['completed_at']}: HTTP {exc.code}: {body[:200]}"
+        if args.dry_run:
+            print(message, file=sys.stderr)
+        else:
+            try:
+                send_hermes_message(message, target=args.target)
+            except Exception:
+                pass
+        if not args.dry_run:
+            state.setdefault("runs", []).append(run)
+            save_state(args.state, state)
+        return 1
     except Exception as exc:
         run.update({"ok": False, "completed_at": utcnow(), "error": str(exc)})
         message = f"Cipher cluster scan alert error at {run['completed_at']}: {exc}"

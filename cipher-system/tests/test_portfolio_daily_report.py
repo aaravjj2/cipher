@@ -14,10 +14,11 @@ def test_preview_contains_only_active_isolated_portfolios(tmp_path: Path):
     result = daily.preview(tmp_path / "fronttest.sqlite",
                            datetime(2026, 8, 14, 16, 10, tzinfo=NY),
                            prospective_db_path=tmp_path / "prospective.sqlite")
-    # The two QQQ systems are deliberately disabled as of 2026-08-18, so the
-    # digest covers the four active portfolios (400k combined starting cash).
+    # The two QQQ systems are deliberately disabled as of 2026-08-18 and
+    # v6_nvda_c05 was registered 2026-08-18, so the digest covers the five
+    # active portfolios (500k combined starting cash).
     active = [spec.portfolio_id for spec in fronttest_portfolios.ACTIVE_SPECS]
-    assert result["snapshot"]["combined_equity"] == 400_000
+    assert result["snapshot"]["combined_equity"] == 500_000
     assert result["snapshot"]["daily_pnl"] == 0
     assert [row["portfolio_id"] for row in result["snapshot"]["portfolios"]] == active
     assert "Paper simulation only" in result["message"]

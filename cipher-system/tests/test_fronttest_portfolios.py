@@ -51,12 +51,12 @@ class SpreadMarket(FakeMarket):
         return {symbol: values[symbol] for symbol in symbols if symbol in values}
 
 
-def test_six_portfolios_are_isolated_and_initialized(tmp_path: Path):
+def test_seven_portfolios_are_isolated_and_initialized(tmp_path: Path):
     db = ft.connect(tmp_path / "fronttest.sqlite")
     try:
         rows = ft.portfolio_status(db)
-        assert len(rows) == 6
-        assert len({row["portfolio_id"] for row in rows}) == 6
+        assert len(rows) == 7
+        assert len({row["portfolio_id"] for row in rows}) == 7
         assert all(row["realized_equity"] == 100_000 for row in rows)
     finally:
         db.close()
@@ -182,7 +182,7 @@ def test_expensive_long_option_falls_back_to_defined_risk_vertical(monkeypatch, 
 
 
 def test_alpaca_expiry_field_is_accepted_by_contract_selector():
-    spec = ft.SPECS[3]
+    spec = next(s for s in ft.SPECS if s.portfolio_id == "qqq_validated")
     row = {
         "symbol": "QQQ260807C00100000", "type": "call", "expiry": "2026-08-07",
         "strike": 100, "bid": 1.9, "ask": 2.0, "open_interest": 500, "volume": 100,

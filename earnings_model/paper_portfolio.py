@@ -59,6 +59,34 @@ def init_paper_db(db_path: Optional[str] = None) -> sqlite3.Connection:
     return conn
 
 
+def _next_friday(report_date: str) -> str:
+    """Nearest Friday on or after the report date (options settle into that week's expiry)."""
+    day = date.fromisoformat(report_date)
+    days_ahead = (4 - day.weekday()) % 7
+    if days_ahead == 0:
+        # Reporting on a Friday rolls to the following week's expiry.
+        days_ahead = 7
+    return (day + timedelta(days=days_ahead)).isoformat()
+
+
+def upcoming_week_schedule(days_ahead: int = 7, conn=None) -> List[tuple]:
+    """Earnings schedule for the window from the live scanner — never hardcoded.
+
+    Returns [(symbol, scheduled_date), ...] sorted by report date.
+    """
+    from .scanner import find_upcoming_earnings
+
+    seen = set()
+    out = []
+    for card in find_upcoming_earnings(days_ahead=days_ahead, conn=conn):
+        key = (str(card.get("symbol") or "").upper(), card.get("scheduled_date"))
+        if key[0] and key[1] and key not in seen:
+            seen.add(key)
+            out.append(key)
+    out.sort(key=lambda item: item[1])
+    return out
+
+
 def round_strike(val: float, base: float = 2.5) -> float:
     """Round a price to the nearest strike increment."""
     if val >= 200:
@@ -88,10 +116,9 @@ def generate_optimal_paper_setup(symbol: str, spot: float, report_date: str, tar
         rev_risk = float(m['gap_reversal_risk_pct'])
         beat_prob = float(f['beat_probability_pct'])
 
-    # Expiry: Nearest Friday
-    entry_dt = date(2026, 8, 17)
-    # Target expiry this Friday 2026-08-21
-    expiry_str = '2026-08-21'
+    # Expiry: nearest Friday on or after the report date.
+    entry_dt = date.today()
+    expiry_str = _next_friday(report_date)
 
     # Strike width scaling
     if spot >= 500:
@@ -244,34 +271,33 @@ def execute_paper_order(conn: sqlite3.Connection, setup: Dict[str, Any]) -> int:
     return c.lastrowid
 
 
-def enter_this_week_paper_book(target_risk_per_trade: float = 2000.0) -> List[Dict[str, Any]]:
-    """Enter paper trades for all 12 companies reporting this week."""
-    conn = init_paper_db()
+def enter_this_week_paper_book(
+    target_risk_per_trade: float = 2000.0,
+    days_ahead: int = 7,
+    schedule: Optional[List[tuple]] = None,
+    db_path: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    """Enter paper trades for companies reporting within the window (default next 7 days).
 
-    # Schedule of this week's reports
-    week_schedule = [
-        ('HD', '2026-08-18'),
-        ('BIDU', '2026-08-18'),
-        ('TGT', '2026-08-19'),
-        ('LOW', '2026-08-19'),
-        ('TJX', '2026-08-19'),
-        ('ADI', '2026-08-19'),
-        ('EL', '2026-08-19'),
-        ('NDSN', '2026-08-19'),
-        ('WMT', '2026-08-20'),
-        ('BABA', '2026-08-20'),
-        ('ROST', '2026-08-20'),
-        ('DE', '2026-08-20')
-    ]
-
-    # Clear existing open test orders to avoid duplicate stacking
-    c = conn.cursor()
-    c.execute("DELETE FROM paper_positions WHERE status = 'OPEN'")
-    conn.commit()
+    Idempotent by design: a symbol already entered for the same report date is
+    skipped, so repeated scheduled runs never stack duplicate positions and open
+    positions are never deleted by a re-run.
+    """
+    conn = init_paper_db(db_path)
+    if schedule is None:
+        schedule = upcoming_week_schedule(days_ahead=days_ahead)
+    existing = {
+        (str(row[0]), str(row[1]))
+        for row in conn.execute("select symbol, report_date from paper_positions")
+    }
 
     placed_orders = []
 
-    for sym, rep_date in week_schedule:
+    for sym, rep_date in schedule:
+        key = (str(sym).upper(), str(rep_date))
+        if key in existing:
+            print(f"Skipping {sym} {rep_date}: already entered")
+            continue
         try:
             t = yf.Ticker(sym)
             h = t.history(period='5d')

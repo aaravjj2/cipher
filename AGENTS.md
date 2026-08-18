@@ -137,7 +137,7 @@ Run the lightweight checks after active-app edits:
 python3 -m compileall -q cipher-system/core tests
 node --check cipher-system/app/server.mjs
 node --check cipher-system/app/launcher.mjs
-node --check cipher-system/app/public/app.js
+for f in cipher-system/app/*.mjs; do node --check "$f"; done
 pytest -q
 ```
 

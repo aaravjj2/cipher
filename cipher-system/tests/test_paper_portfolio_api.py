@@ -11,16 +11,18 @@ if str(ROOT) not in sys.path:
 from core import fronttest_portfolios, paper_portfolio_api  # noqa: E402
 
 
-def test_snapshot_exposes_six_read_only_shadow_portfolios(tmp_path: Path) -> None:
+def test_snapshot_exposes_seven_read_only_shadow_portfolios(tmp_path: Path) -> None:
     db_path = tmp_path / "fronttest.sqlite"
     db = fronttest_portfolios.connect(db_path)
     db.close()
+    # Seven specs registered: v6_nvda_p05, v6_nvda_c05, v6_nvda_c1,
+    # v6_nvda_p1, qqq_early, qqq_validated, mu_pm_liquidity.
     result = paper_portfolio_api.snapshot(db_path)
-    assert result["portfolio_count"] == 6
+    assert result["portfolio_count"] == 7
     assert result["paper_only"] is True
     assert result["read_only"] is True
     assert result["execution_capability"] is False
-    assert result["combined_starting_cash"] == 600_000
+    assert result["combined_starting_cash"] == 700_000
     assert result["opportunity_summary"]["signals"] == 0
     assert result["opportunity_summary"]["scope"] == "underlying_path_counterfactual"
     assert all(row["positions"] == [] and row["signals"] == [] for row in result["portfolios"])
@@ -90,5 +92,5 @@ def test_snapshot_separates_realized_midpoint_and_liquidation_equity(tmp_path: P
     assert row["marked_equity"] == 100_086
     assert row["liquidation_equity"] < row["marked_equity"]
     assert row["positions"][0]["mark_status"] == "current"
-    assert result["combined_marked_equity"] == 600_086
+    assert result["combined_marked_equity"] == 700_086
     assert result["normalized_comparison"]["ranked"] is False

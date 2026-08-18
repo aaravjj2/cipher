@@ -53,6 +53,9 @@ class PortfolioSpec:
 
 SPECS = (
     PortfolioSpec("v6_nvda_p05", "V6 PUT 0.5->1", "NVDA", ("P05",), 5, 100_000, .10, 10, 14, 21, .98),
+    # C05 was being emitted by the V6 study but no portfolio subscribed to it;
+    # registered 2026-08-18 so the call 0.5->1 setup gets a paper account too.
+    PortfolioSpec("v6_nvda_c05", "V6 CALL 0.5->1", "NVDA", ("C05",), 5, 100_000, .10, 10, 14, 21, 1.00),
     PortfolioSpec("v6_nvda_c1", "V6 CALL 1->2", "NVDA", ("C1",), 5, 100_000, .075, 10, 14, 21, 1.00),
     PortfolioSpec("v6_nvda_p1", "V6 PUT 1->2", "NVDA", ("P1",), 5, 100_000, .05, 10, 14, 21, .98),
     # QQQ systems are turned off as of 2026-08-18; flip enabled=True to restart them.

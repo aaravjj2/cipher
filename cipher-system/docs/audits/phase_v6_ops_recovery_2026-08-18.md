@@ -92,6 +92,50 @@ never recorded a signal. Investigation shows the capture path is correct:
 
 No backfill was performed — the fronttest is strictly prospective.
 
+## 5. Improvement-sprint execution (2026-08-18 evening)
+
+**P0-4 — `paper-enter` made dynamic and idempotent, now scheduled.**
+- `earnings_model/paper_portfolio.py`: schedule comes from the live radar
+  (`upcoming_week_schedule` -> `scanner.find_upcoming_earnings`), entry date
+  is `date.today()` (no more hardcoded `2026-08-17` / `2026-08-21`), and
+  `enter_this_week_paper_book` is idempotent per (symbol, report-date) —
+  re-runs skip existing entries and never delete open positions.
+- `cipher-earnings-digest.service` now chains `radar; paper-enter;
+  notify-discord` so the daily 08:15 ET run books new paper positions.
+- Regression tests: `tests/test_earnings_paper_portfolio.py` (4 tests,
+  joblib-guarded) cover Friday roll, schedule dedupe/sort, idempotency,
+  and live-date + Iron Condor fallback.
+
+**P2-1 — `v6_nvda_c05` registered.** The V6 study emits C05 that no
+portfolio subscribed to; added `PortfolioSpec("v6_nvda_c05", ...)` to
+`fronttest_portfolios.py`. Verified live in the pass output (registered,
+`enabled: true`).
+
+**P1-1 — Paper Portfolios UI disabled badge.** API already exposed
+`enabled`; the frontend now renders a `DISABLED` badge and a
+"turned off, not receiving signals" note, and the loading copy no longer
+says "six". Published via `sync_web_build.sh`.
+
+**P0-3 — cluster-alert exit code.** `hermes_scan_alerts.py` now
+authenticates to the hosted core with `CIPHER_INTERNAL_PROXY_TOKEN` and
+treats the provider-session suspension (422) as an honest exit-0 state
+instead of an error alert; verified exit 0 via systemd.
+
+**P0-1 — autopilot first-fill readiness.** Executor healthy with the fixed
+config: `mode: shadow`, 4 workers running, 0 restarts, no exceptions,
+`reconciliation_passed: true`. Scheduler pass fires 08:45 ET; the next
+qualifying card in the 09:35–11:30 ET window is the live first-fill gate.
+
+**P0-2 / P0-5 — user dashboard actions (documented, not automatable from
+this VM).** Cloudflare tunnel VM wiring is complete and verified
+(`sync-secrets.py` -> `/etc/cipher/cloudflare-tunnel.token` via systemd
+`LoadCredential`); only the GCP secret `cipher-cloudflare-tunnel-token`
+(from the Zero Trust dashboard) is missing. Supabase Site URL needs a
+one-click dashboard edit (project `ipcsgrijatnnsbpguojl` -> Site URL
+`https://web-finance-dashboard.vercel.app`); no management/service-role
+token exists server-side. Both updated in
+`docs/next-improvements-2026-08-18.md` with exact steps.
+
 ## Verification
 
 - `pytest`: 1016 passed, 2 skipped (includes QQQ-disable + P1-capture tests)

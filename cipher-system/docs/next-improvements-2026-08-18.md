@@ -51,6 +51,17 @@ service is **inactive** — no tunnel token has been provisioned.
 5. Keep the Tailscale `:8443` route until Access-protected verification passes,
    per CLOUDFLARE.md; the password gate stays as defense in depth.
 
+**Status 2026-08-18.** VM side is fully wired and verified: `sync-secrets.py`
+materializes `/etc/cipher/cloudflare-tunnel.token` (mode 0600) from GCP secret
+`cipher-cloudflare-tunnel-token`, and `cipher-cloudflared.service` reads it via
+systemd `LoadCredential` — the token never touches a process command line,
+shared env file, or journal. The service is inactive solely because the GCP
+secret does not exist yet. This is a user dashboard action: create the
+Zero Trust tunnel + Access policy and store the token as
+`cipher-cloudflare-tunnel-token` (the VM's own service account lacks
+Secret Manager read, so a human/owner account must create it). After that,
+`sudo systemctl enable --now cipher-cloudflared.service` and run the verifier.
+
 **Gate.** Anonymous guest `GET /api/quote` returns `401`/guest-yahoo data
 through the public hostname, CORS preflight passes from the Vercel origin, and
 no credential is exposed in the tunnel config.
@@ -94,6 +105,13 @@ week's run picks up the new calendar without code edits.
 **How.** Set it in Supabase → Authentication → URL Configuration (or via the
 management API with the service-role key, server-side only). Verify a
 sign-in/confirm round-trip in a fresh browser.
+
+**Status 2026-08-18.** Cannot be automated from this VM: no Supabase
+management token or service-role key is present (only `SUPABASE_URL` +
+`SUPABASE_ANON_KEY`). Project ref is `ipcsgrijatnnsbpguojl` (from
+`SUPABASE_URL`). Remains a one-click dashboard action: Supabase →
+Authentication → URL Configuration → Site URL =
+`https://web-finance-dashboard.vercel.app`, then Save.
 
 **Gate.** Email confirmation and password reset resolve back to the Vercel app.
 
