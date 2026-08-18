@@ -1,0 +1,3 @@
+"""
+Earnings Model for Cipher
+"""
