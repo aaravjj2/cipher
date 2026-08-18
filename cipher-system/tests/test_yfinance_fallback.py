@@ -176,6 +176,37 @@ def test_options_view_labels_yfinance_as_limited_without_opra(monkeypatch):
     assert "GREEKS" in view["caveat"].upper()
 
 
+def test_provider_capabilities_reports_anonymous_mode_without_credentials():
+    result = app.provider_capabilities(values={})
+
+    assert result["active_provider"] == "alpaca"
+    assert result["mode"] == "unconfigured"
+    assert result["read_only"] is True
+    assert result["live_execution_present"] is False
+    assert result["alpaca"]["credentials_configured"] is False
+    assert result["alpaca"]["options_chain"] is None
+    assert result["alpaca"]["stock_quotes_bars"] is None
+    assert result["webull"]["status"] == "unsupported"
+    assert result["tradier"]["status"] == "capture_supplement_only"
+    # yfinance is the anonymous fallback; it must be reported, not hidden.
+    assert "yfinance" in result
+
+
+def test_provider_capabilities_labels_degraded_feeds():
+    result = app.provider_capabilities(
+        values={
+            "ALPACA_API_KEY": "key", "ALPACA_API_SECRET": "secret",
+            "ALPACA_DATA_FEED": "indicative", "ALPACA_STOCK_FEED": "iex",
+        }
+    )
+
+    assert result["mode"] == "alpaca_indicative_iex"
+    assert result["alpaca"]["options_chain"] == "degraded"
+    assert result["alpaca"]["stock_quotes_bars"] == "degraded"
+    assert result["alpaca"]["credentials_configured"] is True
+    assert "caveat" in result["alpaca"]
+
+
 def test_flow_reports_opra_unavailable_instead_of_using_yfinance_as_a_tape(monkeypatch):
     monkeypatch.setattr(app, "local_settings", lambda: (_ for _ in ()).throw(ValueError("no Alpaca session")))
     monkeypatch.setattr(app.tradier_flow, "flow", lambda *_args, **_kwargs: None)

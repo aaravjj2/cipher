@@ -25,22 +25,52 @@ def digest(path: Path) -> str:
     return hasher.hexdigest()
 
 
+def _wal_trio_copy(source: Path, destination: Path) -> None:
+    """Fallback hot copy for WAL-mode DBs whose read-only open is blocked.
+
+    When a writer is mid-commit, `mode=ro` can fail with CANTOPEN because the
+    reader cannot create/recover the -shm file. Copying the main file, then the
+    -wal, then the -shm (in that order) is the documented safe hot-copy order:
+    SQLite replays the copied WAL into the copied main file on open, so the
+    destination is consistent as of the copy moment. Integrity is verified by
+    the caller on the restored copy.
+    """
+    for suffix in ("", "-wal", "-shm"):
+        src = Path(f"{source}{suffix}")
+        if src.is_file():
+            shutil.copy2(src, Path(f"{destination}{suffix}"))
+    with sqlite3.connect(destination, timeout=5) as check:
+        if check.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
+            raise sqlite3.DatabaseError("WAL trio copy failed integrity check")
+
+
 def sqlite_backup(source: Path, destination: Path, *, attempts: int = 3) -> None:
-    """Online backup with bounded retries for a writer opening/rotating a WAL."""
+    """Online backup with bounded retries, then a WAL trio copy fallback.
+
+    The read-only URI open is preferred (it never blocks the writer), but it
+    can fail with "unable to open database file" on a WAL DB when the writer
+    is mid-commit and the reader cannot create the -shm file. Retry with
+    backoff; if every attempt fails, fall back to the ordered WAL hot copy.
+    """
     last_error: sqlite3.Error | None = None
     for attempt in range(attempts):
         destination.unlink(missing_ok=True)
         try:
             with sqlite3.connect(
-                f"file:{source.as_posix()}?mode=ro", uri=True, timeout=5
-            ) as src, sqlite3.connect(destination, timeout=5) as dst:
+                f"file:{source.as_posix()}?mode=ro", uri=True, timeout=10
+            ) as src, sqlite3.connect(destination, timeout=10) as dst:
                 src.backup(dst)
             return
         except sqlite3.Error as exc:
             last_error = exc
             if attempt + 1 < attempts:
-                time.sleep(0.25 * (attempt + 1))
-    raise last_error or sqlite3.OperationalError("backup did not run")
+                time.sleep(1.0 * (attempt + 1))
+    # Writer is still holding the WAL; use the ordered trio hot copy instead.
+    try:
+        _wal_trio_copy(source, destination)
+        return
+    except (sqlite3.Error, OSError) as exc:
+        raise last_error or exc from exc
 
 
 def backup(target_root: Path = operator_status.BACKUPS) -> dict:

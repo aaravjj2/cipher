@@ -41,6 +41,7 @@ export const NAV_SECTIONS: NavSection[] = [
     label: "TODAY",
     items: [
       { label: "Morning Brief", icon: GridIcon },
+      { label: "Earnings Radar", icon: StarIcon },
       { label: "Research Desk", icon: SearchIcon },
     ],
   },

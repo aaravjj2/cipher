@@ -227,6 +227,7 @@ def snapshot(db_path: Path = DEFAULT_DB, *, recent_limit: int = 30) -> dict[str,
                 "equity_curve": curve,
                 "opportunity_summary": opportunity_summary,
                 "bounded_recent_realized_pnl": realized,
+                "description": spec.description,
             })
             sample = int(normalized["n"] or 0)
             comparison_rows.append({

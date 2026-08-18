@@ -49,19 +49,44 @@ class PortfolioSpec:
     # daily digest; they remain in the registry/status so the UI can show the
     # turned-off state instead of pretending they never existed.
     enabled: bool = True
+    # Human-readable explainer shown in the UI so a quiet portfolio is
+    # understood rather than assumed broken. Keep it factual: what it trades,
+    # why it may be quiet, and what would make it act.
+    description: str = ""
 
 
 SPECS = (
-    PortfolioSpec("v6_nvda_p05", "V6 PUT 0.5->1", "NVDA", ("P05",), 5, 100_000, .10, 10, 14, 21, .98),
+    PortfolioSpec(
+        "v6_nvda_p05", "V6 PUT 0.5->1", "NVDA", ("P05",), 5, 100_000, .10, 10, 14, 21, .98,
+        description="Trades NVDA 5-minute PUT setups whose 0.5% structure confirms. This is the most active V6 variant; a fresh P05 setup inside the 09:35-11:30 ET window triggers a paper entry.",
+    ),
     # C05 was being emitted by the V6 study but no portfolio subscribed to it;
     # registered 2026-08-18 so the call 0.5->1 setup gets a paper account too.
-    PortfolioSpec("v6_nvda_c05", "V6 CALL 0.5->1", "NVDA", ("C05",), 5, 100_000, .10, 10, 14, 21, 1.00),
-    PortfolioSpec("v6_nvda_c1", "V6 CALL 1->2", "NVDA", ("C1",), 5, 100_000, .075, 10, 14, 21, 1.00),
-    PortfolioSpec("v6_nvda_p1", "V6 PUT 1->2", "NVDA", ("P1",), 5, 100_000, .05, 10, 14, 21, .98),
+    PortfolioSpec(
+        "v6_nvda_c05", "V6 CALL 0.5->1", "NVDA", ("C05",), 5, 100_000, .10, 10, 14, 21, 1.00,
+        description="Trades NVDA 5-minute CALL setups confirming at 0.5%. The V6 study emits C05 occasionally; it was registered on 2026-08-18 so those signals finally have a paper account. Quiet until the next qualifying call setup fires.",
+    ),
+    PortfolioSpec(
+        "v6_nvda_c1", "V6 CALL 1->2", "NVDA", ("C1",), 5, 100_000, .075, 10, 14, 21, 1.00,
+        description="Trades NVDA 5-minute CALL continuation setups: a stopped-out first leg must be followed by a fresh 1% re-cross within 5 bars. Rare by design - the study has emitted C1 zero times since the fronttest began (2026-08-14).",
+    ),
+    PortfolioSpec(
+        "v6_nvda_p1", "V6 PUT 1->2", "NVDA", ("P1",), 5, 100_000, .05, 10, 14, 21, .98,
+        description="Trades NVDA 5-minute PUT continuation setups (stopped-out first leg, then a fresh 1% re-cross). Rare by design - P1 fired only twice since the study started and both predate the fronttest. It will enter when the next qualifying continuation confirms.",
+    ),
     # QQQ systems are turned off as of 2026-08-18; flip enabled=True to restart them.
-    PortfolioSpec("qqq_validated", "QQQ VALIDATED 0.5->1", "QQQ", ("validated_bull", "validated_bear"), 1, 100_000, .05, 1, 3, 7, 1.00, enabled=False),
-    PortfolioSpec("qqq_early", "QQQ EARLY pivot->0.5", "QQQ", ("early_bull", "early_bear"), 1, 100_000, .02, 1, 3, 7, 1.00, enabled=False),
-    PortfolioSpec("mu_pm_liquidity", "MU PM break/sweep 15m", "MU", ("bull_break", "bear_break", "top_sweep", "bottom_sweep"), 5, 100_000, .02, 1, 3, 7, 1.00),
+    PortfolioSpec(
+        "qqq_validated", "QQQ VALIDATED 0.5->1", "QQQ", ("validated_bull", "validated_bear"), 1, 100_000, .05, 1, 3, 7, 1.00, enabled=False,
+        description="QQQ 1-minute validated setups (0.5% move target). Turned off 2026-08-18 after 2 closed trades at -$3,639.73; kept in the registry so the shutdown state is visible. Flip enabled=True to restart.",
+    ),
+    PortfolioSpec(
+        "qqq_early", "QQQ EARLY pivot->0.5", "QQQ", ("early_bull", "early_bear"), 1, 100_000, .02, 1, 3, 7, 1.00, enabled=False,
+        description="QQQ 1-minute early-pivot setups targeting 0.5%. Turned off 2026-08-18 after 8 closed trades at -$908.39; kept in the registry so the shutdown state is visible. Flip enabled=True to restart.",
+    ),
+    PortfolioSpec(
+        "mu_pm_liquidity", "MU PM break/sweep 15m", "MU", ("bull_break", "bear_break", "top_sweep", "bottom_sweep"), 5, 100_000, .02, 1, 3, 7, 1.00,
+        description="Trades MU 5-minute premarket liquidity breaks and sweeps (bull/bear break, top/bottom sweep). Active; it has 2 closed trades at -$1,501.88 so far.",
+    ),
 )
 
 # Portfolios the pass actually processes; disabled ones stay in SPECS for the
@@ -739,5 +764,6 @@ def portfolio_status(db: sqlite3.Connection) -> list[dict]:
             "realized_pnl": equity - spec.starting_cash, "closed_trades": int(closed[0]),
             "wins": int(closed[2] or 0), "open_positions": int(open_count),
             "risk_fraction": spec.risk_fraction, "enabled": spec.enabled,
+            "description": spec.description,
         })
     return out

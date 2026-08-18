@@ -16,7 +16,7 @@ EnvironmentFile=-/etc/cipher/cipher.env
 # deletes open positions), and the digest posts the weekly preview and active
 # paper book to Discord. A failure in one step must not block the rest, so the
 # steps are chained with ';' not '&&'.
-ExecStart=/bin/bash -c '/home/aarav/Aarav/cipher/cipher-github/.venv-research-py312/bin/python -m earnings_model radar; /home/aarav/Aarav/cipher/cipher-github/.venv-research-py312/bin/python -m earnings_model paper-enter; /home/aarav/Aarav/cipher/cipher-github/.venv-research-py312/bin/python -m earnings_model notify-discord --type all'
+ExecStart=/bin/bash -c '/home/aarav/Aarav/cipher/cipher-github/.venv-research-py312/bin/python -m earnings_model radar --json-output /home/aarav/Aarav/cipher/runtime/data/earnings_radar.json; /home/aarav/Aarav/cipher/cipher-github/.venv-research-py312/bin/python -m earnings_model paper-enter; /home/aarav/Aarav/cipher/cipher-github/.venv-research-py312/bin/python -m earnings_model notify-discord --type all'
 NoNewPrivileges=true
 PrivateTmp=true
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6

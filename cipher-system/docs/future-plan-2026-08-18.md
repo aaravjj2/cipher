@@ -116,9 +116,29 @@ this repo.
   note anything anomalous in `docs/audits/`.
 - On change: full test suite + compile + node checks before commit.
 
-## 6. Immediate next actions
+## 6. Implementation status (executed 2026-08-18)
 
-1. Watch tomorrow's autopilot window (09:35–11:30 ET) for the first fill.
+All code items from section 3 were implemented, verified, and pushed in the
+post-plan sprint. Current `master` is ahead of this plan's snapshot; the
+verification suite was **1027 passed, 1 skipped** after the sprint.
+
+| Item | Status | Evidence |
+|---|---|---|
+| A1 Cloudflare tunnel | user action (token) | VM wiring verified; only the Zero Trust org + GCP secret `cipher-cloudflare-tunnel-token` is missing |
+| A2 provider-capability surface | **done** | `/api/provider-capabilities` existed and is consumed by the Settings card; 2 new tests assert anonymous/degraded mode labeling |
+| A3 anonymous-mode parity audit | **done** | `tests/test_yfinance_fallback.py` extended with provider-capabilities tests (8 tests total cover quote/bars/chain/matrix/options/flow degraded states) |
+| A4 C05 signal capture | awaiting signal | `v6_nvda_c05` registered 2026-08-18; captures the next qualifying C05 event |
+| B5 backup WAL hardening | **done** | `backup_local_state.py` gained a WAL trio hot-copy fallback; `cipher-local-backup` (failed since Aug 17) ran clean at 23:31 UTC on Aug 18 |
+| B6 alert health monitor | **done** | `scripts/alert_health_monitor.py` + `cipher-health-monitor.service/.timer` (22:10 ET weekdays, 14:10 ET weekends); verified run reports healthy and flags failed units; 1 test |
+| B7 secrets inventory | **done** | `docs/secrets-inventory-2026-08-18.md` — names, locations, consumers; no values |
+| C8 strategy explainers | **done** | `PortfolioSpec.description` surfaced through `paper_portfolio_api` and rendered in the Paper Portfolios UI; rebuilt + published |
+| C9 earnings radar UI | **done** | `earnings_model radar --json-output` writes `runtime/data/earnings_radar.json`; digest service updated; `/api/earnings-radar` endpoint + Earnings Radar panel (sidebar TODAY section) shipped; verified end-to-end (40 cards); 3 tests |
+| C10 cohort tracking | **done** | `scripts/cohort_tracking_report.py` reads fronttest + shadow DBs, prints per-strategy signals/entries/outcomes; verified against live DB |
+
+## 7. Immediate next actions
+
+1. Watch the next autopilot window (09:35–11:30 ET) for the first fill.
 2. Create the Cloudflare Zero Trust org + tunnel token (user action, ~10 min)
    to complete item A1.
-3. Pick up A2 (provider-capability surface) as the first code task.
+3. Add `alert_health_monitor` output to the cohort cadence (optional): run the
+   health monitor in the weekly ops review alongside `cohort_tracking_report.py`.

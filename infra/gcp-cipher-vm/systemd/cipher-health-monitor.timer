@@ -1,0 +1,12 @@
+[Unit]
+Description=Daily Cipher ops health monitor
+
+[Timer]
+# 18:10 ET weekdays and weekends: after the market close and long after the
+# last daily digest, so a failed overnight pass is already visible.
+OnCalendar=Mon..Fri *-*-* 22:10:00 America/New_York
+OnCalendar=Sat,Sun *-*-* 14:10:00 America/New_York
+Persistent=true
+
+[Install]
+WantedBy=timers.target

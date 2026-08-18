@@ -70,11 +70,13 @@ def main():
     radar_parser.add_argument('--days', type=int, default=14, help='Days ahead to scan (default 14)')
     radar_parser.add_argument('--tiers', type=str, help='Cap tiers to filter (e.g. mega,large)')
     radar_parser.add_argument('--symbol', type=str, help='Specific ticker to check')
+    radar_parser.add_argument('--json-output', type=str, help='Write machine-readable radar cards to this JSON path')
 
     scan_parser = subparsers.add_parser('scan', help='Alias for radar')
     scan_parser.add_argument('--days', type=int, default=14, help='Days ahead to scan (default 14)')
     scan_parser.add_argument('--tiers', type=str, help='Cap tiers to filter (e.g. mega,large)')
     scan_parser.add_argument('--symbol', type=str, help='Specific ticker to check')
+    scan_parser.add_argument('--json-output', type=str, help='Write machine-readable radar cards to this JSON path')
 
     # 7. Status
     status_parser = subparsers.add_parser('status', help='Show database status and fetch logs')
@@ -221,6 +223,20 @@ def main():
         symbols = [args.symbol.upper()] if args.symbol else None
         print(f"Scanning for upcoming earnings in the next {args.days} days...")
         cards = find_upcoming_earnings(days_ahead=args.days, tiers=tiers, symbols=symbols)
+        if args.json_output:
+            # Write the machine-readable radar for the web core to serve.
+            import os
+            from pathlib import Path
+            payload = {
+                "as_of": pd.Timestamp.now(tz="UTC").isoformat(timespec="seconds"),
+                "days_ahead": args.days,
+                "count": len(cards),
+                "cards": cards,
+            }
+            out = Path(args.json_output)
+            out.parent.mkdir(parents=True, exist_ok=True)
+            out.write_text(json.dumps(payload, default=str, indent=2), encoding="utf-8")
+            print(f"Radar JSON written to {out}")
         print(render_radar_table(cards))
 
     elif args.command == 'status':

@@ -1,0 +1,18 @@
+[Unit]
+Description=Cipher ops health monitor: check timers/services and alert on anomalies
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=aarav
+Group=aarav
+WorkingDirectory=/home/aarav/Aarav/cipher/cipher-github/cipher-system
+# DISCORD_PROGRESS_WEBHOOK lives in the server env file.
+EnvironmentFile=-/etc/cipher/cipher.env
+ExecStart=/home/aarav/Aarav/cipher/cipher-github/.venv-research-py312/bin/python scripts/alert_health_monitor.py
+NoNewPrivileges=true
+PrivateTmp=true
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=cipher-health-monitor

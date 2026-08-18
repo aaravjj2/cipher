@@ -310,6 +310,47 @@ def provider_capabilities(values: dict[str, str] | None = None) -> dict:
     }
 
 
+EARNINGS_RADAR_PATH = Path(
+    os.environ.get("CIPHER_EARNINGS_RADAR_PATH",
+                    "/home/aarav/Aarav/cipher/runtime/data/earnings_radar.json")
+)
+
+
+def earnings_radar() -> dict:
+    """Serve the latest earnings radar JSON written by the digest pass.
+
+    The radar is produced by `earnings_model radar --json-output ...` in the
+    research venv (joblib dependency) and this core only reads the artifact.
+    Missing or stale output is reported as a state, never fabricated.
+    """
+    if not EARNINGS_RADAR_PATH.is_file():
+        return {
+            "status": "unavailable",
+            "reason": "No earnings radar artifact yet; the digest writes it after its first 08:15 ET run.",
+            "as_of": utcnow(), "count": 0, "cards": [],
+        }
+    try:
+        payload = json.loads(EARNINGS_RADAR_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {"status": "unavailable", "reason": "Radar artifact unreadable.",
+                "as_of": utcnow(), "count": 0, "cards": []}
+    try:
+        produced = datetime.fromisoformat(str(payload.get("as_of")).replace("Z", "+00:00"))
+        age_hours = (datetime.now(timezone.utc) - produced.astimezone(timezone.utc)).total_seconds() / 3600
+    except (TypeError, ValueError):
+        age_hours = None
+    stale = age_hours is not None and age_hours > 30.0
+    return {
+        "status": "stale" if stale else "current",
+        "age_hours": round(age_hours, 2) if age_hours is not None else None,
+        "as_of": payload.get("as_of"),
+        "days_ahead": payload.get("days_ahead"),
+        "count": len(payload.get("cards", [])),
+        "cards": payload.get("cards", []),
+        "caveat": "Earnings dates are schedule estimates from the data provider, not guarantees.",
+    }
+
+
 def governance_status():
     """Read governance state without mutating or migrating the registry."""
 
@@ -2446,6 +2487,8 @@ class Handler(BaseHTTPRequestHandler):
                 }
             elif parsed.path == "/api/provider-capabilities":
                 data = provider_capabilities()
+            elif parsed.path == "/api/earnings-radar":
+                data = earnings_radar()
             elif parsed.path == "/api/governance":
                 data = governance_status()
             elif parsed.path == "/api/standing":

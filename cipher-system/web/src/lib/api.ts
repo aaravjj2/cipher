@@ -276,6 +276,7 @@ export type PaperPortfolioSummary = {
   wins: number;
   open_positions: number;
   enabled: boolean;
+  description?: string;
   config: Record<string, unknown>;
   positions: Array<Record<string, unknown>>;
   signals: Array<Record<string, unknown>>;
@@ -336,6 +337,36 @@ export type PaperPortfoliosResponse = {
 
 export function fetchPaperPortfolios(signal?: AbortSignal): Promise<PaperPortfoliosResponse> {
   return getJson<PaperPortfoliosResponse>("/api/paper-portfolios", signal);
+}
+
+export type EarningsRadarCard = {
+  symbol: string;
+  scheduled_date: string;
+  days_until: number;
+  eps_estimate_avg: number | null;
+  eps_estimate_range: string | null;
+  hist_beat_rate: number | null;
+  total_hist_reports: number;
+  direction_bias: string;
+  confidence: number;
+  expected_gap_pct: number;
+  reversal_risk_pct: number;
+  recommended_strategy: string;
+  rationale: string;
+};
+
+export type EarningsRadarResponse = {
+  status: "current" | "stale" | "unavailable";
+  age_hours: number | null;
+  as_of: string | null;
+  days_ahead?: number;
+  count: number;
+  cards: EarningsRadarCard[];
+  caveat: string;
+};
+
+export function fetchEarningsRadar(signal?: AbortSignal): Promise<EarningsRadarResponse> {
+  return getJson<EarningsRadarResponse>("/api/earnings-radar", signal);
 }
 
 export type ProspectiveProgram = {

@@ -20,6 +20,7 @@ import { GexReplay as GexReplayBase } from "@/components/panels/GexReplay";
 import { Alerts as AlertsBase } from "@/components/panels/Alerts";
 import { Settings as SettingsBase } from "@/components/panels/Settings";
 import { MorningBrief as MorningBriefBase } from "@/components/panels/MorningBrief";
+import { EarningsRadar as EarningsRadarBase } from "@/components/panels/EarningsRadar";
 import { PaperPortfolios as PaperPortfoliosBase } from "@/components/panels/PaperPortfolios";
 import { OptionsTerminal as OptionsTerminalBase } from "@/components/panels/OptionsTerminal";
 import { PortfolioRisk as PortfolioRiskBase } from "@/components/panels/PortfolioRisk";
@@ -65,6 +66,7 @@ const ChartSaves = memo(ChartSavesBase);
 const SetupScanner = memo(SetupScannerBase);
 const Settings = memo(SettingsBase);
 const MorningBrief = memo(MorningBriefBase);
+const EarningsRadar = memo(EarningsRadarBase);
 const PaperPortfolios = memo(PaperPortfoliosBase);
 const OptionsTerminal = memo(OptionsTerminalBase);
 const PortfolioRisk = memo(PortfolioRiskBase);
@@ -78,6 +80,7 @@ const TickerWorkbench = memo(TickerWorkbenchBase);
 /** Uppercase display titles — used by Header's subtitle and by dockview tab labels. */
 export const PANEL_TITLES: Record<string, string> = {
   "Morning Brief": "MORNING BRIEF",
+  "Earnings Radar": "EARNINGS RADAR",
   "Research Desk": "RESEARCH DESK",
   "Ticker Workbench": "TICKER WORKBENCH",
   "Strike Matrix": "STRIKE MATRIX",
@@ -143,6 +146,8 @@ export function PanelHost({
   switch (panel) {
     case "Morning Brief":
       return <MorningBrief ticker={ticker} onNavigate={onNavigate} />;
+    case "Earnings Radar":
+      return <EarningsRadar />;
     case "Research Desk":
       return <ResearchDesk onNavigate={onNavigate} />;
     case "Ticker Workbench":
