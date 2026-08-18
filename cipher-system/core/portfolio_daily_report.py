@@ -7,7 +7,7 @@ from pathlib import Path
 import sqlite3
 from typing import Callable
 
-from core.fronttest_portfolios import DEFAULT_DB, NY, SPECS, connect, portfolio_status
+from core.fronttest_portfolios import DEFAULT_DB, NY, ACTIVE_SPECS, connect, portfolio_status
 from core.paper_portfolio_api import _open_mark
 from core.prospective_fronttests import DEFAULT_DB as DEFAULT_PROSPECTIVE_DB
 
@@ -67,7 +67,7 @@ def snapshot(
     mark_now = datetime.now(timezone.utc)
     status = {row["portfolio_id"]: row for row in portfolio_status(db)}
     portfolios = []
-    for spec in SPECS:
+    for spec in ACTIVE_SPECS:
         trades, pnl, wins = db.execute(
             """select count(*),coalesce(sum(pnl),0),
                       coalesce(sum(case when pnl>0 then 1 else 0 end),0)
@@ -126,7 +126,7 @@ def snapshot(
         "combined_marked_equity": sum(row["marked_equity"] for row in portfolios),
         "combined_unrealized_pnl_mid": sum(row["unrealized_pnl_mid"] for row in portfolios),
         "combined_liquidation_pnl": sum(row["liquidation_pnl"] for row in portfolios),
-        "combined_starting_cash": sum(spec.starting_cash for spec in SPECS),
+        "combined_starting_cash": sum(spec.starting_cash for spec in ACTIVE_SPECS),
         "daily_trades": sum(row["daily_trades"] for row in portfolios),
         "portfolios": portfolios,
         "prospective_programs": _prospective_snapshot(prospective_db_path, report_day),

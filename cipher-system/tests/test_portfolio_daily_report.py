@@ -10,13 +10,16 @@ from core import fronttest_portfolios
 NY = ZoneInfo("America/New_York")
 
 
-def test_preview_contains_all_six_isolated_portfolios(tmp_path: Path):
+def test_preview_contains_only_active_isolated_portfolios(tmp_path: Path):
     result = daily.preview(tmp_path / "fronttest.sqlite",
                            datetime(2026, 8, 14, 16, 10, tzinfo=NY),
                            prospective_db_path=tmp_path / "prospective.sqlite")
-    assert result["snapshot"]["combined_equity"] == 600_000
+    # The two QQQ systems are deliberately disabled as of 2026-08-18, so the
+    # digest covers the four active portfolios (400k combined starting cash).
+    active = [spec.portfolio_id for spec in fronttest_portfolios.ACTIVE_SPECS]
+    assert result["snapshot"]["combined_equity"] == 400_000
     assert result["snapshot"]["daily_pnl"] == 0
-    assert len(result["snapshot"]["portfolios"]) == 6
+    assert [row["portfolio_id"] for row in result["snapshot"]["portfolios"]] == active
     assert "Paper simulation only" in result["message"]
     assert len(result["message"]) < 1900
 
@@ -56,22 +59,22 @@ def test_preview_reports_skipped_counterfactual_outcomes(tmp_path: Path):
     db.execute(
         """insert into signals(signal_id,portfolio_id,symbol,setup_id,direction,signal_at,
                                detected_at,payload_json,disposition,skip_reason)
-           values ('skip1','qqq_early','QQQ','early_bear','short',
+           values ('skip1','v6_nvda_p05','NVDA','P05','short',
                    '2026-08-14T10:00:00-04:00','2026-08-14T10:01:00-04:00','{}',
                    'SKIPPED','DAILY_LIMIT')"""
     )
     db.execute(
         """insert into signal_outcomes(
                signal_id,portfolio_id,symbol,status,outcome,methodology,created_at,updated_at)
-           values ('skip1','qqq_early','QQQ','RESOLVED','TARGET',
+           values ('skip1','v6_nvda_p05','NVDA','RESOLVED','TARGET',
                    'underlying_path_only','2026-08-14T10:30:00Z','2026-08-14T10:30:00Z')"""
     )
     db.commit()
     db.close()
     result = daily.preview(path, datetime(2026, 8, 14, 16, 10, tzinfo=NY),
                            prospective_db_path=tmp_path / "prospective.sqlite")
-    qqq = next(row for row in result["snapshot"]["portfolios"] if row["portfolio_id"] == "qqq_early")
-    assert qqq["skipped_targets"] == 1
+    active = [row for row in result["snapshot"]["portfolios"] if row["portfolio_id"] == "v6_nvda_p05"]
+    assert active[0]["skipped_targets"] == 1
     assert "skipped path: 1 target" in result["message"]
 
 

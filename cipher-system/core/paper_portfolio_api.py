@@ -175,6 +175,7 @@ def snapshot(db_path: Path = DEFAULT_DB, *, recent_limit: int = 30) -> dict[str,
                 "entry_start_et": spec.entry_start_et.strftime("%H:%M"),
                 "entry_cutoff_et": spec.entry_cutoff_et.strftime("%H:%M"),
                 "direction_flip_cooldown_minutes": spec.direction_flip_cooldown_minutes,
+                "enabled": spec.enabled,
             }
             opportunity = db.execute(
                 """select count(*),

@@ -64,9 +64,39 @@ deleted, so the service failed with `Failed to load environment files`.
   lock).
 - Verified end-to-end: digest `delivered` for report day 2026-08-18.
 
+## 4. QQQ systems turned off; NVDA zero-signal portfolios verified (2026-08-18)
+
+**QQQ.** `qqq_early` and `qqq_validated` are disabled via a new `enabled`
+flag on `PortfolioSpec` (both set `False`). Disabled portfolios:
+
+- receive no signals in `detect_signals` (routing iterates `ACTIVE_SPECS`),
+- are excluded from the daily Discord digest and its combined equity,
+- remain visible in status/API with `enabled: false` so the UI shows the
+  turned-off state instead of pretending they never existed.
+
+Flip `enabled=True` on the two QQQ specs to restart them.
+
+**NVDA (v6_nvda_c1 / v6_nvda_p1).** The two continuation portfolios have
+never recorded a signal. Investigation shows the capture path is correct:
+
+- The V6 study emits C1/P1 rarely by design (continuation setups requiring a
+  half-level cross, a stopped-out first leg, and a fresh 1% re-cross within
+  5 bars). Over 12 days of NVDA 5-minute bars the study emitted P1 twice
+  (Aug 10, Aug 13) and C1 zero times.
+- The fronttest only began running on 2026-08-14, so both P1 emissions
+  predate it; on the days it has run (Aug 14/17/18) the study emitted only
+  P05 (recorded) and C05 (emitted but subscribed by no portfolio).
+- A new regression test crafts an oscillating session that produces a real
+  P1 signal on the latest closed bar and asserts `detect_signals` routes it
+  to `v6_nvda_p1` (and never backfills the earlier P05 bar).
+
+No backfill was performed — the fronttest is strictly prospective.
+
 ## Verification
 
-- `pytest`: 1012 passed, 1 skipped (regression test included)
+- `pytest`: 1016 passed, 2 skipped (includes QQQ-disable + P1-capture tests)
 - Executor restarted with fixed config; cycle pipeline now admits cards
 - Earnings timer active; one-shot run delivered both Discord messages
 - Discord digest service delivered successfully
+- Fronttest pass and paper-portfolio API report `enabled` state live
+- Daily digest idempotent after QQQ removal (no duplicate posts)

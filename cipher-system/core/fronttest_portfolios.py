@@ -45,16 +45,25 @@ class PortfolioSpec:
     entry_cutoff_et: time = time(11, 30)
     direction_flip_cooldown_minutes: int = 15
     force_close_et: time = time(15, 45)
+    # Disabled portfolios stop receiving signals and are excluded from the
+    # daily digest; they remain in the registry/status so the UI can show the
+    # turned-off state instead of pretending they never existed.
+    enabled: bool = True
 
 
 SPECS = (
     PortfolioSpec("v6_nvda_p05", "V6 PUT 0.5->1", "NVDA", ("P05",), 5, 100_000, .10, 10, 14, 21, .98),
     PortfolioSpec("v6_nvda_c1", "V6 CALL 1->2", "NVDA", ("C1",), 5, 100_000, .075, 10, 14, 21, 1.00),
     PortfolioSpec("v6_nvda_p1", "V6 PUT 1->2", "NVDA", ("P1",), 5, 100_000, .05, 10, 14, 21, .98),
-    PortfolioSpec("qqq_validated", "QQQ VALIDATED 0.5->1", "QQQ", ("validated_bull", "validated_bear"), 1, 100_000, .05, 1, 3, 7, 1.00),
-    PortfolioSpec("qqq_early", "QQQ EARLY pivot->0.5", "QQQ", ("early_bull", "early_bear"), 1, 100_000, .02, 1, 3, 7, 1.00),
+    # QQQ systems are turned off as of 2026-08-18; flip enabled=True to restart them.
+    PortfolioSpec("qqq_validated", "QQQ VALIDATED 0.5->1", "QQQ", ("validated_bull", "validated_bear"), 1, 100_000, .05, 1, 3, 7, 1.00, enabled=False),
+    PortfolioSpec("qqq_early", "QQQ EARLY pivot->0.5", "QQQ", ("early_bull", "early_bear"), 1, 100_000, .02, 1, 3, 7, 1.00, enabled=False),
     PortfolioSpec("mu_pm_liquidity", "MU PM break/sweep 15m", "MU", ("bull_break", "bear_break", "top_sweep", "bottom_sweep"), 5, 100_000, .02, 1, 3, 7, 1.00),
 )
+
+# Portfolios the pass actually processes; disabled ones stay in SPECS for the
+# registry and status surface but receive no signals and no digest rows.
+ACTIVE_SPECS = tuple(spec for spec in SPECS if spec.enabled)
 
 
 def connect(path: Path = DEFAULT_DB) -> sqlite3.Connection:
@@ -319,9 +328,10 @@ def detect_signals(bars_by_symbol: Mapping[str, Sequence[Bar]]) -> list[dict]:
     latest = _latest_regular(nvda)
     if latest:
         result = v6.run_symbol("NVDA", nvda)
+        nvda_specs = [spec for spec in ACTIVE_SPECS if spec.symbol == "NVDA"]
         for row in result["signals"]:
             if row["day"] == latest.t.date().isoformat() and row["signal_time"] == latest.t.strftime("%H:%M"):
-                for spec in SPECS[:3]:
+                for spec in nvda_specs:
                     if row["setup_id"] in spec.setup_ids:
                         out.append({**row, "portfolio_id": spec.portfolio_id,
                                     "signal_at": latest.t.isoformat(), "symbol": "NVDA"})
@@ -330,15 +340,19 @@ def detect_signals(bars_by_symbol: Mapping[str, Sequence[Bar]]) -> list[dict]:
     latest = _latest_regular(qqq)
     if latest:
         report = studies.qqq_wave_study(qqq)
-        pools = (
-            (SPECS[3], report["raw_validated_signal_records"]),
-            (SPECS[4], report["raw_early_signal_records"]),
-        )
-        for spec, rows in pools:
+        for spec in ACTIVE_SPECS:
+            if spec.symbol != "QQQ":
+                continue
+            if any(setup.startswith("validated_") for setup in spec.setup_ids):
+                rows = report["raw_validated_signal_records"]
+            elif any(setup.startswith("early_") for setup in spec.setup_ids):
+                rows = report["raw_early_signal_records"]
+            else:
+                continue
             for row in rows:
                 if datetime.fromisoformat(row["signal_at"]) == latest.t and row["setup_id"] in spec.setup_ids:
                     payload = {**row, "portfolio_id": spec.portfolio_id}
-                    if spec.portfolio_id == "qqq_early":
+                    if "early_" in spec.setup_ids[0]:
                         sign = 1 if row["direction"] == "long" else -1
                         payload["target"] = row["anchor"] + sign * .5 * row["pm_range"]
                         payload["stop"] = row["anchor"]
@@ -346,11 +360,12 @@ def detect_signals(bars_by_symbol: Mapping[str, Sequence[Bar]]) -> list[dict]:
 
     mu = list(bars_by_symbol.get("MU", ()))
     latest = _latest_regular(mu)
-    if latest:
+    mu_spec = next((spec for spec in ACTIVE_SPECS if spec.symbol == "MU"), None)
+    if latest and mu_spec:
         report = studies.mu_premarket_study(mu)
         for row in report["raw_signal_records"]:
             if datetime.fromisoformat(row["signal_at"]) == latest.t:
-                out.append({**row, "portfolio_id": SPECS[5].portfolio_id,
+                out.append({**row, "portfolio_id": mu_spec.portfolio_id,
                             "max_hold_minutes": 15})
     return out
 
@@ -720,6 +735,6 @@ def portfolio_status(db: sqlite3.Connection) -> list[dict]:
             "starting_cash": spec.starting_cash, "realized_equity": equity,
             "realized_pnl": equity - spec.starting_cash, "closed_trades": int(closed[0]),
             "wins": int(closed[2] or 0), "open_positions": int(open_count),
-            "risk_fraction": spec.risk_fraction,
+            "risk_fraction": spec.risk_fraction, "enabled": spec.enabled,
         })
     return out
