@@ -1,0 +1,10 @@
+[Unit]
+Description=Run the Cipher earnings radar + Discord digest on weekday premarket
+
+[Timer]
+OnCalendar=Mon..Fri *-*-* 08:15:00 America/New_York
+Persistent=true
+Unit=cipher-earnings-digest.service
+
+[Install]
+WantedBy=timers.target

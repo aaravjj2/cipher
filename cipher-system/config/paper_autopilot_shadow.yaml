@@ -17,23 +17,27 @@ strategy:
   allowed_tickers: [SPY, QQQ, IWM, AAPL, MSFT, NVDA, AMZN, GOOGL, META, TSLA, AVGO, AMD, MU, SNDK, NFLX, PLTR, COIN, IBIT]
   entry_window_et_start: "09:35"
   entry_window_et_end: "11:30"
+  # Setup names contain commas, so block mappings with quoted values are required:
+  # YAML flow mappings ({...}) split every value at the first comma, which silently
+  # truncated setups like "triple cluster (3 peaks" and made every card fail the
+  # allowed-pattern filter (all entries SKIPPED_SETUP_DISABLED).
   allowed_patterns:
-    - {scanner_type: flash_agentic, setup: triple cluster (3 peaks, above), direction: bullish}
-    - {scanner_type: flash_agentic, setup: triple cluster (3 peaks, above), direction: bearish}
-    - {scanner_type: flash_agentic, setup: triple cluster (3 peaks, below), direction: bullish}
-    - {scanner_type: flash_agentic, setup: triple cluster (3 peaks, below), direction: bearish}
-    - {scanner_type: flash_agentic, setup: quad cluster (4 peaks, above), direction: bullish}
-    - {scanner_type: flash_agentic, setup: quad cluster (4 peaks, above), direction: bearish}
-    - {scanner_type: flash_agentic, setup: quad cluster (4 peaks, below), direction: bullish}
-    - {scanner_type: flash_agentic, setup: quad cluster (4 peaks, below), direction: bearish}
-    - {scanner_type: flash_agentic, setup: golden / top-pull, direction: bullish}
-    - {scanner_type: flash_agentic, setup: golden / top-pull, direction: bearish}
-    - {scanner_type: flash_agentic, setup: battle zone, direction: bullish}
-    - {scanner_type: flash_agentic, setup: battle zone, direction: bearish}
-    - {scanner_type: flash_agentic, setup: call wall, direction: bullish}
-    - {scanner_type: flash_agentic, setup: call wall, direction: bearish}
-    - {scanner_type: flash_agentic, setup: put floor, direction: bullish}
-    - {scanner_type: flash_agentic, setup: put floor, direction: bearish}
+    - {scanner_type: flash_agentic, setup: "triple cluster (3 peaks, above)", direction: bullish}
+    - {scanner_type: flash_agentic, setup: "triple cluster (3 peaks, above)", direction: bearish}
+    - {scanner_type: flash_agentic, setup: "triple cluster (3 peaks, below)", direction: bullish}
+    - {scanner_type: flash_agentic, setup: "triple cluster (3 peaks, below)", direction: bearish}
+    - {scanner_type: flash_agentic, setup: "quad cluster (4 peaks, above)", direction: bullish}
+    - {scanner_type: flash_agentic, setup: "quad cluster (4 peaks, above)", direction: bearish}
+    - {scanner_type: flash_agentic, setup: "quad cluster (4 peaks, below)", direction: bullish}
+    - {scanner_type: flash_agentic, setup: "quad cluster (4 peaks, below)", direction: bearish}
+    - {scanner_type: flash_agentic, setup: "golden / top-pull", direction: bullish}
+    - {scanner_type: flash_agentic, setup: "golden / top-pull", direction: bearish}
+    - {scanner_type: flash_agentic, setup: "battle zone", direction: bullish}
+    - {scanner_type: flash_agentic, setup: "battle zone", direction: bearish}
+    - {scanner_type: flash_agentic, setup: "call wall", direction: bullish}
+    - {scanner_type: flash_agentic, setup: "call wall", direction: bearish}
+    - {scanner_type: flash_agentic, setup: "put floor", direction: bullish}
+    - {scanner_type: flash_agentic, setup: "put floor", direction: bearish}
 
 instrument:
   model: long_option

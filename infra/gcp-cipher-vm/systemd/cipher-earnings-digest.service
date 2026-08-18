@@ -1,0 +1,23 @@
+[Unit]
+Description=Refresh Cipher earnings radar and deliver the daily Discord digest
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=aarav
+Group=aarav
+WorkingDirectory=/home/aarav/Aarav/cipher/cipher-github
+# DISCORD_PROGRESS_WEBHOOK lives in the server env file. The research venv is
+# used because earnings_model requires joblib, which the main cipher venv lacks.
+EnvironmentFile=-/etc/cipher/cipher.env
+# Radar refreshes the upcoming-earnings universe; the digest posts the weekly
+# preview and active paper book to Discord. A radar failure must not block the
+# digest, so the steps are chained with ';' not '&&'.
+ExecStart=/bin/bash -c '/home/aarav/Aarav/cipher/cipher-github/.venv-research-py312/bin/python -m earnings_model radar; /home/aarav/Aarav/cipher/cipher-github/.venv-research-py312/bin/python -m earnings_model notify-discord --type all'
+NoNewPrivileges=true
+PrivateTmp=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=cipher-earnings-digest
