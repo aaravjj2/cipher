@@ -35,6 +35,8 @@ cipher-system/app/node_modules/
 *.swp
 
 # Research modules keep bulk raw data and large outputs on disk, not in git.
+# (Plain path form also covers the local machine-specific data symlink.)
+earnings_model/data
 earnings_model/data/
 "EOD strategy/data/"
 "EOD strategy/results/"
