@@ -1,8 +1,12 @@
 # Cipher
 
-Local, read-only options research terminal for personal use. The active app lives in
+Local-first, read-only options research terminal for personal use. The active app lives in
 `cipher-system/` and provides Strike Matrix, Night Vision, Spyglass, scanners,
 watchlists, journal, chart saves, and local ranking/weight labs.
+
+It runs fully local against Alpaca market data or in a hosted multi-user mode
+(Vercel frontend + Supabase Auth/RLS + the Node/Python backend), with a
+Yahoo/yfinance fallback for anonymous users who do not provide Alpaca keys.
 
 This repository is not a commercial product and is not integrated with APEX,
 Hermes, Fincept, AccessObsidian internals, or any proprietary Cipher clone.
@@ -29,6 +33,22 @@ Hermes, Fincept, AccessObsidian internals, or any proprietary Cipher clone.
  SIP/IEX stocks            cipher-system/data/
 ```
 
+## Deployment modes
+
+- **Local** — the Node proxy and Python core run on one machine, the browser is
+  served from `cipher-system/app/public`, and Alpaca credentials stay in
+  `cipher-system/app/.env`. Default ports are 8282 (core) and 8283 (web).
+- **Hosted multi-user** — Vercel serves the Next.js static export, Supabase
+  provides Auth and RLS-isolated user state, and the Node/Python backend runs on
+  a VM with `CIPHER_HOSTED=1`. Login uses an opaque HttpOnly/Secure cookie, and
+  user Alpaca keys are session-only in backend memory. See
+  `cipher-system/docs/provider-compatibility.md` and
+  `cipher-system/supabase/README.md`.
+- **No Alpaca keys** — guest users get delayed Yahoo/yfinance quotes, bars, and a
+  limited option chain plus a degraded Strike Matrix. OPRA flow, live option
+  trades, feed-provided Greeks, and verified dealer positioning stay explicitly
+  unavailable rather than zero.
+
 ## Research Governance Platform
 
 Cipher now includes a separate governance and strategy-graduation plane under
@@ -54,8 +74,10 @@ broker adapter or live-order path. See
 
 ## Current Data Model
 
-Cipher currently uses Alpaca credentials server-side only. The browser never sees
-keys.
+Cipher uses Alpaca credentials server-side only. The browser never sees keys.
+When no Alpaca session is available, it falls back to Yahoo/yfinance for stock
+quotes and bars and a limited option chain; missing Greeks/OI and OPRA flow stay
+explicitly unavailable rather than zero.
 
 | Surface | Data Used |
 |---|---|
@@ -266,9 +288,10 @@ The local core exposes:
 
 ```bash
 cd /home/aarav/Aarav/cipher
-python3 -m compileall -q cipher-system/core tests
+python3 -m compileall -q cipher-system/core cipher-system/tests
 node --check cipher-system/app/server.mjs
 node --check cipher-system/app/launcher.mjs
-node --check cipher-system/app/public/app.js
-pytest -q
+node --test cipher-system/app/test/*.test.mjs cipher-system/web/test/*.test.mjs
+cd cipher-system/web && npm run check
+cd ../.. && pytest -q
 ```
