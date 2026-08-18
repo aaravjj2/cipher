@@ -4,6 +4,12 @@
 
 **Cipher — The Auditable AI Options Copilot**
 
+## Elevator pitch (Devpost tagline, ≤200 chars)
+
+**An auditable AI research copilot for options traders — evidence-backed
+scans, replayable analysis, and a paper-only autopilot, with no broker order
+authority.**
+
 ## One-line pitch
 
 An all-in-one research workstation that helps individual stock and options
