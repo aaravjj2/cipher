@@ -57,6 +57,25 @@ input mode inspectable. Missing gamma, open interest, quotes, trades, or bars
 remain unknown. GEX remains a public-open-interest heuristic, not verified
 dealer positioning.
 
+## Anonymous yfinance fallback
+
+When no Alpaca credentials/session are available, the core may use the already
+installed `yfinance` package as an explicitly degraded fallback:
+
+| Capability | Anonymous fallback behavior |
+|---|---|
+| Stock quotes | Delayed/unofficial Yahoo Finance quote with no fabricated bid/ask |
+| Stock OHLCV bars | Delayed/unofficial Yahoo Finance history |
+| Option chain | Limited Yahoo option-chain snapshot with nullable Greeks and OI date |
+| Strike Matrix | May render strike rows and modeled exposure where mid/IV/OI inputs are sufficient; every response is labeled `feed=yahoo` |
+| OPRA flow / latest option trades | Unavailable; the UI explicitly reports that OPRA event-time data is not available |
+| Verified dealer positioning | Never available; GEX remains a public-OI heuristic |
+
+The fallback never converts absent fields to zero and never presents a Yahoo
+snapshot as an OPRA tape. If yfinance is unavailable or Yahoo returns no usable
+rows, the API returns an explicit unavailable/error state rather than blocking
+the rest of the terminal.
+
 ## Tradier
 
 Tradier is not an interchangeable backend for the active Alpaca routes. Its
@@ -76,6 +95,42 @@ active application. It is reported as `unsupported`. Do not claim Webull support
 or add brokerage integration under the read-only project boundary. A future
 read-only adapter would require an explicit scope decision, normalized field
 mapping, provenance rules, and tests before it could be described as supported.
+
+## Hosted multi-user mode
+
+Hosted deployment is intentionally split across three manually configured
+services:
+
+```text
+Vercel Next.js export  ->  stable HTTPS Node API origin on the GCP VM
+Supabase Auth/Postgres  ->  authentication and RLS-scoped user state
+GCP Python core        ->  read-only Alpaca market-data normalization
+```
+
+The Vercel browser bundle receives only `NEXT_PUBLIC_SUPABASE_URL`,
+`NEXT_PUBLIC_SUPABASE_ANON_KEY`, and `NEXT_PUBLIC_CIPHER_API_ORIGIN`. The
+Supabase service-role key, database password, internal proxy token, and all
+Alpaca credentials stay off Vercel and out of the browser.
+
+Supabase verifies the email/password only for the sign-in exchange. The browser
+then receives an opaque `HttpOnly; Secure; SameSite=None` `cipher_session`
+cookie. The cookie contains no email, password, Supabase token, or Alpaca key;
+the temporary Supabase access token is held only in bounded Node process memory
+and is cleared on logout, expiry, restart, or session eviction. Browser API
+requests use `credentials: include`, not persisted bearer tokens.
+
+Users manually enter an Alpaca key and secret in Settings for a session-only connection. The Node proxy sends
+them over HTTPS to the authenticated core hop; the core stores them only in a
+bounded in-memory session with inactivity and absolute expiry. They are cleared
+on disconnect, logout, expiry, or process restart and are never written to
+Supabase, browser storage, URLs, logs, disk caches, or API responses. Feed
+selection is shown as OPRA/SIP full-intent or indicative/IEX degraded research;
+it does not prove account entitlements.
+
+The Vercel frontend must use a stable HTTPS API hostname. The existing Tailscale
+Funnel is a private pilot/rollback option, not the production API-origin
+contract. Hosted deployment is not ready for public traffic until Auth, RLS,
+secret-boundary, and no-live-order checks pass.
 
 ## Safety boundary
 

@@ -104,8 +104,44 @@ def _normalize(raw: dict, *, preserve_id: bool = False) -> dict:
     }
 
 
-def add_position(raw: dict, path: Path = STORE_PATH) -> dict:
+def _repository_data(repository) -> dict:
+    settings = repository.list_rows("portfolio_risk_settings", query={}) or []
+    cash = float(settings[0].get("cash") or 0) if settings else 0.0
+    positions = []
+    for row in repository.list_rows("portfolio_risk_positions", query={}) or []:
+        metadata = dict(row.get("metadata") or {})
+        metadata.update({
+            "id": row.get("id"),
+            "ticker": row.get("ticker"),
+            "contract_symbol": row.get("contract") or metadata.get("contract_symbol"),
+            "quantity": row.get("quantity"),
+            "entry_price": row.get("entry_price"),
+        })
+        positions.append(_normalize(metadata, preserve_id=True))
+    return {"schema_version": SCHEMA_VERSION, "cash": cash, "positions": positions}
+
+
+def add_position(raw: dict, path: Path = STORE_PATH, *, repository=None) -> dict:
     row = _normalize(raw)
+    if repository is not None:
+        rows = repository.insert_row(
+            "portfolio_risk_positions",
+            {
+                "ticker": row["ticker"],
+                "contract": row["contract_symbol"],
+                "quantity": row["quantity"],
+                "entry_price": row["entry_price"],
+                "direction": "LONG" if row["quantity"] > 0 else "SHORT",
+                "metadata": row,
+            },
+        ) or []
+        if not rows:
+            raise ValueError("portfolio position was not saved")
+        saved = dict(rows[0])
+        persisted_id = str(saved.get("id") or row["id"])
+        saved.update(row)
+        saved["id"] = persisted_id
+        return saved
     with _LOCK:
         data = _load(path)
         data["positions"].append(row)
@@ -113,7 +149,12 @@ def add_position(raw: dict, path: Path = STORE_PATH) -> dict:
     return row
 
 
-def delete_position(position_id: str, path: Path = STORE_PATH) -> dict:
+def delete_position(position_id: str, path: Path = STORE_PATH, *, repository=None) -> dict:
+    if repository is not None:
+        if not repository.get_row("portfolio_risk_positions", str(position_id)):
+            raise ValueError("unknown portfolio position")
+        repository.delete_row("portfolio_risk_positions", str(position_id))
+        return {"deleted": str(position_id)}
     with _LOCK:
         data = _load(path)
         before = len(data["positions"])
@@ -124,8 +165,13 @@ def delete_position(position_id: str, path: Path = STORE_PATH) -> dict:
     return {"deleted": str(position_id)}
 
 
-def set_cash(value: Any, path: Path = STORE_PATH) -> dict:
+def set_cash(value: Any, path: Path = STORE_PATH, *, repository=None) -> dict:
     cash = _number(value, "cash")
+    if repository is not None:
+        saved = repository.upsert_row("portfolio_risk_settings", {"cash": cash, "settings": {}}, conflict_column="user_id")
+        if not saved:
+            raise ValueError("portfolio cash was not saved")
+        return {"cash": cash}
     with _LOCK:
         data = _load(path)
         data["cash"] = cash
@@ -137,21 +183,29 @@ CSV_FIELDS = ("strategy", "asset_type", "ticker", "contract_symbol", "option_typ
               "expiration", "quantity", "entry_price", "fees", "opened_at", "notes")
 
 
-def export_csv(path: Path = STORE_PATH) -> str:
+def export_csv(path: Path = STORE_PATH, *, repository=None) -> str:
     output = io.StringIO()
     writer = csv.DictWriter(output, fieldnames=CSV_FIELDS, extrasaction="ignore")
     writer.writeheader()
-    for row in _load(path)["positions"]:
+    source = _repository_data(repository) if repository is not None else _load(path)
+    for row in source["positions"]:
         writer.writerow(row)
     return output.getvalue()
 
 
-def import_csv(text: str, path: Path = STORE_PATH, *, replace: bool = False) -> dict:
+def import_csv(text: str, path: Path = STORE_PATH, *, replace: bool = False, repository=None) -> dict:
     if len(text.encode("utf-8")) > 1_000_000:
         raise ValueError("CSV is limited to 1 MB")
     rows = [_normalize(dict(row)) for row in csv.DictReader(io.StringIO(text))]
     if len(rows) > 2000:
         raise ValueError("CSV is limited to 2000 positions")
+    if repository is not None:
+        if replace:
+            for existing in repository.list_rows("portfolio_risk_positions", query={}) or []:
+                repository.delete_row("portfolio_risk_positions", str(existing.get("id")))
+        for row in rows:
+            add_position(row, repository=repository)
+        return {"imported": len(rows), "replaced": bool(replace)}
     with _LOCK:
         data = _load(path)
         data["positions"] = rows if replace else data["positions"] + rows
@@ -170,8 +224,8 @@ def _match_option(position: dict, contracts: list[dict]) -> dict | None:
 
 
 def status(*, quote_fn: Callable[[str], dict], chain_fn: Callable[[str, str, str], list[dict]],
-           path: Path = STORE_PATH) -> dict:
-    data = _load(path)
+           path: Path = STORE_PATH, repository=None) -> dict:
+    data = _repository_data(repository) if repository is not None else _load(path)
     positions = [dict(row) for row in data["positions"]]
     tickers = sorted({row["ticker"] for row in positions})
     quotes: dict[str, dict | None] = {}

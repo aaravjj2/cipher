@@ -35,10 +35,11 @@ def options_chain_view(ticker: str, feed: str | None, expiration_count: int, *,
 
 
 def portfolio_snapshot(feed: str | None, *, quote_fn: QuoteProvider,
-                       chain_fn: ChainProvider) -> dict:
+                       chain_fn: ChainProvider, portfolio_repository=None) -> dict:
     return portfolio_risk.status(
         quote_fn=quote_fn,
         chain_fn=lambda symbol, start, end: chain_fn(
             symbol, feed, max_pages=12, expiration_gte=start, expiration_lte=end,
         ),
+        repository=portfolio_repository,
     )

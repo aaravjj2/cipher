@@ -95,23 +95,33 @@ def _save(store: dict) -> None:
             os.unlink(tmp)
 
 
-def list_layouts(include_payload: bool = False) -> list[dict]:
+def _public_row(row: dict, include_payload: bool) -> dict:
+    return dict(row) if include_payload else {k: v for k, v in row.items() if k != "layout"}
+
+
+def list_layouts(include_payload: bool = False, *, repository=None) -> list[dict]:
     """Saved layouts, newest-updated first.
 
     The default omits the grid blobs: the panel only needs names and timestamps to
     render its picker, and shipping every blob on every poll would send far more
     than the UI uses.
     """
+    if repository is not None:
+        rows = repository.list_rows("workspace_layouts", query={"order": "updated_at.desc"}) or []
+        return [_public_row(dict(row), include_payload) for row in rows]
     with _LOCK:
         store = _load()
     rows = sorted(store["layouts"], key=lambda r: r.get("updated_at") or "", reverse=True)
-    if include_payload:
-        return [dict(r) for r in rows]
-    return [{k: v for k, v in r.items() if k != "layout"} for r in rows]
+    return [_public_row(dict(row), include_payload) for row in rows]
 
 
-def get_layout(name: str) -> dict:
+def get_layout(name: str, *, repository=None) -> dict:
     name = _validate_name(name)
+    if repository is not None:
+        rows = repository.list_rows("workspace_layouts", query={"name": f"eq.{name}"}) or []
+        if rows:
+            return dict(rows[0])
+        raise WorkspaceLayoutError(f"no saved layout named {name!r}")
     with _LOCK:
         store = _load()
     for row in store["layouts"]:
@@ -120,13 +130,29 @@ def get_layout(name: str) -> dict:
     raise WorkspaceLayoutError(f"no saved layout named {name!r}")
 
 
-def save_layout(name: str, layout: Any) -> dict:
+def save_layout(name: str, layout: Any, *, repository=None) -> dict:
     """Creates or overwrites a named layout. Overwrite is intentional — the panel's
     save control is "save this arrangement as <name>", and re-saving the same name
     is how a user updates a layout they're iterating on."""
     name = _validate_name(name)
     layout = _validate_layout(layout)
     now = _utcnow()
+    if repository is not None:
+        existing = repository.list_rows("workspace_layouts", query={"name": f"eq.{name}"}) or []
+        if existing:
+            saved = repository.update_row(
+                "workspace_layouts",
+                str(existing[0]["id"]),
+                {"name": name, "layout": layout, "updated_at": now},
+            ) or []
+        else:
+            saved = repository.insert_row(
+                "workspace_layouts",
+                {"name": name, "layout": layout, "created_at": now, "updated_at": now},
+            ) or []
+        if not saved:
+            raise WorkspaceLayoutError("workspace layout was not saved")
+        return _public_row(dict(saved[0]), include_payload=False)
     with _LOCK:
         store = _load()
         for row in store["layouts"]:
@@ -150,8 +176,14 @@ def save_layout(name: str, layout: Any) -> dict:
     return {k: v for k, v in record.items() if k != "layout"}
 
 
-def delete_layout(name: str) -> dict:
+def delete_layout(name: str, *, repository=None) -> dict:
     name = _validate_name(name)
+    if repository is not None:
+        existing = repository.list_rows("workspace_layouts", query={"name": f"eq.{name}"}) or []
+        if not existing:
+            raise WorkspaceLayoutError(f"no saved layout named {name!r}")
+        repository.delete_row("workspace_layouts", str(existing[0]["id"]))
+        return {"deleted": True, "name": name}
     with _LOCK:
         store = _load()
         remaining = [r for r in store["layouts"] if r["name"] != name]
@@ -162,8 +194,8 @@ def delete_layout(name: str) -> dict:
     return {"deleted": True, "name": name}
 
 
-def layouts_status() -> dict:
-    rows = list_layouts()
+def layouts_status(*, repository=None) -> dict:
+    rows = list_layouts(repository=repository)
     return {
         "as_of": _utcnow(),
         "layouts": rows,

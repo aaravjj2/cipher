@@ -10,6 +10,7 @@ type Entry = { value: unknown; expiresAt: number };
 const values = new Map<string, Entry>();
 const inFlight = new Map<string, Promise<unknown>>();
 const counters = { network: 0, cacheHits: 0, sharedHits: 0, invalidations: 0 };
+let cacheGeneration = 0;
 
 function regularSession(now = new Date()): boolean {
   const parts = new Intl.DateTimeFormat("en-US", {
@@ -55,10 +56,15 @@ export function coordinatedGet<T>(path: string, loader: () => Promise<T>, signal
   if (pending) counters.sharedHits += 1;
   if (!pending) {
     counters.network += 1;
+    const generation = cacheGeneration;
     pending = loader().then((value) => {
-      values.set(path, { value, expiresAt: Date.now() + requestTtl(path) });
+      if (generation === cacheGeneration) {
+        values.set(path, { value, expiresAt: Date.now() + requestTtl(path) });
+      }
       return value;
-    }).finally(() => inFlight.delete(path));
+    }).finally(() => {
+      if (inFlight.get(path) === pending) inFlight.delete(path);
+    });
     inFlight.set(path, pending);
   }
   return withAbort(pending, signal);
@@ -66,6 +72,14 @@ export function coordinatedGet<T>(path: string, loader: () => Promise<T>, signal
 
 export function invalidateRequests(prefix = "/api/"): void {
   for (const key of values.keys()) if (key.startsWith(prefix)) values.delete(key);
+  counters.invalidations += 1;
+}
+
+/** Clear all user-scoped read models when the authenticated subject changes. */
+export function resetRequestCache(): void {
+  cacheGeneration += 1;
+  values.clear();
+  inFlight.clear();
   counters.invalidations += 1;
 }
 

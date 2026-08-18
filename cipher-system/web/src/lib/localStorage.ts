@@ -1,8 +1,6 @@
-// Thin typed wrapper around window.localStorage. Cipher's Watchlists, Journal, and Chart
-// Saves panels have no server-side backend for this data (confirmed against the legacy
-// vanilla-JS frontend at app/public.legacy/app.js, which persists the same 3 features to
-// localStorage under a single `cipher_local_v1` blob) — this file is the real data source
-// for those panels, not a stand-in for one.
+// Thin typed wrapper around window.localStorage for local mode. Hosted user-owned
+// records use the authenticated API/repository paths; local mode retains the legacy
+// browser-local behavior so the standalone terminal remains offline-friendly.
 
 export function readLocal<T>(key: string, fallback: T): T {
   if (typeof window === "undefined") return fallback;

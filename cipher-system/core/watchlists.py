@@ -44,7 +44,26 @@ def _name(raw: object) -> str:
     return value
 
 
-def list_all(path: Path = DEFAULT_DB) -> dict:
+def list_all(path: Path = DEFAULT_DB, *, repository=None) -> dict:
+    if repository is not None:
+        lists = repository.list_rows("watchlists", query={"order": "name.asc"}) or []
+        members = repository.list_rows("watchlist_members", query={"order": "position.asc,added_at.asc"}) or []
+        by_list = {}
+        for member in members:
+            by_list.setdefault(str(member.get("watchlist_id")), []).append(member.get("ticker"))
+        screens = repository.list_rows("saved_screens", query={"order": "name.asc"}) or []
+        return {
+            "watchlists": [
+                {**dict(row), "tickers": by_list.get(str(row.get("id")), [])}
+                for row in lists
+            ],
+            "screens": [
+                {**dict(row), "criteria": row.get("criteria") or {}}
+                for row in screens
+            ],
+            "server_side": True,
+            "execution_capability": False,
+        }
     with _connect(path) as db:
         lists = []
         for row in db.execute("SELECT * FROM watchlists ORDER BY name COLLATE NOCASE"):
@@ -56,8 +75,18 @@ def list_all(path: Path = DEFAULT_DB) -> dict:
     return {"watchlists": lists, "screens": screens, "server_side": True, "execution_capability": False}
 
 
-def create_watchlist(name: object, path: Path = DEFAULT_DB) -> dict:
-    now, item = _now(), {"id": uuid.uuid4().hex, "name": _name(name), "created_at": _now(), "updated_at": _now(), "tickers": []}
+def create_watchlist(name: object, path: Path = DEFAULT_DB, *, repository=None) -> dict:
+    now = _now()
+    label = _name(name)
+    if repository is not None:
+        rows = repository.insert_row(
+            "watchlists",
+            {"name": label, "created_at": now, "updated_at": now},
+        ) or []
+        if not rows:
+            raise ValueError("watchlist was not saved")
+        return {**dict(rows[0]), "tickers": []}
+    item = {"id": uuid.uuid4().hex, "name": label, "created_at": now, "updated_at": now, "tickers": []}
     with _connect(path) as db:
         try:
             db.execute("INSERT INTO watchlists VALUES(?,?,?,?)", (item["id"], item["name"], now, now))
@@ -66,8 +95,19 @@ def create_watchlist(name: object, path: Path = DEFAULT_DB) -> dict:
     return item
 
 
-def add_member(watchlist_id: str, ticker: object, path: Path = DEFAULT_DB) -> dict:
+def add_member(watchlist_id: str, ticker: object, path: Path = DEFAULT_DB, *, repository=None) -> dict:
     symbol = _ticker(ticker)
+    if repository is not None:
+        if repository.get_row("watchlists", watchlist_id) is None:
+            raise ValueError("unknown watchlist")
+        members = repository.list_rows("watchlist_members", query={"watchlist_id": f"eq.{watchlist_id}"}) or []
+        position = max((int(row.get("position") or 0) for row in members), default=-1) + 1
+        repository.insert_row(
+            "watchlist_members",
+            {"watchlist_id": watchlist_id, "ticker": symbol, "position": position, "added_at": _now()},
+        )
+        repository.update_row("watchlists", watchlist_id, {"updated_at": _now()})
+        return {"watchlist_id": watchlist_id, "ticker": symbol}
     with _connect(path) as db:
         if not db.execute("SELECT 1 FROM watchlists WHERE id=?", (watchlist_id,)).fetchone():
             raise ValueError("unknown watchlist")
@@ -77,8 +117,18 @@ def add_member(watchlist_id: str, ticker: object, path: Path = DEFAULT_DB) -> di
     return {"watchlist_id": watchlist_id, "ticker": symbol}
 
 
-def remove_member(watchlist_id: str, ticker: object, path: Path = DEFAULT_DB) -> dict:
+def remove_member(watchlist_id: str, ticker: object, path: Path = DEFAULT_DB, *, repository=None) -> dict:
     symbol = _ticker(ticker)
+    if repository is not None:
+        members = repository.list_rows(
+            "watchlist_members",
+            query={"watchlist_id": f"eq.{watchlist_id}", "ticker": f"eq.{symbol}"},
+        ) or []
+        if not members:
+            raise ValueError("ticker is not in that watchlist")
+        repository.delete_row("watchlist_members", str(members[0].get("id") or f"{watchlist_id}:{symbol}"))
+        repository.update_row("watchlists", watchlist_id, {"updated_at": _now()})
+        return {"watchlist_id": watchlist_id, "ticker": symbol, "deleted": True}
     with _connect(path) as db:
         cursor = db.execute("DELETE FROM watchlist_members WHERE watchlist_id=? AND ticker=?", (watchlist_id, symbol))
     if cursor.rowcount != 1:
@@ -86,7 +136,12 @@ def remove_member(watchlist_id: str, ticker: object, path: Path = DEFAULT_DB) ->
     return {"watchlist_id": watchlist_id, "ticker": symbol, "deleted": True}
 
 
-def delete_watchlist(watchlist_id: str, path: Path = DEFAULT_DB) -> dict:
+def delete_watchlist(watchlist_id: str, path: Path = DEFAULT_DB, *, repository=None) -> dict:
+    if repository is not None:
+        if repository.get_row("watchlists", watchlist_id) is None:
+            raise ValueError("unknown watchlist")
+        repository.delete_row("watchlists", watchlist_id)
+        return {"deleted": watchlist_id}
     with _connect(path) as db:
         cursor = db.execute("DELETE FROM watchlists WHERE id=?", (watchlist_id,))
     if cursor.rowcount != 1:
@@ -94,7 +149,7 @@ def delete_watchlist(watchlist_id: str, path: Path = DEFAULT_DB) -> dict:
     return {"deleted": watchlist_id}
 
 
-def save_screen(name: object, criteria: object, watchlist_id: str | None = None, path: Path = DEFAULT_DB) -> dict:
+def save_screen(name: object, criteria: object, watchlist_id: str | None = None, path: Path = DEFAULT_DB, *, repository=None) -> dict:
     if not isinstance(criteria, dict) or not criteria:
         raise ValueError("criteria must be a non-empty object")
     unknown = set(criteria) - ALLOWED_CRITERIA
@@ -103,8 +158,20 @@ def save_screen(name: object, criteria: object, watchlist_id: str | None = None,
     normalized = {}
     for key, value in criteria.items():
         normalized[key] = bool(value) if key == "optionable" else float(value)
-    item = {"id": uuid.uuid4().hex, "name": _name(name), "watchlist_id": watchlist_id or None, "criteria": normalized,
-            "created_at": _now(), "updated_at": _now()}
+    now = _now()
+    label = _name(name)
+    if repository is not None:
+        if watchlist_id and repository.get_row("watchlists", watchlist_id) is None:
+            raise ValueError("unknown watchlist")
+        rows = repository.insert_row(
+            "saved_screens",
+            {"name": label, "watchlist_id": watchlist_id or None, "criteria": normalized, "created_at": now, "updated_at": now},
+        ) or []
+        if not rows:
+            raise ValueError("saved screen was not saved")
+        return {**dict(rows[0]), "criteria": normalized}
+    item = {"id": uuid.uuid4().hex, "name": label, "watchlist_id": watchlist_id or None, "criteria": normalized,
+            "created_at": now, "updated_at": now}
     with _connect(path) as db:
         if watchlist_id and not db.execute("SELECT 1 FROM watchlists WHERE id=?", (watchlist_id,)).fetchone():
             raise ValueError("unknown watchlist")
@@ -115,7 +182,12 @@ def save_screen(name: object, criteria: object, watchlist_id: str | None = None,
     return item
 
 
-def delete_screen(screen_id: str, path: Path = DEFAULT_DB) -> dict:
+def delete_screen(screen_id: str, path: Path = DEFAULT_DB, *, repository=None) -> dict:
+    if repository is not None:
+        if not repository.get_row("saved_screens", screen_id):
+            raise ValueError("unknown saved screen")
+        repository.delete_row("saved_screens", screen_id)
+        return {"deleted": screen_id}
     with _connect(path) as db:
         cursor = db.execute("DELETE FROM saved_screens WHERE id=?", (screen_id,))
     if cursor.rowcount != 1:
@@ -123,16 +195,29 @@ def delete_screen(screen_id: str, path: Path = DEFAULT_DB) -> dict:
     return {"deleted": screen_id}
 
 
-def run_screen(screen_id: str, *, quote_fn: Callable[[str], dict], universe: set[str], scanner_scores: dict[str, float], path: Path = DEFAULT_DB) -> dict:
-    with _connect(path) as db:
-        screen = db.execute("SELECT * FROM saved_screens WHERE id=?", (screen_id,)).fetchone()
+def run_screen(screen_id: str, *, quote_fn: Callable[[str], dict], universe: set[str], scanner_scores: dict[str, float], path: Path = DEFAULT_DB, repository=None) -> dict:
+    if repository is not None:
+        screen = repository.get_row("saved_screens", screen_id)
         if not screen:
             raise ValueError("unknown saved screen")
-        if screen["watchlist_id"]:
-            symbols = [r["ticker"] for r in db.execute("SELECT ticker FROM watchlist_members WHERE watchlist_id=? ORDER BY position", (screen["watchlist_id"],))]
+        criteria = screen.get("criteria") or {}
+        if screen.get("watchlist_id"):
+            members = repository.list_rows("watchlist_members", query={"watchlist_id": f"eq.{screen['watchlist_id']}"}) or []
+            symbols = [str(row.get("ticker")) for row in sorted(members, key=lambda row: (row.get("position") or 0, row.get("added_at") or ""))]
         else:
             symbols = sorted(universe)[:100]
-    criteria = json.loads(screen["criteria_json"])
+    else:
+        with _connect(path) as db:
+            screen = db.execute("SELECT * FROM saved_screens WHERE id=?", (screen_id,)).fetchone()
+            if not screen:
+                raise ValueError("unknown saved screen")
+            if screen["watchlist_id"]:
+                symbols = [r["ticker"] for r in db.execute("SELECT ticker FROM watchlist_members WHERE watchlist_id=? ORDER BY position", (screen["watchlist_id"],))]
+            else:
+                symbols = sorted(universe)[:100]
+        criteria = json.loads(screen["criteria_json"])
+    watchlist_id_value = screen["watchlist_id"] if isinstance(screen, sqlite3.Row) else screen.get("watchlist_id")
+    screen_name = screen["name"] if isinstance(screen, sqlite3.Row) else screen.get("name")
     results, errors = [], []
     for ticker in symbols:
         try:
@@ -151,6 +236,6 @@ def run_screen(screen_id: str, *, quote_fn: Callable[[str], dict], universe: set
                 results.append(row)
         except Exception as exc:
             errors.append({"ticker": ticker, "error": str(exc)})
-    return {"id": screen_id, "name": screen["name"], "criteria": criteria, "evaluated": len(symbols), "matches": results,
-            "errors": errors, "generated_at": _now(), "reproducible_inputs": {"watchlist_id": screen["watchlist_id"], "tickers": symbols},
+    return {"id": screen_id, "name": screen_name, "criteria": criteria, "evaluated": len(symbols), "matches": results,
+            "errors": errors, "generated_at": _now(), "reproducible_inputs": {"watchlist_id": watchlist_id_value, "tickers": symbols},
             "execution_capability": False}

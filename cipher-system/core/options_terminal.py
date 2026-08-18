@@ -106,6 +106,13 @@ def chain_view(ticker: str, spot_quote: dict, rows: Sequence[dict], *,
         "iv_rank": None, "iv_percentile": None,
         "iv_history_status": "UNAVAILABLE_INSUFFICIENT_HISTORY",
         "open_interest_caveat": "OI carries its provider date and may be prior-session data; missing OI stays unknown.",
+        "caveat": (
+            "OPRA data is not available for this limited Yahoo Finance/yfinance chain. "
+            "The chain may support strike browsing and modeled exposure where mid/IV/OI "
+            "inputs exist, but feed Greeks and event-time options flow are unavailable."
+            if any(row.get("feed") == "yahoo" for row in contracts)
+            else "Feed Greeks and open-interest dates remain provider-dependent; missing fields stay unknown."
+        ),
         "read_only": True,
     }
 

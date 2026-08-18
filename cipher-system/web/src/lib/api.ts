@@ -5,6 +5,8 @@
 // distinct from the mock types in src/types/cipher.ts used by not-yet-wired panels.
 
 import { coordinatedGet, invalidateRequests } from "@/lib/requestCache";
+import { getAccessToken } from "@/lib/auth";
+import { hostedApiUrl, isSupabaseConfigured } from "@/lib/supabase";
 
 export type RealQuote = {
   ticker: string;
@@ -142,9 +144,19 @@ export class ApiError extends Error {
   }
 }
 
+async function authHeaders(): Promise<Record<string, string>> {
+  if (!isSupabaseConfigured()) return {};
+  try {
+    const token = await getAccessToken();
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  } catch {
+    return {};
+  }
+}
+
 async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
   return coordinatedGet(path, async () => {
-    const res = await fetch(path, { cache: "no-store" });
+    const res = await fetch(hostedApiUrl(path), { cache: "no-store", signal, credentials: "include", headers: await authHeaders() });
     if (!res.ok) {
       let detail = "";
       let readOnly = false;
@@ -162,11 +174,12 @@ async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
 }
 
 async function postJson<T>(path: string, body: unknown, signal?: AbortSignal): Promise<T> {
-  const res = await fetch(path, {
+  const res = await fetch(hostedApiUrl(path), {
     method: "POST",
     cache: "no-store",
     signal,
-    headers: { "content-type": "application/json" },
+    credentials: "include",
+    headers: { "content-type": "application/json", ...(await authHeaders()) },
     body: JSON.stringify(body),
   });
   if (!res.ok) {
@@ -184,6 +197,31 @@ async function postJson<T>(path: string, body: unknown, signal?: AbortSignal): P
   const result = await res.json() as T;
   invalidateRequests();
   return result;
+}
+
+export type ProviderSessionStatus = {
+  status: "connected" | "disconnected" | "expired" | "unavailable" | string;
+  options_feed: "opra" | "indicative" | null;
+  stock_feed: "sip" | "iex" | null;
+  expires_at: string | null;
+  read_only: true;
+};
+
+export function fetchProviderSessionStatus(signal?: AbortSignal): Promise<ProviderSessionStatus> {
+  return getJson<ProviderSessionStatus>("/api/provider-session", signal);
+}
+
+export function connectProviderSession(input: {
+  key: string;
+  secret: string;
+  options_feed: "opra" | "indicative";
+  stock_feed: "sip" | "iex";
+}, signal?: AbortSignal): Promise<ProviderSessionStatus> {
+  return postJson<ProviderSessionStatus>("/api/provider-session", input, signal);
+}
+
+export function disconnectProviderSession(signal?: AbortSignal): Promise<ProviderSessionStatus> {
+  return postJson<ProviderSessionStatus>("/api/provider-session", { action: "disconnect" }, signal);
 }
 
 export function fetchQuote(ticker: string, signal?: AbortSignal): Promise<RealQuote> {
@@ -1850,6 +1888,24 @@ export function deleteWorkspaceLayout(
   return postJson("/api/workspace-layouts?action=delete", { name }, signal);
 }
 
+export type ChartSaveCard = {
+  id: string;
+  ticker: string;
+  price: number;
+  view: string;
+  dateAdded: string;
+  topLevels: { level: number; score: number }[];
+  imageUrl: string;
+};
+export const fetchChartSaves = (signal?: AbortSignal) => getJson<{ saves: ChartSaveCard[] }>("/api/chart-saves", signal);
+export const createChartSave = (save: Omit<ChartSaveCard, "id" | "dateAdded"> & { dateAdded: string }, signal?: AbortSignal) => postJson<ChartSaveCard>("/api/chart-saves?action=create", save, signal);
+export const deleteChartSave = (id: string, signal?: AbortSignal) => postJson<{ deleted: string }>("/api/chart-saves?action=delete", { id }, signal);
+
+export type StandingNote = { id: string; date: string; note: string; created_at: string; updated_at: string };
+export const fetchStandingNotes = (signal?: AbortSignal) => getJson<{ notes: StandingNote[] }>("/api/standing-notes", signal);
+export const saveStandingNote = (date: string, note: string, signal?: AbortSignal) => postJson<StandingNote>("/api/standing-notes?action=save", { date, note }, signal);
+export const deleteStandingNote = (date: string, signal?: AbortSignal) => postJson<{ deleted: string }>("/api/standing-notes?action=delete", { date }, signal);
+
 export type RealScanUniverse = {
   count: number;
   /** Optionable tickers, ordered by the backend's own liquidity/size ranking. */
@@ -1904,6 +1960,15 @@ export type ProviderCapabilities = {
     credentials_configured: false;
     status: "unsupported";
     capabilities: string[];
+  };
+  yfinance: {
+    status: "available" | "unavailable";
+    quotes: string;
+    bars: string;
+    options_chain: string;
+    matrix: string;
+    flow: "unavailable";
+    caveat: string;
   };
 };
 

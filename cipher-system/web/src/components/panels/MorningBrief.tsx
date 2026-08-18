@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { fetchAutopilotStatus, fetchMorningBrief, fetchQuote, type AutopilotStatus, type MorningBriefResponse } from "@/lib/api";
+import { fetchAutopilotStatus, fetchMorningBrief, fetchQuote, fetchWatchlists, type AutopilotStatus, type MorningBriefResponse } from "@/lib/api";
 import { loadWatchlistTickers } from "@/lib/watchlist";
+import { isSupabaseConfigured } from "@/lib/supabase";
 import { Skeleton, SkeletonRegion } from "@/components/ui/skeleton";
 
 const money = (value?: number | null) => value == null ? "—" : value.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
@@ -29,13 +30,16 @@ export function MorningBrief({ ticker, onNavigate }: { ticker: string; onNavigat
       if (!ctrl.signal.aborted) setError(err instanceof Error ? err.message : "Morning Brief unavailable");
     });
     fetchAutopilotStatus(ctrl.signal).then(setAutopilot).catch(() => setAutopilot(null));
-    Promise.allSettled(loadWatchlistTickers().slice(0, 12).map(async (symbol) => {
+    const watchlistPromise = isSupabaseConfigured()
+      ? fetchWatchlists().then((result) => result.watchlists.flatMap((list) => list.tickers))
+      : Promise.resolve(loadWatchlistTickers());
+    watchlistPromise.then((symbols) => Promise.allSettled(symbols.slice(0, 12).map(async (symbol) => {
       const quote = await fetchQuote(symbol, ctrl.signal);
       return { ticker: symbol, price: quote.price_context, change: quote.day_change_pct };
-    })).then((results) => {
+    }))).then((results) => {
       const rows = results.flatMap((result) => result.status === "fulfilled" ? [result.value] : []);
       setWatchlist(rows.sort((a, b) => Math.abs(b.change) - Math.abs(a.change)));
-    });
+    }).catch(() => setWatchlist([]));
     return () => ctrl.abort();
   }, [ticker]);
 

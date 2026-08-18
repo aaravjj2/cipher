@@ -14,8 +14,10 @@ import {
   type RealLevel,
   type RealNightVisionResponse,
   type RealXrayRung,
+  createChartSave,
 } from "@/lib/api";
 import { addChartSave } from "@/lib/chartSaves";
+import { isSupabaseConfigured } from "@/lib/supabase";
 import { buildNightVisionGeometry, isRegularSessionBar, nearestBarIndex, visibleTail } from "@/lib/nightVisionGeometry";
 import type { ExposureMetric } from "@/types/cipher";
 
@@ -837,14 +839,20 @@ export function NightVision({
           if (!nightVision) return;
           const ranked = [...nightVision.levels].sort((a, b) => b.abs_gex - a.abs_gex).slice(0, 4);
           const maxAbs = ranked[0]?.abs_gex || 1;
-          addChartSave({
+          const save = {
             ticker,
             price: spot,
             view: expirationMode === "1exp" ? "1 Exp" : EXPIRATION_OPTIONS.find((o) => o.value === expirationMode)?.label || "1 Exp",
             imageUrl: "",
             topLevels: ranked.map((l) => ({ level: l.price, score: Math.round((l.abs_gex / maxAbs) * 100) })),
-          });
-          setToast("Chart saved");
+            dateAdded: new Date().toLocaleDateString("en-US", { month: "numeric", day: "numeric", year: "2-digit" }),
+          };
+          if (isSupabaseConfigured()) {
+            void createChartSave(save).then(() => setToast("Chart saved")).catch(() => setToast("Chart save unavailable"));
+          } else {
+            addChartSave(save);
+            setToast("Chart saved");
+          }
         }}
       >
         Save chart

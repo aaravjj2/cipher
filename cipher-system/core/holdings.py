@@ -116,6 +116,7 @@ def _find(store: dict, position_id: str) -> dict:
 
 def add_position(
     ticker: str, shares: Any, entry_price: Any, entry_date: str, notes: str | None = None,
+    *, repository=None,
 ) -> dict:
     ticker = _validate_ticker(ticker)
     shares = _validate_positive_number(shares, "shares")
@@ -136,6 +137,11 @@ def add_position(
         "created_at": now,
         "updated_at": now,
     }
+    if repository is not None:
+        rows = repository.insert_row("holdings", record) or []
+        if not rows:
+            raise HoldingsError("holding was not saved")
+        return dict(rows[0])
     with _LOCK:
         store = _load()
         store["positions"].append(record)
@@ -145,8 +151,37 @@ def add_position(
 
 def close_position(
     position_id: str, exit_price: Any, exit_date: str, shares: Any = None,
+    *, repository=None,
 ) -> dict:
     exit_price = _validate_positive_number(exit_price, "exit_price")
+    if repository is not None:
+        original = repository.get_row("holdings", position_id)
+        if not original or original.get("status") != "OPEN":
+            raise HoldingsError(f"position {position_id!r} is already closed or unknown")
+        exit_date = _validate_date(exit_date, "exit_date")
+        if exit_date < str(original.get("entry_date")):
+            raise HoldingsError("exit_date cannot precede entry_date")
+        remaining = float(original["shares"])
+        close_qty = remaining if shares is None else _validate_positive_number(shares, "shares")
+        if close_qty > remaining + 1e-9:
+            raise HoldingsError(f"cannot close {close_qty:g} shares; only {remaining:g} open on this position")
+        now = _utcnow()
+        if close_qty >= remaining - 1e-9:
+            rows = repository.update_row(
+                "holdings", position_id,
+                {"status": "CLOSED", "exit_price": exit_price, "exit_date": exit_date, "updated_at": now},
+            ) or []
+            return dict(rows[0]) if rows else {"id": position_id, "status": "CLOSED"}
+        repository.update_row("holdings", position_id, {"shares": remaining - close_qty, "updated_at": now})
+        rows = repository.insert_row("holdings", {
+            "ticker": original["ticker"], "shares": close_qty, "entry_price": original["entry_price"],
+            "entry_date": original["entry_date"], "status": "CLOSED", "notes": original.get("notes"),
+            "exit_price": exit_price, "exit_date": exit_date, "closed_from_id": position_id,
+            "created_at": now, "updated_at": now,
+        }) or []
+        if not rows:
+            raise HoldingsError("closed holding was not saved")
+        return dict(rows[0])
     with _LOCK:
         store = _load()
         original = _find(store, position_id)
@@ -195,9 +230,14 @@ def close_position(
     return result
 
 
-def delete_position(position_id: str) -> dict:
+def delete_position(position_id: str, *, repository=None) -> dict:
     """Removes a record outright — for correcting a mis-entry, not for recording a
     sale (close_position keeps realized P&L history; this does not)."""
+    if repository is not None:
+        if not repository.get_row("holdings", position_id):
+            raise HoldingsError(f"no position with id {position_id!r}")
+        repository.delete_row("holdings", position_id)
+        return {"deleted": True, "id": str(position_id)}
     with _LOCK:
         store = _load()
         row = _find(store, position_id)
@@ -206,7 +246,10 @@ def delete_position(position_id: str) -> dict:
     return {"deleted": True, "id": row["id"]}
 
 
-def list_positions(status: str | None = None) -> list[dict]:
+def list_positions(status: str | None = None, *, repository=None) -> list[dict]:
+    if repository is not None:
+        rows = repository.list_rows("holdings", query={"status": f"eq.{status}"} if status else {}) or []
+        return [dict(row) for row in rows]
     with _LOCK:
         store = _load()
     rows = store["positions"]
@@ -227,8 +270,9 @@ def holdings_status(
     bars_fn: Callable[..., dict] | None = None,
     include_benchmark: bool = False,
     benchmarks: tuple[str, ...] = ("SPY", "QQQ"),
+    *, repository=None,
 ) -> dict:
-    positions = list_positions()
+    positions = list_positions(repository=repository)
     open_rows, closed_rows = [], []
     quote_cache: dict[str, dict | None] = {}
     unresolved: list[str] = []

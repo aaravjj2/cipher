@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { fetchQuote } from "@/lib/api";
+import { fetchQuote, fetchWatchlists } from "@/lib/api";
 import { loadWatchlistTickers } from "@/lib/watchlist";
+import { isSupabaseConfigured } from "@/lib/supabase";
 
 /**
  * Always-visible quote strip under the header — the watchlist as a ticker tape, so the
@@ -13,10 +14,9 @@ import { loadWatchlistTickers } from "@/lib/watchlist";
  * `Promise.all(fetchQuote)` + interval pattern the Watchlists panel already uses, at the
  * same 15s cadence — nothing new is polled and no value is derived here.
  *
- * Membership is re-read from localStorage on every tick rather than pushed in: the list is
- * written from three places (Header's "+ Watchlist", the Watchlists panel, defaults) and
- * same-tab writes fire no `storage` event, so polling the key is what actually keeps this
- * in sync. It costs one localStorage read per 15s.
+ * Membership is re-read from the authenticated watchlist API in hosted mode and from
+ * localStorage in standalone mode. Polling keeps same-tab writes visible without relying
+ * on a browser `storage` event.
  */
 
 const REFRESH_MS = 15_000;
@@ -37,7 +37,14 @@ export function TickerStrip({ activeTicker, onSelect }: TickerStripProps) {
   const [rows, setRows] = useState<Record<string, Row>>({});
 
   const refresh = useCallback(async () => {
-    const watchlist = loadWatchlistTickers();
+    let watchlist: string[] = [];
+    try {
+      watchlist = isSupabaseConfigured()
+        ? (await fetchWatchlists()).watchlists.flatMap((list) => list.tickers)
+        : loadWatchlistTickers();
+    } catch {
+      // The active ticker still remains visible when the user-state service is unavailable.
+    }
     const merged = [activeTicker, ...watchlist.filter((t) => t !== activeTicker)]
       .filter(Boolean)
       .slice(0, MAX_SYMBOLS);

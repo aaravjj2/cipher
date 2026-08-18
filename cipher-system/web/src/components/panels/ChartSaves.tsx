@@ -3,12 +3,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { buildLadder, CHART_H, CHART_W, LABEL_W } from "@/lib/chartLadder";
 import { loadChartSaves, removeChartSave } from "@/lib/chartSaves";
+import { deleteChartSave, fetchChartSaves } from "@/lib/api";
+import { isSupabaseConfigured } from "@/lib/supabase";
 import type { ChartSaveCard } from "@/types/cipher";
 
 /**
  * Chart Saves panel — grid gallery of snapshots saved from Night Vision's "Save chart"
- * button (see NightVision.tsx), persisted to localStorage via lib/chartSaves.ts (no
- * server-side backend for this feature — same as the legacy vanilla-JS frontend).
+ * button (see NightVision.tsx). Local mode keeps the legacy localStorage fallback;
+ * hosted mode uses the authenticated Supabase-backed chart-saves repository.
  *
  * Every number on a card is real: ticker, saved spot price, and the scored levels. The
  * thumbnail draws only those, to scale. It used to draw a seeded random-walk
@@ -200,14 +202,24 @@ export function ChartSaves() {
 
   useEffect(() => {
     let cancelled = false;
-    queueMicrotask(() => {
-      if (!cancelled) { setCards(loadChartSaves()); setLoaded(true); }
-    });
+    if (isSupabaseConfigured()) {
+      fetchChartSaves().then((result) => {
+        if (!cancelled) { setCards(result.saves); setLoaded(true); }
+      }).catch(() => { if (!cancelled) { setCards([]); setLoaded(true); } });
+    } else {
+      queueMicrotask(() => {
+        if (!cancelled) { setCards(loadChartSaves()); setLoaded(true); }
+      });
+    }
     return () => { cancelled = true; };
   }, []);
 
   const handleDelete = (id: string) => {
-    setCards(removeChartSave(id));
+    if (isSupabaseConfigured()) {
+      void deleteChartSave(id).then(() => setCards((current) => current.filter((card) => card.id !== id)));
+    } else {
+      setCards(removeChartSave(id));
+    }
   };
 
   return (

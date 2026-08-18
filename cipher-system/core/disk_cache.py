@@ -34,6 +34,15 @@ DEFAULT_TTL_SECONDS = 60
 MAX_FILES = 4000
 
 
+def _persistent_cache_allowed() -> bool:
+    """Only operator/local requests may use the shared on-disk spillover."""
+    try:
+        from core.request_context import current
+        return current() is None
+    except ImportError:
+        return True
+
+
 def _key_to_path(key: str) -> Path:
     digest = hashlib.sha1(key.encode("utf-8")).hexdigest()[:20]
     return CACHE_DIR / f"{digest}.json"
@@ -41,6 +50,8 @@ def _key_to_path(key: str) -> Path:
 
 def get(key: str, ttl: int = DEFAULT_TTL_SECONDS):
     """Return the cached payload, or None when absent/stale/unreadable."""
+    if not _persistent_cache_allowed():
+        return None
     path = _key_to_path(key)
     try:
         if not path.is_file():
@@ -58,6 +69,8 @@ def get(key: str, ttl: int = DEFAULT_TTL_SECONDS):
 
 def put(key: str, payload) -> None:
     """Persist a payload. Written atomically so a reader never sees a partial file."""
+    if not _persistent_cache_allowed():
+        return
     try:
         CACHE_DIR.mkdir(parents=True, exist_ok=True)
         path = _key_to_path(key)

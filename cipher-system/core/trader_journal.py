@@ -109,7 +109,56 @@ def _json_list(value: Any, field: str) -> list:
     return value
 
 
-def create_entry(raw: dict, path: Path = DEFAULT_DB) -> dict:
+def _hosted_item(row: dict) -> dict:
+    metadata = row.get("metadata") if isinstance(row.get("metadata"), dict) else {}
+    item = {
+        "id": row.get("id"),
+        "ticker": row.get("ticker") or metadata.get("ticker"),
+        "title": row.get("title") or metadata.get("title"),
+        "status": metadata.get("status", "planned"),
+        "direction": metadata.get("direction", "neutral"),
+        "setup": metadata.get("setup"),
+        "thesis": metadata.get("thesis") or row.get("body"),
+        "invalidation": metadata.get("invalidation"),
+        "targets": metadata.get("targets", []),
+        "tags": metadata.get("tags", []),
+        "entry_at": metadata.get("entry_at"),
+        "entry_price": metadata.get("entry_price"),
+        "exit_at": metadata.get("exit_at"),
+        "exit_price": metadata.get("exit_price"),
+        "exit_reason": metadata.get("exit_reason"),
+        "position_id": metadata.get("position_id"),
+        "signal_id": metadata.get("signal_id"),
+        "chart_state": metadata.get("chart_state"),
+        "notes": metadata.get("notes"),
+        "legs": metadata.get("legs", []),
+        "chart_snapshot_svg": metadata.get("chart_snapshot_svg"),
+        "created_at": row.get("created_at"),
+        "updated_at": row.get("updated_at"),
+        "excursion": {"mfe_pct": None, "mae_pct": None, "bars": 0, "status": "UNAVAILABLE_HOSTED"},
+        "option_excursion": {"status": "UNAVAILABLE_HOSTED"},
+    }
+    return item
+
+
+def _hosted_metadata(record: dict) -> dict:
+    return {
+        "status": record.get("status"), "direction": record.get("direction"),
+        "setup": record.get("setup"), "thesis": record.get("thesis"),
+        "invalidation": record.get("invalidation"),
+        "targets": json.loads(record.get("targets_json") or "[]"),
+        "tags": json.loads(record.get("tags_json") or "[]"),
+        "entry_at": record.get("entry_at"), "entry_price": record.get("entry_price"),
+        "exit_at": record.get("exit_at"), "exit_price": record.get("exit_price"),
+        "exit_reason": record.get("exit_reason"), "position_id": record.get("position_id"),
+        "signal_id": record.get("signal_id"),
+        "chart_state": json.loads(record["chart_state_json"]) if record.get("chart_state_json") else None,
+        "notes": record.get("notes"), "legs": json.loads(record.get("legs_json") or "[]"),
+        "chart_snapshot_svg": record.get("chart_snapshot_svg"),
+    }
+
+
+def create_entry(raw: dict, path: Path = DEFAULT_DB, *, repository=None) -> dict:
     ticker = _symbol(raw.get("ticker"))
     title = str(raw.get("title") or "").strip()[:160]
     if not title:
@@ -143,6 +192,21 @@ def create_entry(raw: dict, path: Path = DEFAULT_DB) -> dict:
     }
     if len(record["chart_state_json"] or "") > 500_000:
         raise ValueError("chart_state is limited to 500 KB")
+    if repository is not None:
+        rows = repository.insert_row(
+            "journal_entries",
+            {
+                "ticker": record["ticker"],
+                "title": record["title"],
+                "body": record["notes"] or record["thesis"] or "",
+                "metadata": _hosted_metadata(record),
+                "created_at": record["created_at"],
+                "updated_at": record["updated_at"],
+            },
+        ) or []
+        if not rows:
+            raise ValueError("journal entry was not saved")
+        return _hosted_item(dict(rows[0]))
     with _connect(path) as db:
         db.execute(f"INSERT INTO journal_entries({','.join(record)}) VALUES({','.join('?' for _ in record)})", tuple(record.values()))
     return _decode(record)
@@ -158,7 +222,36 @@ def _decode(row: dict | sqlite3.Row) -> dict:
     return value
 
 
-def update_entry(entry_id: str, raw: dict, path: Path = DEFAULT_DB) -> dict:
+def update_entry(entry_id: str, raw: dict, path: Path = DEFAULT_DB, *, repository=None) -> dict:
+    if repository is not None:
+        existing = repository.get_row("journal_entries", entry_id)
+        if not existing:
+            raise ValueError("unknown journal entry")
+        metadata = dict(existing.get("metadata") or {})
+        for key in FIELDS:
+            if key in raw and key != "ticker":
+                metadata[key] = raw[key]
+        ticker = _symbol(raw.get("ticker", existing.get("ticker")))
+        title = str(raw.get("title", existing.get("title")) or "").strip()[:160]
+        if not title:
+            raise ValueError("title is required")
+        metadata["ticker"] = ticker
+        metadata["title"] = title
+        now = _now()
+        rows = repository.update_row(
+            "journal_entries",
+            entry_id,
+            {
+                "ticker": ticker,
+                "title": title,
+                "body": str(metadata.get("notes") or metadata.get("thesis") or ""),
+                "metadata": metadata,
+                "updated_at": now,
+            },
+        ) or []
+        if not rows:
+            raise ValueError("journal entry was not updated")
+        return _hosted_item(dict(rows[0]))
     updates = {key: value for key, value in raw.items() if key in FIELDS}
     with _connect(path) as db:
         current = db.execute("SELECT * FROM journal_entries WHERE id=?", (entry_id,)).fetchone()
@@ -210,7 +303,12 @@ def update_entry(entry_id: str, raw: dict, path: Path = DEFAULT_DB) -> dict:
     return _decode(saved)
 
 
-def delete_entry(entry_id: str, path: Path = DEFAULT_DB) -> dict:
+def delete_entry(entry_id: str, path: Path = DEFAULT_DB, *, repository=None) -> dict:
+    if repository is not None:
+        if not repository.get_row("journal_entries", entry_id):
+            raise ValueError("unknown journal entry")
+        repository.delete_row("journal_entries", entry_id)
+        return {"deleted": entry_id}
     with _connect(path) as db:
         cursor = db.execute("DELETE FROM journal_entries WHERE id=?", (entry_id,))
     if cursor.rowcount != 1:
@@ -238,7 +336,17 @@ def _excursion(entry: dict, bars_fn: Callable[..., dict] | None) -> dict:
     return {"mfe_pct": round(mfe, 6), "mae_pct": round(mae, 6), "bars": len(rows), "status": "CALCULATED_FROM_UNDERLYING_5M"}
 
 
-def list_entries(*, ticker: str | None = None, bars_fn: Callable[..., dict] | None = None, path: Path = DEFAULT_DB) -> dict:
+def list_entries(*, ticker: str | None = None, bars_fn: Callable[..., dict] | None = None, path: Path = DEFAULT_DB, repository=None) -> dict:
+    if repository is not None:
+        query = {"ticker": f"eq.{_symbol(ticker)}"} if ticker else {}
+        rows = repository.list_rows("journal_entries", query=query) or []
+        return {
+            "entries": [_hosted_item(dict(row)) for row in rows],
+            "as_of": _now(),
+            "manual_journal": True,
+            "execution_capability": False,
+            "caveat": "User-authored research journal. Hosted entries use Supabase RLS; excursion analytics remain unavailable until a user-scoped bar source is attached.",
+        }
     with _connect(path) as db:
         rows = db.execute("SELECT * FROM journal_entries WHERE (? IS NULL OR ticker=?) ORDER BY created_at DESC", (ticker, ticker)).fetchall()
     entries = []
@@ -255,7 +363,7 @@ def list_entries(*, ticker: str | None = None, bars_fn: Callable[..., dict] | No
             "caveat": "User-authored research journal. Underlying and captured option marks are separate; bid/mid/ask paths are simulated valuations, never claimed fills."}
 
 
-def save_template(name: object, state: object, path: Path = DEFAULT_DB) -> dict:
+def save_template(name: object, state: object, path: Path = DEFAULT_DB, *, repository=None) -> dict:
     label = str(name or "").strip()[:80]
     if not label or not isinstance(state, dict):
         raise ValueError("template name and state object are required")
@@ -263,13 +371,29 @@ def save_template(name: object, state: object, path: Path = DEFAULT_DB) -> dict:
     if len(raw) > 500_000:
         raise ValueError("template state is limited to 500 KB")
     now, template_id = _now(), uuid.uuid4().hex
+    if repository is not None:
+        existing = repository.list_rows("chart_templates", query={"name": f"eq.{label}"}) or []
+        if existing:
+            rows = repository.update_row(
+                "chart_templates", str(existing[0]["id"]), {"name": label, "state": state, "updated_at": now},
+            ) or []
+        else:
+            rows = repository.insert_row(
+                "chart_templates", {"name": label, "state": state, "created_at": now, "updated_at": now},
+            ) or []
+        if not rows:
+            raise ValueError("template was not saved")
+        return {**dict(rows[0]), "state": rows[0].get("state") or state}
     with _connect(path) as db:
         db.execute("INSERT INTO chart_templates VALUES(?,?,?,?,?) ON CONFLICT(name) DO UPDATE SET state_json=excluded.state_json,updated_at=excluded.updated_at", (template_id, label, raw, now, now))
         row = db.execute("SELECT * FROM chart_templates WHERE name=?", (label,)).fetchone()
     return {**dict(row), "state": json.loads(row["state_json"])}
 
 
-def list_templates(path: Path = DEFAULT_DB) -> dict:
+def list_templates(path: Path = DEFAULT_DB, *, repository=None) -> dict:
+    if repository is not None:
+        rows = repository.list_rows("chart_templates", query={"order": "name.asc"}) or []
+        return {"templates": [dict(row) for row in rows], "execution_capability": False}
     with _connect(path) as db:
         rows = db.execute("SELECT * FROM chart_templates ORDER BY name").fetchall()
     return {"templates": [{**dict(row), "state": json.loads(row["state_json"])} for row in rows], "execution_capability": False}

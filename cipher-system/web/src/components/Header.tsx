@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { MenuIcon, SearchIcon } from "@/components/icons";
 import { addToWatchlist } from "@/lib/watchlist";
-import { fetchProductStatus, fetchScanUniverse, type ProductStatus } from "@/lib/api";
+import { addWatchlistMember, createWatchlist, fetchProductStatus, fetchScanUniverse, fetchWatchlists, type ProductStatus } from "@/lib/api";
+import { isSupabaseConfigured } from "@/lib/supabase";
 
 type HeaderProps = {
   /** Current panel name, rendered uppercase in `.brand-sub` (e.g. "SETUP SCANNER"). */
@@ -136,6 +137,7 @@ export function Header({
   const [searchFocused, setSearchFocused] = useState(false);
   const [inputValue, setInputValue] = useState(ticker);
   const [watchlistAdded, setWatchlistAdded] = useState(false);
+  const [watchlistBusy, setWatchlistBusy] = useState(false);
   const [productStatus, setProductStatus] = useState<ProductStatus | null>(null);
   const isPositive = (changePct ?? 0) >= 0;
 
@@ -199,6 +201,26 @@ export function Header({
     const id = setTimeout(() => setWatchlistAdded(false), 1400);
     return () => clearTimeout(id);
   }, [watchlistAdded]);
+
+  const addCurrentTickerToWatchlist = async () => {
+    if (watchlistBusy) return;
+    setWatchlistBusy(true);
+    try {
+      if (!isSupabaseConfigured()) {
+        addToWatchlist(ticker);
+      } else {
+        const payload = await fetchWatchlists();
+        const list = payload.watchlists[0] ?? await createWatchlist("Default");
+        if (!list.tickers.includes(ticker)) await addWatchlistMember(list.id, ticker);
+      }
+      setWatchlistAdded(true);
+    } catch {
+      // The watchlist panel surfaces the detailed API error; the header remains a
+      // non-blocking shortcut and must not claim a write that failed.
+    } finally {
+      setWatchlistBusy(false);
+    }
+  };
 
   // Keep the input in sync when the active ticker changes externally (e.g. a watchlist click).
   useEffect(() => {
@@ -443,20 +465,17 @@ export function Header({
           </div>
         )}
 
-        {/* Quick-add current ticker to the real localStorage-backed watchlist (lib/watchlist.ts) */}
+        {/* Quick-add current ticker to the authenticated hosted watchlist, or local fallback. */}
         <button
           type="button"
-          onClick={() => {
-            addToWatchlist(ticker);
-            setWatchlistAdded(true);
-          }}
+          onClick={() => void addCurrentTickerToWatchlist()}
           className="shrink-0 rounded-[8px] px-[12px] py-2 text-[12px] font-semibold whitespace-nowrap"
           style={{
             border: `1px solid ${watchlistAdded ? "var(--accent)" : "var(--line)"}`,
             color: watchlistAdded ? "var(--accent)" : "var(--text-dim)",
           }}
         >
-          {watchlistAdded ? "Added" : "+ Watchlist"}
+          {watchlistBusy ? "Saving…" : watchlistAdded ? "Added" : "+ Watchlist"}
         </button>
 
         {/* Panel's own toolbar (Strike Matrix / Night Vision / Trident) portals into this slot.

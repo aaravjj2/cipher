@@ -55,7 +55,12 @@ def _connect(path: Path) -> sqlite3.Connection:
     return db
 
 
-def list_rules(db_path: Path = DEFAULT_DB) -> dict:
+def list_rules(db_path: Path = DEFAULT_DB, *, repository=None) -> dict:
+    if repository is not None:
+        rows = repository.list_rows("alerts", query={"order": "created_at.desc"}) or []
+        return {"rules": [{**dict(row), "enabled": bool(row.get("enabled", True))} for row in rows],
+                "deliveries": [], "kinds": sorted(KINDS),
+                "local_only": False, "execution_capability": False}
     with _connect(db_path) as db:
         rows = db.execute(
             "SELECT id,ticker,kind,threshold,enabled,created_at FROM alert_rules ORDER BY created_at DESC"
@@ -66,7 +71,7 @@ def list_rules(db_path: Path = DEFAULT_DB) -> dict:
             "local_only": True, "execution_capability": False}
 
 
-def add_rule(*, ticker: str, kind: str, threshold: object, db_path: Path = DEFAULT_DB) -> dict:
+def add_rule(*, ticker: str, kind: str, threshold: object, db_path: Path = DEFAULT_DB, repository=None) -> dict:
     symbol = ticker.upper().strip()
     if not symbol or len(symbol) > 12 or not symbol.replace(".", "").replace("-", "").isalnum():
         raise ValueError("ticker must be a valid symbol")
@@ -80,13 +85,26 @@ def add_rule(*, ticker: str, kind: str, threshold: object, db_path: Path = DEFAU
         raise ValueError("threshold is outside the supported range")
     rule = {"id": uuid.uuid4().hex, "ticker": symbol, "kind": kind,
             "threshold": value, "enabled": True, "created_at": _now()}
+    if repository is not None:
+        rows = repository.insert_row(
+            "alerts",
+            {"ticker": symbol, "kind": kind, "threshold": value, "enabled": True, "created_at": rule["created_at"]},
+        ) or []
+        if not rows:
+            raise ValueError("alert rule was not saved")
+        return {**dict(rows[0]), "enabled": True}
     with _connect(db_path) as db:
         db.execute("INSERT INTO alert_rules VALUES (?,?,?,?,?,?)",
                    (rule["id"], symbol, kind, value, 1, rule["created_at"]))
     return rule
 
 
-def delete_rule(rule_id: str, db_path: Path = DEFAULT_DB) -> dict:
+def delete_rule(rule_id: str, db_path: Path = DEFAULT_DB, *, repository=None) -> dict:
+    if repository is not None:
+        if not repository.get_row("alerts", str(rule_id)):
+            raise ValueError("unknown alert rule")
+        repository.delete_row("alerts", str(rule_id))
+        return {"deleted": str(rule_id)}
     with _connect(db_path) as db:
         cursor = db.execute("DELETE FROM alert_rules WHERE id = ?", (str(rule_id),))
     if cursor.rowcount != 1:

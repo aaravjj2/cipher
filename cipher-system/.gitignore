@@ -1,0 +1,31 @@
+.env
+.env.*
+!.env.example
+!web/.env.hosted.example
+
+app/.env
+app/.scanner-ingest-token
+app/logs/
+app/public_backup_*/
+web/.next/
+web/out/
+web/node_modules/
+web/test-results/
+
+# Local research state and provider caches
+data/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.db
+*.db-shm
+*.db-wal
+
+# Supabase CLI local state (project link/ref cache)
+supabase/.temp/
+
+# Python/OS/editor artifacts
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.DS_Store

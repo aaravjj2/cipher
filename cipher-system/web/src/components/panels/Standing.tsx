@@ -4,7 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import { ChevronLeftIcon, ChevronRightIcon } from "@/components/icons";
 import { readLocal, writeLocal } from "@/lib/localStorage";
-import { fetchStanding, type StandingStatus } from "@/lib/api";
+import { deleteStandingNote, fetchStanding, fetchStandingNotes, saveStandingNote, type StandingStatus } from "@/lib/api";
+import { isSupabaseConfigured } from "@/lib/supabase";
 import { SkeletonCards } from "@/components/ui/skeleton";
 
 /**
@@ -14,8 +15,8 @@ import { SkeletonCards } from "@/components/ui/skeleton";
  * executor's position table, and core/evidence_status.py). Cipher places no live
  * orders and has no realized P&L, so unlike the Journal panel this replaced —
  * which invented a Month P&L figure with no backend behind it — there is no P&L
- * headline here. Manual per-day notes are the one piece with no server backend;
- * they remain their own localStorage layer, keyed by date.
+ * headline here. Local mode keeps browser-local day notes; hosted mode stores
+ * them through the authenticated Supabase repository.
  */
 
 const NOTES_STORAGE_KEY = "cipher_standing_notes_v1";
@@ -181,7 +182,11 @@ export function Standing() {
       setToday({ year: now.getFullYear(), month: now.getMonth(), day: now.getDate() });
       setView({ year: now.getFullYear(), month: now.getMonth() });
       setFormDate(now.toISOString().slice(0, 10));
-      setNotes(readLocal<DayNote[]>(NOTES_STORAGE_KEY, []));
+      if (isSupabaseConfigured()) {
+        fetchStandingNotes().then((result) => setNotes(result.notes.map((row) => ({ date: row.date, note: row.note })))).catch(() => setNotes([]));
+      } else {
+        setNotes(readLocal<DayNote[]>(NOTES_STORAGE_KEY, []));
+      }
     });
     return () => { cancelled = true; };
   }, []);
@@ -211,19 +216,30 @@ export function Standing() {
     if (today) setView({ year: today.year, month: today.month });
   }
 
-  function saveNote(e: React.FormEvent) {
+  async function saveNote(e: React.FormEvent) {
     e.preventDefault();
     const next = [...notes.filter((n) => n.date !== formDate), { date: formDate, note: formNote }].filter((n) => n.note.trim());
+    if (isSupabaseConfigured()) {
+      try {
+        if (formNote.trim()) await saveStandingNote(formDate, formNote);
+        else if (notes.some((entry) => entry.date === formDate)) await deleteStandingNote(formDate);
+      } catch { return; }
+    } else {
+      writeLocal(NOTES_STORAGE_KEY, next);
+    }
     setNotes(next);
-    writeLocal(NOTES_STORAGE_KEY, next);
     setFormNote("");
     setFormOpen(false);
   }
 
   function removeNote(date: string) {
     const next = notes.filter((n) => n.date !== date);
+    if (isSupabaseConfigured()) {
+      void deleteStandingNote(date).catch(() => {});
+    } else {
+      writeLocal(NOTES_STORAGE_KEY, next);
+    }
     setNotes(next);
-    writeLocal(NOTES_STORAGE_KEY, next);
   }
 
   const isTodayVisible = Boolean(today && view && view.year === today.year && view.month === today.month);

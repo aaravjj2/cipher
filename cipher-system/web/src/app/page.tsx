@@ -9,6 +9,9 @@ import { TickerStrip } from "@/components/TickerStrip";
 import { Workspace } from "@/components/panels/Workspace";
 import { SpyglassHeaderTabs, type SpyglassTab } from "@/components/panels/Spyglass";
 import { fetchQuote, type RealQuote } from "@/lib/api";
+import { AuthPanel } from "@/components/auth/AuthPanel";
+import { useAuthSession } from "@/lib/auth";
+import { isSupabaseConfigured } from "@/lib/supabase";
 
 const QUOTE_REFRESH_MS = 10_000;
 
@@ -22,8 +25,8 @@ const SPYGLASS_SUB_TITLES: Record<SpyglassTab, string> = {
 
 const WORKSPACE_COUNT = 2;
 
-export default function Home() {
-  const [activePanel, setActivePanel] = useState("Morning Brief");
+function TerminalHome({ guestMode = false }: { guestMode?: boolean }) {
+  const [activePanel, setActivePanel] = useState(guestMode ? "Strike Matrix" : "Morning Brief");
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [spyglassTab, setSpyglassTab] = useState<SpyglassTab>("spyglass");
   /**
@@ -141,6 +144,11 @@ export default function Home() {
           </main>
         ) : (
           <main className="flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-6">
+            {guestMode && (
+              <div className="mb-3 rounded-lg border px-3 py-2 text-[11px]" style={{ borderColor: "var(--gold)", color: "var(--text-dim)", background: "var(--panel)" }}>
+                Guest mode · delayed/unofficial Yahoo Finance data. Strike Matrix, quotes, bars, and limited option chains are available; saved data, OPRA flow, and Alpaca connections require sign-in.
+              </div>
+            )}
             <PanelHost
               panel={activePanel}
               ticker={ticker}
@@ -161,4 +169,14 @@ export default function Home() {
       />
     </div>
   );
+}
+
+export default function Home() {
+  const auth = useAuthSession();
+  const [guestMode, setGuestMode] = useState(false);
+  if (!isSupabaseConfigured()) return <TerminalHome />;
+  if (auth.loading) return <AuthPanel onGuestContinue={() => setGuestMode(true)} />;
+  if (auth.session) return <TerminalHome />;
+  if (guestMode) return <TerminalHome guestMode />;
+  return <AuthPanel onGuestContinue={() => setGuestMode(true)} />;
 }

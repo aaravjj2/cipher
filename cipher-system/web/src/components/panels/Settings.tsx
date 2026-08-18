@@ -15,6 +15,9 @@ import {
   type RealWeightLabStatus,
 } from "@/lib/api";
 import { readLocal, writeLocal } from "@/lib/localStorage";
+import { ProviderConnectionPanel } from "@/components/auth/ProviderConnectionPanel";
+import { signOut, useAuthSession } from "@/lib/auth";
+import { isSupabaseConfigured } from "@/lib/supabase";
 
 /**
  * Settings panel — real connection status (from /api/health) and Cipher Model calibration
@@ -206,10 +209,10 @@ function ConnectionCard() {
       />
 
       <p className="text-[13px] leading-relaxed" style={{ color: "var(--text-dim)" }}>
-        Cipher reads Alpaca options and price data through the local core service to build
-        the Strike Matrix, Night Vision charts, Trident, and Spyglass flow. Credentials live
-        only in that service&apos;s local <code>.env</code> file — this browser never sees
-        keys, and Cipher never places trades or generates orders.
+        Cipher reads Alpaca options and price data through the authenticated core service to build
+        the Strike Matrix, Night Vision charts, Trident, and Spyglass flow. In local mode,
+        credentials remain in the core&apos;s <code>.env</code>; hosted users connect through the
+        session-only panel below. Cipher never places trades or generates orders.
       </p>
 
       {health && (
@@ -284,13 +287,16 @@ function ProviderCompatibilityCard() {
         <div className="flex flex-col gap-1.5">
           <StatRow label="Alpaca options" value={`${data.alpaca.options_feed.toUpperCase()} · ${data.alpaca.options_chain ?? "unknown"}`} />
           <StatRow label="Alpaca stocks" value={`${data.alpaca.stock_feed.toUpperCase()} · ${data.alpaca.stock_quotes_bars ?? "unknown"}`} />
+          <StatRow label="Anonymous fallback" value={`${data.yfinance.status} · quotes/bars ${data.yfinance.quotes === "available_degraded" ? "available" : "unavailable"}`} />
+          <StatRow label="Fallback options" value={`${data.yfinance.options_chain}; matrix ${data.yfinance.matrix}`} />
           <StatRow label="Tradier" value="Capture only" />
           <StatRow label="Webull" value="Unsupported" />
         </div>
       )}
       <p className="text-[11px]" style={{ color: "var(--text-mute)" }}>
-        Indicative options and IEX stock data are degraded research inputs; missing fields remain unknown.
-        GEX remains a public-OI heuristic, not verified dealer positioning.
+        Without Alpaca credentials, delayed Yahoo Finance/yfinance quotes and bars remain available as degraded research inputs.
+        OPRA flow and feed Greeks remain unavailable; strike-matrix rows may still render when chain fields are sufficient.
+        Missing fields remain unknown, and GEX remains a public-OI heuristic, not verified dealer positioning.
       </p>
     </Card>
   );
@@ -470,6 +476,25 @@ function WeightLabCard() {
   );
 }
 
+function AccountCard() {
+  const auth = useAuthSession();
+  if (!isSupabaseConfigured() || !auth.session) return null;
+  return (
+    <Card>
+      <CardHeading icon={KeyIcon} title="Account" />
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="text-[13px]" style={{ color: "var(--text)" }}>{auth.session.user.email ?? "Authenticated user"}</p>
+          <p className="mt-1 text-[11px]" style={{ color: "var(--text-mute)" }}>Signing out also clears the session-only Alpaca connection.</p>
+        </div>
+        <button type="button" onClick={() => void signOut()} className="rounded-md border px-3 py-2 text-[12px] font-semibold" style={{ borderColor: "var(--line)", color: "var(--text)" }}>
+          Sign out
+        </button>
+      </div>
+    </Card>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -488,8 +513,10 @@ export function Settings() {
       </div>
 
       <YourPlanCard />
+      <AccountCard />
       <PreferencesCard />
       <ConnectionCard />
+      <ProviderConnectionPanel />
       <ProviderCompatibilityCard />
       <ResearchStatusCard />
       <EvidenceStatusCard />

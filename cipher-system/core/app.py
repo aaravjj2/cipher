@@ -6,6 +6,7 @@ It is not verified dealer positioning.
 """
 from __future__ import annotations
 
+import hmac
 import json
 import math
 import os
@@ -39,6 +40,9 @@ ROOT_DIR = CORE_DIR.parent
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 import disk_cache
+from core import provider_session
+from core import request_context
+from core import user_state
 from scanner import SCAN_UNIVERSE, UNIVERSE_META, get_scan_job, run_scan, start_scan_job
 import weight_lab
 import cluster_backtest
@@ -52,6 +56,8 @@ import holdings
 import ask_cipher
 import chat_jobs
 import workspace_layouts
+import chart_saves
+import standing_notes
 import options_backtest_catalog
 import gex_replay
 import alerts
@@ -73,6 +79,7 @@ import options_backtest_jobs
 import market_research_agent
 import finviz_discovery
 import autopilot_status
+import yfinance_provider
 from company_research_engine import yahoo_rss_headlines
 from zoneinfo import ZoneInfo
 
@@ -172,6 +179,22 @@ QUOTE_RESPONSE_BUDGET_SECONDS = 1.5
 _QUOTE_REFRESH_EXECUTOR = ThreadPoolExecutor(max_workers=4, thread_name_prefix="cipher-quote")
 _QUOTE_REFRESH_LOCK = threading.RLock()
 _QUOTE_REFRESH_INFLIGHT: dict[str, object] = {}
+
+
+def _session_limit(name: str, default: float) -> float:
+    try:
+        value = float(os.environ.get(name, default))
+    except (TypeError, ValueError):
+        value = default
+    return value if value > 0 else default
+
+
+PROVIDER_SESSIONS = provider_session.SessionStore(
+    now_fn=time.monotonic,
+    inactivity_seconds=_session_limit("CIPHER_PROVIDER_SESSION_INACTIVITY_SECONDS", 30 * 60),
+    absolute_seconds=_session_limit("CIPHER_PROVIDER_SESSION_ABSOLUTE_SECONDS", 12 * 60 * 60),
+    max_sessions=int(_session_limit("CIPHER_PROVIDER_SESSION_MAX", 32)),
+)
 
 
 def _cache_event(name: str, hit: bool) -> None:
@@ -283,6 +306,7 @@ def provider_capabilities(values: dict[str, str] | None = None) -> dict:
             "status": "unsupported",
             "capabilities": [],
         },
+        "yfinance": yfinance_provider.capability_status(),
     }
 
 
@@ -540,6 +564,22 @@ def research_status():
 
 
 def local_settings():
+    context = request_context.current()
+    if context is not None:
+        if not context.provider_session_id:
+            raise ValueError("An Alpaca provider session is required for hosted market data.")
+        credentials = PROVIDER_SESSIONS.get(context.user_id, context.provider_session_id)
+        if credentials is None:
+            raise ValueError("The Alpaca provider session is unavailable or expired.")
+        return (
+            credentials.key,
+            credentials.secret,
+            credentials.options_feed,
+            credentials.stock_feed,
+        )
+    if os.environ.get("CIPHER_HOSTED") == "1":
+        raise ValueError("provider session context is required for hosted market data")
+
     values = {}
     if ENV.is_file():
         for line in ENV.read_text(encoding="utf-8").splitlines():
@@ -569,6 +609,14 @@ def local_settings():
     options_feed = values.get("ALPACA_DATA_FEED", "opra").lower()
     stock_feed = values.get("ALPACA_STOCK_FEED", "sip").lower()
     return key, secret, options_feed, stock_feed
+
+
+def _alpaca_settings_or_none() -> tuple[str, str, str, str] | None:
+    """Resolve Alpaca only when an authenticated/session-scoped configuration exists."""
+    try:
+        return local_settings()
+    except (ValueError, RuntimeError):
+        return None
 
 
 DEFAULT_SCAN_WORKERS = 4
@@ -635,11 +683,17 @@ def alpaca(path, query=None, base=DATA):
 
 
 def resolve_options_feed(requested: str | None) -> str:
-    preferred = (requested or local_settings()[2] or "opra").lower()
+    explicit = str(requested or "").strip().lower()
+    if explicit in {"yahoo", "yfinance"}:
+        return "yahoo"
+    alpaca_settings = _alpaca_settings_or_none()
+    if alpaca_settings is None:
+        return "yahoo"
+    preferred = (explicit or alpaca_settings[2] or "opra").lower()
     if preferred not in {"opra", "indicative", "auto"}:
         preferred = "opra"
     if preferred == "auto":
-        preferred = local_settings()[2] if local_settings()[2] in {"opra", "indicative"} else "opra"
+        preferred = alpaca_settings[2] if alpaca_settings[2] in {"opra", "indicative"} else "opra"
     return preferred
 
 
@@ -746,7 +800,13 @@ def quote(ticker):
             _cache_event("quote", True)
             return deepcopy(cached[1])
     _cache_event("quote", False)
-    _, _, _, preferred_stock = local_settings()
+    alpaca_settings = _alpaca_settings_or_none()
+    if alpaca_settings is None:
+        result = yfinance_provider.quote(ticker)
+        with _CACHE_LOCK:
+            QUOTE_CACHE[ticker] = (time.time(), result)
+        return deepcopy(result)
+    _, _, _, preferred_stock = alpaca_settings
     feeds = []
     for feed in (preferred_stock, "sip", "iex"):
         if feed not in feeds:
@@ -763,7 +823,13 @@ def quote(ticker):
         except ValueError as exc:
             last_error = exc
     if result is None:
-        raise last_error or ValueError("Unable to load underlying quote.")
+        try:
+            result = yfinance_provider.quote(ticker)
+        except Exception:
+            raise last_error or ValueError("Unable to load underlying quote.")
+        with _CACHE_LOCK:
+            QUOTE_CACHE[ticker] = (time.time(), result)
+        return deepcopy(result)
     # Attach prior close / day change from recent daily bars only.  Use the
     # same wide, newest-tail daily-bar retrieval as /api/bars; a tight
     # date-only start/end can return stale older bars from Alpaca and invert
@@ -843,8 +909,8 @@ def bounded_quote(ticker):
 
 def option_chain(ticker, feed, force=False, max_pages=8, expiration_gte=None, expiration_lte=None):
     feed = resolve_options_feed(feed)
-    if feed not in {"opra", "indicative"}:
-        raise ValueError("feed must be 'opra' or 'indicative'.")
+    if feed not in {"opra", "indicative", "yahoo"}:
+        raise ValueError("feed must be 'opra', 'indicative', or 'yahoo'.")
     cache_key = (ticker.upper(), feed, int(max_pages), expiration_gte, expiration_lte)
     with _CACHE_LOCK:
         cached = CHAIN_CACHE.get(cache_key)
@@ -855,6 +921,11 @@ def option_chain(ticker, feed, force=False, max_pages=8, expiration_gte=None, ex
             _cache_event("chain", True)
             return deepcopy(cached[1])
     _cache_event("chain", False)
+    if feed == "yahoo":
+        contracts = yfinance_provider.option_chain(ticker, expiration_count=12)
+        with _CACHE_LOCK:
+            CHAIN_CACHE[cache_key] = (time.time(), contracts)
+        return deepcopy(contracts)
     # Fall back to the disk cache before paying for the network. This is what lets a
     # restart (or a second scan soon after the first) start warm instead of cold.
     disk_key = "chain|" + "|".join(str(part) for part in cache_key)
@@ -1300,7 +1371,15 @@ def matrix(ticker, feed, depth, expiration_count, force=False, chain_pages=None)
         "total_expirations_available": total_expirations_available,
         "rows": rows,
         "formula": "Gamma × open interest × 100 × spot² × 0.01; puts receive a negative sign. Null OI remains unknown.",
-        "caveat": "This is a public-OI heuristic, not verified dealer positioning. Cells with unavailable exposure inputs remain unknown rather than zero.",
+        "caveat": (
+            "OPRA options data is not available; this limited Yahoo Finance/yfinance chain "
+            "may still render strike rows, but it does not provide feed Greeks or an event-time tape. "
+            "GEX is calculated only where the existing model has sufficient mid/IV/OI inputs. "
+            "This remains a public-OI heuristic, not verified dealer positioning; unavailable "
+            "exposure inputs remain unknown rather than zero."
+            if used_feed == "yahoo"
+            else "This is a public-OI heuristic, not verified dealer positioning. Cells with unavailable exposure inputs remain unknown rather than zero."
+        ),
         "coverage": {
             "contracts": len(contracts),
             "contracts_missing_gamma": missing_gamma,
@@ -1311,7 +1390,10 @@ def matrix(ticker, feed, depth, expiration_count, force=False, chain_pages=None)
             # than taken straight from the feed. See exposure.resolve_iv/contract_size.
             "contracts_gamma_modeled": gamma_modeled_contracts[0],
             "contracts_oi_from_volume": oi_proxy_contracts[0],
-            "open_interest_source": "Alpaca option-contract metadata",
+            "open_interest_source": (
+                "Yahoo Finance/yfinance option-chain snapshot"
+                if used_feed == "yahoo" else "Alpaca option-contract metadata"
+            ),
             "open_interest_as_of": max((c.get("open_interest_date") or "" for c in contracts), default=None),
             "calculated_cells": sum(1 for row in rows for cell in row["cells"] if cell["available"]),
             "listed_cells": sum(1 for row in rows for cell in row["cells"] if cell.get("listed")),
@@ -1633,7 +1715,18 @@ def bars(ticker, timeframe, limit=200, start=None):
     # newest-`want`-only slice below for this case, since holdings-style benchmark
     # charts need the bars nearest the start date, not nearest now.
     start = start_override or (end - timedelta(days=calendar_days))
-    _, _, _, preferred_stock = local_settings()
+    alpaca_settings = _alpaca_settings_or_none()
+    if alpaca_settings is None:
+        result = yfinance_provider.bars(
+            ticker,
+            normalized,
+            limit=want,
+            start=start_override,
+        )
+        with _CACHE_LOCK:
+            BARS_CACHE[cache_key] = (time.time(), result)
+        return deepcopy(result)
+    _, _, _, preferred_stock = alpaca_settings
     feeds = []
     for feed in (preferred_stock, "sip", "iex"):
         if feed not in feeds:
@@ -1688,9 +1781,22 @@ def bars(ticker, timeframe, limit=200, start=None):
                 break
         except ValueError as exc:
             last_error = exc
-    if not output and last_error:
-        raise last_error
-    result = {"ticker": ticker.upper(), "timeframe": normalized, "feed": used_feed, "bars": output}
+    if not output:
+        try:
+            result = yfinance_provider.bars(
+                ticker,
+                normalized,
+                limit=want,
+                start=start_override,
+            )
+        except Exception:
+            if last_error:
+                raise last_error
+            raise ValueError("Unable to load underlying bars.")
+        with _CACHE_LOCK:
+            BARS_CACHE[cache_key] = (time.time(), result)
+        return deepcopy(result)
+    result = {"ticker": ticker.upper(), "timeframe": normalized, "feed": used_feed, "provider": "alpaca", "bars": output}
     with _CACHE_LOCK:
         BARS_CACHE[cache_key] = (time.time(), result)
     return deepcopy(result)
@@ -1866,6 +1972,14 @@ def _flow_unbounded(ticker, feed, min_premium=5000, max_price=None, option_type=
         return captured
 
     feed = resolve_options_feed(feed)
+    if feed == "yahoo":
+        return _flow_unavailable(
+            ticker,
+            feed,
+            min_premium,
+            reason="provider_unavailable",
+            detail="OPRA options trade data is not available without Alpaca; yfinance does not provide an event-time options tape.",
+        )
     contracts = option_chain(ticker, feed, force=force)
     prints = []
     for contract in contracts:
@@ -2168,6 +2282,39 @@ class Handler(BaseHTTPRequestHandler):
             return origin
         return "http://127.0.0.1:8283"
 
+    def _prepare_request_context(self) -> bool:
+        expected = os.environ.get("CIPHER_INTERNAL_PROXY_TOKEN")
+        if not expected:
+            return True
+        path = urlparse(self.path).path
+        supplied = self.headers.get("X-Cipher-Internal-Token", "")
+        if not supplied:
+            if path in {"/health", "/api/health"}:
+                return True
+            self.send_json(401, {"error": "internal authentication required", "read_only": True})
+            return False
+        if not hmac.compare_digest(supplied, expected):
+            self.send_json(401, {"error": "internal authentication failed", "read_only": True})
+            return False
+        guest = self.headers.get("X-Cipher-Guest", "") == "1"
+        user_id = self.headers.get("X-Cipher-User-Id", "").strip()
+        if guest:
+            if user_id != "guest":
+                self.send_json(401, {"error": "invalid guest context", "read_only": True})
+                return False
+        elif not user_id:
+            self.send_json(401, {"error": "user context required", "read_only": True})
+            return False
+        request_context.activate(
+            request_context.ProviderRequestContext(
+                user_id=user_id,
+                access_token=self.headers.get("X-Cipher-Access-Token"),
+                provider_session_id=self.headers.get("X-Cipher-Provider-Session"),
+                guest=guest,
+            )
+        )
+        return True
+
     def send_json(self, status, data):
         body = json.dumps(
             _json_safe(data), separators=(",", ":"), default=str, allow_nan=False
@@ -2259,6 +2406,14 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self):
+        if not self._prepare_request_context():
+            return
+        try:
+            self._do_GET()
+        finally:
+            request_context.clear()
+
+    def _do_GET(self):
         parsed = urlparse(self.path)
         params = parse_qs(parsed.query)
 
@@ -2272,11 +2427,18 @@ class Handler(BaseHTTPRequestHandler):
         feed = pget("feed")
         try:
             if parsed.path in {"/health", "/api/health"}:
-                key, secret, default_feed, stock_feed = local_settings()
+                if os.environ.get("CIPHER_HOSTED") == "1" and request_context.current() is None:
+                    values = _provider_env_values()
+                    default_feed = str(values.get("ALPACA_DATA_FEED") or "opra").lower()
+                    stock_feed = str(values.get("ALPACA_STOCK_FEED") or "sip").lower()
+                    configured = False
+                else:
+                    key, secret, default_feed, stock_feed = local_settings()
+                    configured = bool(key and secret)
                 data = {
                     "status": "ok",
                     "service": "cipher-core",
-                    "market_data_configured": bool(key and secret),
+                    "market_data_configured": configured,
                     "default_options_feed": default_feed,
                     "default_stock_feed": stock_feed,
                     "read_only": True,
@@ -2369,12 +2531,20 @@ class Handler(BaseHTTPRequestHandler):
             elif parsed.path == "/api/portfolio-risk":
                 action = (pget("action") or "status").lower()
                 if action == "export":
-                    data = {"filename": "cipher-portfolio.csv", "csv": portfolio_risk.export_csv(),
-                            "execution_capability": False}
+                    data = {"filename": "cipher-portfolio.csv", "csv": portfolio_risk.export_csv(
+                        repository=user_state.repository_for_context(),
+                    ), "execution_capability": False}
                 else:
-                    data = terminal_service.portfolio_snapshot(feed, quote_fn=quote, chain_fn=option_chain)
+                    data = terminal_service.portfolio_snapshot(
+                        feed, quote_fn=quote, chain_fn=option_chain,
+                        portfolio_repository=user_state.repository_for_context(),
+                    )
+            elif parsed.path == "/api/chart-saves":
+                data = chart_saves.list_saves(repository=user_state.repository_for_context())
+            elif parsed.path == "/api/standing-notes":
+                data = standing_notes.list_notes(repository=user_state.repository_for_context())
             elif parsed.path == "/api/watchlists":
-                data = watchlists.list_all()
+                data = watchlists.list_all(repository=user_state.repository_for_context())
             elif parsed.path == "/api/screens":
                 import scan_history
                 screen_id = pget("id") or ""
@@ -2383,11 +2553,15 @@ class Handler(BaseHTTPRequestHandler):
                 if recent:
                     saved = scan_history.load_scan(recent[0]["id"]) or {}
                     scores = {str(row.get("ticker")): float(row.get("score") or 0) for row in saved.get("top", [])}
-                data = watchlists.run_screen(screen_id, quote_fn=quote, universe=set(SCAN_UNIVERSE), scanner_scores=scores)
+                data = watchlists.run_screen(
+                    screen_id, quote_fn=quote, universe=set(SCAN_UNIVERSE), scanner_scores=scores,
+                    repository=user_state.repository_for_context(),
+                )
             elif parsed.path == "/api/journal":
                 action = (pget("action") or "list").lower()
-                data = trader_journal.list_templates() if action == "templates" else trader_journal.list_entries(
-                    ticker=pget("ticker") or None, bars_fn=bars,
+                repository = user_state.repository_for_context()
+                data = trader_journal.list_templates(repository=repository) if action == "templates" else trader_journal.list_entries(
+                    ticker=pget("ticker") or None, bars_fn=bars, repository=repository,
                 )
             elif parsed.path == "/api/company-context":
                 data = company_context.context(ticker)
@@ -2431,7 +2605,7 @@ class Handler(BaseHTTPRequestHandler):
                     self.send_json(400, {"error": f"Unknown gex-replay action: {action}"})
                     return
             elif parsed.path == "/api/alerts":
-                data = alerts.list_rules()
+                data = alerts.list_rules(repository=user_state.repository_for_context())
             elif parsed.path == "/api/alert-metric":
                 data = alert_metric(ticker, str(pget("kind") or ""), feed)
             elif parsed.path == "/api/quote":
@@ -2510,15 +2684,17 @@ class Handler(BaseHTTPRequestHandler):
                 data = holdings.holdings_status(
                     quote_fn=quote, bars_fn=bars,
                     include_benchmark=(pget("benchmark") or "").lower() in {"1", "true", "yes"},
+                    repository=user_state.repository_for_context(),
                 )
             elif parsed.path == "/api/news":
                 data = news_headlines(ticker, limit=int(pget("limit", "15")))
             elif parsed.path == "/api/workspace-layouts":
                 name = pget("name")
+                repository = user_state.repository_for_context()
                 data = (
-                    workspace_layouts.get_layout(name)
+                    workspace_layouts.get_layout(name, repository=repository)
                     if name
-                    else workspace_layouts.layouts_status()
+                    else workspace_layouts.layouts_status(repository=repository)
                 )
             elif parsed.path == "/api/contract-search":
                 # `strike` is required and reaches float() unguarded. Without this the
@@ -2996,6 +3172,14 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_POST(self):
+        if not self._prepare_request_context():
+            return
+        try:
+            self._do_POST()
+        finally:
+            request_context.clear()
+
+    def _do_POST(self):
         parsed = urlparse(self.path)
         params = parse_qs(parsed.query)
 
@@ -3006,6 +3190,43 @@ class Handler(BaseHTTPRequestHandler):
             return values[-1]
 
         try:
+            if parsed.path == "/internal/provider-session":
+                context = request_context.current()
+                if context is None:
+                    self.send_json(401, {"error": "user context required", "read_only": True})
+                    return
+                body = self._read_json_body()
+                action = str(body.get("action") or "").lower()
+                if action == "connect":
+                    options_feed = str(body.get("options_feed") or "opra").lower()
+                    stock_feed = str(body.get("stock_feed") or "sip").lower()
+                    if options_feed not in {"opra", "indicative"} or stock_feed not in {"sip", "iex"}:
+                        raise ValueError("provider feed selection is invalid")
+                    credentials = provider_session.ProviderCredentials(
+                        key=str(body.get("key") or ""),
+                        secret=str(body.get("secret") or ""),
+                        options_feed=options_feed,
+                        stock_feed=stock_feed,
+                    )
+                    session_id = PROVIDER_SESSIONS.connect(context.user_id, credentials)
+                    self.send_json(200, {"provider_session_id": session_id, "status": "connected", "read_only": True})
+                    return
+                session_id = str(body.get("provider_session_id") or "")
+                if action == "status":
+                    credentials = PROVIDER_SESSIONS.get(context.user_id, session_id)
+                    self.send_json(200, {
+                        "status": "connected" if credentials else "disconnected",
+                        "options_feed": credentials.options_feed if credentials else None,
+                        "stock_feed": credentials.stock_feed if credentials else None,
+                        "read_only": True,
+                    })
+                    return
+                if action == "disconnect":
+                    PROVIDER_SESSIONS.disconnect(context.user_id, session_id)
+                    self.send_json(200, {"status": "disconnected", "read_only": True})
+                    return
+                self.send_json(400, {"error": "unknown provider session action", "read_only": True})
+                return
             if parsed.path == "/api/backtest":
                 action = (pget("action") or "").lower()
                 body = self._read_json_body()
@@ -3042,6 +3263,7 @@ class Handler(BaseHTTPRequestHandler):
                         entry_price=body.get("entry_price"),
                         entry_date=body.get("entry_date", ""),
                         notes=body.get("notes"),
+                        repository=user_state.repository_for_context(),
                     )
                     self.send_json(201, data)
                     return
@@ -3051,11 +3273,12 @@ class Handler(BaseHTTPRequestHandler):
                         exit_price=body.get("exit_price"),
                         exit_date=body.get("exit_date", ""),
                         shares=body.get("shares"),
+                        repository=user_state.repository_for_context(),
                     )
                     self.send_json(200, data)
                     return
                 if action == "delete":
-                    data = holdings.delete_position(body.get("id", ""))
+                    data = holdings.delete_position(body.get("id", ""), repository=user_state.repository_for_context())
                     self.send_json(200, data)
                     return
                 self.send_json(400, {"error": f"Unknown holdings POST action: {action or '(none)'}"})
@@ -3068,11 +3291,14 @@ class Handler(BaseHTTPRequestHandler):
                 if action == "save":
                     data = workspace_layouts.save_layout(
                         name=body.get("name", ""), layout=body.get("layout"),
+                        repository=user_state.repository_for_context(),
                     )
                     self.send_json(200, data)
                     return
                 if action == "delete":
-                    data = workspace_layouts.delete_layout(body.get("name", ""))
+                    data = workspace_layouts.delete_layout(
+                        body.get("name", ""), repository=user_state.repository_for_context(),
+                    )
                     self.send_json(200, data)
                     return
                 self.send_json(
@@ -3112,11 +3338,11 @@ class Handler(BaseHTTPRequestHandler):
                 if action == "add":
                     self.send_json(201, alerts.add_rule(
                         ticker=body.get("ticker", ""), kind=body.get("kind", ""),
-                        threshold=body.get("threshold"),
+                        threshold=body.get("threshold"), repository=user_state.repository_for_context(),
                     ))
                     return
                 if action == "delete":
-                    self.send_json(200, alerts.delete_rule(body.get("id", "")))
+                    self.send_json(200, alerts.delete_rule(body.get("id", ""), repository=user_state.repository_for_context()))
                     return
                 self.send_json(400, {"error": f"Unknown alerts action: {action}"})
                 return
@@ -3150,17 +3376,42 @@ class Handler(BaseHTTPRequestHandler):
                 if not isinstance(body, dict):
                     raise ValueError("request body must be a JSON object")
                 if action == "add":
-                    self.send_json(201, portfolio_risk.add_position(body))
+                    self.send_json(201, portfolio_risk.add_position(body, repository=user_state.repository_for_context()))
                 elif action == "delete":
-                    self.send_json(200, portfolio_risk.delete_position(body.get("id", "")))
+                    self.send_json(200, portfolio_risk.delete_position(body.get("id", ""), repository=user_state.repository_for_context()))
                 elif action == "cash":
-                    self.send_json(200, portfolio_risk.set_cash(body.get("cash")))
+                    self.send_json(200, portfolio_risk.set_cash(body.get("cash"), repository=user_state.repository_for_context()))
                 elif action == "import":
                     self.send_json(200, portfolio_risk.import_csv(
                         str(body.get("csv") or ""), replace=bool(body.get("replace", False)),
+                        repository=user_state.repository_for_context(),
                     ))
                 else:
                     self.send_json(400, {"error": f"Unknown portfolio-risk action: {action}"})
+                return
+            if parsed.path == "/api/chart-saves":
+                body = self._read_json_body()
+                if not isinstance(body, dict):
+                    raise ValueError("request body must be a JSON object")
+                action = (pget("action") or "create").lower()
+                if action == "create":
+                    self.send_json(201, chart_saves.create_save(body, repository=user_state.repository_for_context()))
+                elif action == "delete":
+                    self.send_json(200, chart_saves.delete_save(body.get("id", ""), repository=user_state.repository_for_context()))
+                else:
+                    self.send_json(400, {"error": f"Unknown chart-saves action: {action}"})
+                return
+            if parsed.path == "/api/standing-notes":
+                body = self._read_json_body()
+                if not isinstance(body, dict):
+                    raise ValueError("request body must be a JSON object")
+                action = (pget("action") or "save").lower()
+                if action == "save":
+                    self.send_json(200, standing_notes.save_note(body, repository=user_state.repository_for_context()))
+                elif action == "delete":
+                    self.send_json(200, standing_notes.delete_note(body.get("date", ""), repository=user_state.repository_for_context()))
+                else:
+                    self.send_json(400, {"error": f"Unknown standing-notes action: {action}"})
                 return
             if parsed.path == "/api/watchlists":
                 action = (pget("action") or "create").lower()
@@ -3168,17 +3419,17 @@ class Handler(BaseHTTPRequestHandler):
                 if not isinstance(body, dict):
                     raise ValueError("request body must be a JSON object")
                 if action == "create":
-                    data, code = watchlists.create_watchlist(body.get("name")), 201
+                    data, code = watchlists.create_watchlist(body.get("name"), repository=user_state.repository_for_context()), 201
                 elif action == "add":
-                    data, code = watchlists.add_member(str(body.get("watchlist_id") or ""), body.get("ticker")), 200
+                    data, code = watchlists.add_member(str(body.get("watchlist_id") or ""), body.get("ticker"), repository=user_state.repository_for_context()), 200
                 elif action == "remove":
-                    data, code = watchlists.remove_member(str(body.get("watchlist_id") or ""), body.get("ticker")), 200
+                    data, code = watchlists.remove_member(str(body.get("watchlist_id") or ""), body.get("ticker"), repository=user_state.repository_for_context()), 200
                 elif action == "delete":
-                    data, code = watchlists.delete_watchlist(str(body.get("id") or "")), 200
+                    data, code = watchlists.delete_watchlist(str(body.get("id") or ""), repository=user_state.repository_for_context()), 200
                 elif action == "save-screen":
-                    data, code = watchlists.save_screen(body.get("name"), body.get("criteria"), body.get("watchlist_id")), 201
+                    data, code = watchlists.save_screen(body.get("name"), body.get("criteria"), body.get("watchlist_id"), repository=user_state.repository_for_context()), 201
                 elif action == "delete-screen":
-                    data, code = watchlists.delete_screen(str(body.get("id") or "")), 200
+                    data, code = watchlists.delete_screen(str(body.get("id") or ""), repository=user_state.repository_for_context()), 200
                 else:
                     self.send_json(400, {"error": f"Unknown watchlists action: {action}"})
                     return
@@ -3190,13 +3441,13 @@ class Handler(BaseHTTPRequestHandler):
                 if not isinstance(body, dict):
                     raise ValueError("request body must be a JSON object")
                 if action == "create":
-                    self.send_json(201, trader_journal.create_entry(body))
+                    self.send_json(201, trader_journal.create_entry(body, repository=user_state.repository_for_context()))
                 elif action == "update":
-                    self.send_json(200, trader_journal.update_entry(str(body.get("id") or ""), body))
+                    self.send_json(200, trader_journal.update_entry(str(body.get("id") or ""), body, repository=user_state.repository_for_context()))
                 elif action == "delete":
-                    self.send_json(200, trader_journal.delete_entry(str(body.get("id") or "")))
+                    self.send_json(200, trader_journal.delete_entry(str(body.get("id") or ""), repository=user_state.repository_for_context()))
                 elif action == "save-template":
-                    self.send_json(200, trader_journal.save_template(body.get("name"), body.get("state")))
+                    self.send_json(200, trader_journal.save_template(body.get("name"), body.get("state"), repository=user_state.repository_for_context()))
                 else:
                     self.send_json(400, {"error": f"Unknown journal action: {action}"})
                 return
@@ -3208,6 +3459,8 @@ class Handler(BaseHTTPRequestHandler):
                         "/api/backtest?action=ingest-scan",
                         "/api/holdings?action=add|close|delete",
                         "/api/workspace-layouts?action=save|delete",
+                        "/api/chart-saves?action=create|delete",
+                        "/api/standing-notes?action=save|delete",
                         "/api/ask",
                         "/api/alerts?action=add|delete",
                         "/api/options-builder",

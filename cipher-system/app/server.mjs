@@ -6,6 +6,9 @@ import { chmod, readFile } from "node:fs/promises";
 import { dirname, extname, join, normalize, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createAuthGate } from "./auth.mjs";
+import { createSupabaseAuth } from "./supabase_auth.mjs";
+import { createProviderSessionClient } from "./provider_session_client.mjs";
+import { createAuthSessionStore } from "./auth_session.mjs";
 import { createScannerIngestHandler } from "./scanner_ingest.mjs";
 
 const root = dirname(fileURLToPath(import.meta.url));
@@ -29,7 +32,46 @@ const scannerIngest = createScannerIngestHandler({
   forwardUrl: process.env.CIPHER_PAPER_EXECUTOR_URL || "",
 });
 const authGate = createAuthGate();
-if (authGate.enabled && !authGate.configured) {
+const hostedMode = process.env.CIPHER_HOSTED === "1";
+const internalProxyToken = String(process.env.CIPHER_INTERNAL_PROXY_TOKEN || "");
+const hostedOrigins = new Set(
+  String(process.env.CIPHER_HOSTED_ORIGINS || "")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean),
+);
+const guestMode = process.env.CIPHER_GUEST_MODE === "1";
+const guestMarketRoutes = new Set([
+  "/api/quote",
+  "/api/bars",
+  "/api/options-chain",
+  "/api/matrix",
+  "/api/heatmap",
+  "/api/night-vision",
+  "/api/provider-capabilities",
+]);
+const supabaseAuth = createSupabaseAuth({
+  supabaseUrl: process.env.SUPABASE_URL,
+  anonKey: process.env.SUPABASE_ANON_KEY,
+});
+const authSessions = createAuthSessionStore({
+  inactivityMs: Number(process.env.CIPHER_AUTH_SESSION_INACTIVITY_MS || 30 * 60 * 1000),
+  absoluteMs: Number(process.env.CIPHER_AUTH_SESSION_ABSOLUTE_MS || 12 * 60 * 60 * 1000),
+});
+const providerSessionClient = createProviderSessionClient({
+  coreUrl,
+  internalToken: internalProxyToken,
+});
+if (hostedMode && !internalProxyToken) {
+  throw new Error("Hosted mode requires CIPHER_INTERNAL_PROXY_TOKEN for the internal core hop.");
+}
+async function validateHostedRequest(req) {
+  const cookieSession = authSessions.get(req);
+  if (cookieSession) return cookieSession;
+  return supabaseAuth.validateRequest(req);
+}
+
+if (authGate.enabled && !authGate.configured && !hostedMode) {
   throw new Error(
     "Cipher authentication is enabled but CIPHER_APP_PASSWORD_HASH is not configured. "
     + "Set a hash or explicitly set CIPHER_APP_AUTH=off for local development.",
@@ -56,6 +98,16 @@ const mime = {
 const gzip = promisify(gzipCb);
 // Below this, framing and CPU cost more than the bytes saved.
 const GZIP_MIN_BYTES = 1400;
+
+const corsHeaders = (origin) => {
+  const value = String(origin || "");
+  if (!hostedMode || !hostedOrigins.has(value)) return {};
+  return {
+    "access-control-allow-origin": value,
+    "access-control-allow-credentials": "true",
+    vary: "Origin",
+  };
+};
 
 const sendJson = (res, status, body, headers = {}) => {
   res.writeHead(status, {
@@ -107,6 +159,31 @@ const clientKey = (req) => {
   return String(req.socket?.remoteAddress || "shared-client");
 };
 
+const guestRateBuckets = new Map();
+const GUEST_RATE_WINDOW_MS = 60_000;
+const GUEST_RATE_MAX = 60;
+
+function guestRateAllowed(req) {
+  const key = clientKey(req);
+  const now = Date.now();
+  const current = guestRateBuckets.get(key);
+  if (!current || current.expiresAt <= now) {
+    guestRateBuckets.set(key, { count: 1, expiresAt: now + GUEST_RATE_WINDOW_MS });
+    return true;
+  }
+  if (current.count >= GUEST_RATE_MAX) return false;
+  current.count += 1;
+  return true;
+}
+
+function guestAccessAllowed(req, url) {
+  if (!hostedMode || !guestMode) return false;
+  if ((req.method || "GET").toUpperCase() !== "GET") return false;
+  if (!guestMarketRoutes.has(url.pathname)) return false;
+  if (!hostedOrigins.has(String(req.headers.origin || ""))) return false;
+  return guestRateAllowed(req);
+}
+
 async function sendLoginPage(res, status = 200) {
   const page = await readFile(loginPagePath);
   res.writeHead(status, {
@@ -126,6 +203,8 @@ const routes = {
   "/api/holdings": "/api/holdings",
   "/api/news": "/api/news",
   "/api/workspace-layouts": "/api/workspace-layouts",
+  "/api/chart-saves": "/api/chart-saves",
+  "/api/standing-notes": "/api/standing-notes",
   "/api/ask": "/api/ask",
   "/api/research-status": "/api/research-status",
   "/api/provider-capabilities": "/api/provider-capabilities",
@@ -173,7 +252,23 @@ const routes = {
   "/api/backtest": "/api/backtest",
 };
 
-async function proxyCore(res, requestPath, query, { method = "GET", body = null, headers = {}, acceptEncoding = "" } = {}) {
+function trustedCoreHeaders(userContext) {
+  if (!hostedMode || !userContext) return {};
+  const headers = {
+    "x-cipher-internal-token": internalProxyToken,
+    "x-cipher-user-id": userContext.userId,
+  };
+  if (userContext.guest) {
+    headers["x-cipher-guest"] = "1";
+    return headers;
+  }
+  headers["x-cipher-access-token"] = userContext.accessToken;
+  const providerSessionId = providerSessionClient.sessionFor(userContext.userId);
+  if (providerSessionId) headers["x-cipher-provider-session"] = providerSessionId;
+  return headers;
+}
+
+async function proxyCore(res, requestPath, query, { method = "GET", body = null, headers = {}, acceptEncoding = "", requestOrigin = "" } = {}) {
   const target = new URL(requestPath, coreUrl);
   for (const [key, value] of query) target.searchParams.set(key, value);
   const init = { method, headers: { accept: "application/json", ...headers } };
@@ -194,6 +289,7 @@ async function proxyCore(res, requestPath, query, { method = "GET", body = null,
     "cache-control": "no-store",
     "x-content-type-options": "nosniff",
     vary: "accept-encoding",
+    ...corsHeaders(requestOrigin),
   };
   const accepts = String(acceptEncoding || "");
   if (data.length > GZIP_MIN_BYTES && /\bgzip\b/.test(accepts)) {
@@ -211,7 +307,7 @@ async function proxyCore(res, requestPath, query, { method = "GET", body = null,
   res.end(data);
 }
 
-async function proxySSE(req, res, query) {
+async function proxySSE(req, res, query, userContext = null) {
   const target = new URL("/api/stream", coreUrl);
   for (const [key, value] of query) target.searchParams.set(key, value);
   const controller = new AbortController();
@@ -219,7 +315,7 @@ async function proxySSE(req, res, query) {
   req.on("close", onClose);
   try {
     const response = await fetch(target, {
-      headers: { accept: "text/event-stream" },
+      headers: { accept: "text/event-stream", ...trustedCoreHeaders(userContext) },
       signal: controller.signal,
     });
     res.writeHead(response.status, {
@@ -256,8 +352,22 @@ async function proxySSE(req, res, query) {
 
 createServer(async (req, res) => {
   const url = new URL(req.url || "/", `http://${req.headers.host || "127.0.0.1"}`);
+  if (hostedMode && (req.method || "GET").toUpperCase() === "OPTIONS") {
+    const allowed = corsHeaders(req.headers.origin);
+    if (!allowed["access-control-allow-origin"]) return sendJson(res, 403, { error: "origin not allowed" });
+    res.writeHead(204, {
+      ...allowed,
+      "access-control-allow-methods": "GET, POST, OPTIONS",
+      "access-control-allow-headers": "Authorization, Content-Type, Accept",
+    });
+    return res.end();
+  }
   if (url.pathname === "/api/scanner-ingest" || url.pathname === "/api/scanner-ingest/") {
+    if (hostedMode) return sendJson(res, 401, { error: "authentication required" }, corsHeaders(req.headers.origin));
     return scannerIngest(req, res);
+  }
+  if (hostedMode && url.pathname === "/accessobsidian-browser-logger.js") {
+    return sendJson(res, 404, { error: "not found" });
   }
   if (url.pathname === "/accessobsidian-browser-logger.js") {
     if ((req.method || "GET").toUpperCase() !== "GET") {
@@ -284,6 +394,19 @@ createServer(async (req, res) => {
     // an unauthenticated body as disclosure, and it is right to. So an anonymous caller
     // gets liveness and nothing that identifies the deployment or its data sources.
     // Authenticated callers still get the full core health below.
+    if (hostedMode) {
+      const userContext = await validateHostedRequest(req);
+      if (!userContext) return sendJson(res, 200, { status: "ok" }, corsHeaders(req.headers.origin));
+      try {
+        return await proxyCore(res, "/health", new URLSearchParams(), {
+          acceptEncoding: req.headers["accept-encoding"] || "",
+          headers: trustedCoreHeaders(userContext),
+          requestOrigin: req.headers.origin || "",
+        });
+      } catch {
+        return sendJson(res, 503, { status: "unavailable", read_only: true }, corsHeaders(req.headers.origin));
+      }
+    }
     if (!authGate.isAuthenticated(req)) return sendJson(res, 200, { status: "ok" });
     try {
       return await proxyCore(res, "/health", new URLSearchParams(), {
@@ -292,6 +415,38 @@ createServer(async (req, res) => {
     } catch {
       return sendJson(res, 503, { status: "unavailable", read_only: true });
     }
+  }
+  if (hostedMode && url.pathname === "/auth/session") {
+    const method = (req.method || "GET").toUpperCase();
+    const headers = corsHeaders(req.headers.origin);
+    if (method === "GET") {
+      const session = authSessions.get(req);
+      if (!session) return sendJson(res, 401, { authenticated: false }, headers);
+      return sendJson(res, 200, { authenticated: true, user: { id: session.userId } }, headers);
+    }
+    if (method === "POST") {
+      const validated = await supabaseAuth.validateRequest(req);
+      if (!validated) return sendJson(res, 401, { error: "authentication required" }, headers);
+      const cookie = authSessions.create(validated);
+      return sendJson(
+        res,
+        200,
+        { authenticated: true, user: { id: validated.userId } },
+        { ...headers, "set-cookie": cookie },
+      );
+    }
+    if (method === "DELETE") {
+      const session = authSessions.get(req);
+      if (session) {
+        await providerSessionClient.disconnect(session).catch(() => {});
+      }
+      const cookie = authSessions.clear(req);
+      return sendJson(res, 200, { authenticated: false }, { ...headers, "set-cookie": cookie });
+    }
+    return sendJson(res, 405, { error: "method not allowed" }, { ...headers, allow: "GET, POST, DELETE" });
+  }
+  if (hostedMode && (url.pathname === "/api/login" || url.pathname === "/api/logout")) {
+    return sendJson(res, 404, { error: "local authentication is disabled in hosted mode" }, corsHeaders(req.headers.origin));
   }
   if (url.pathname === "/api/login") {
     if ((req.method || "GET").toUpperCase() !== "POST") {
@@ -331,7 +486,24 @@ createServer(async (req, res) => {
     }
     return sendJson(res, 200, { ok: true }, { "set-cookie": authGate.logoutCookie() });
   }
-  if (!authGate.isAuthenticated(req)) {
+  let hostedUser = null;
+  let guestContext = null;
+  if (hostedMode) {
+    hostedUser = await validateHostedRequest(req);
+    if (!hostedUser && guestAccessAllowed(req, url)) {
+      guestContext = { userId: "guest", accessToken: null, guest: true };
+    }
+    if (!hostedUser && !guestContext) {
+      if (url.pathname.startsWith("/api/") || url.pathname === "/api/stream" || url.pathname === "/api/live") {
+        return sendJson(res, 401, { error: "authentication required" }, corsHeaders(req.headers.origin));
+      }
+      try {
+        return await sendLoginPage(res);
+      } catch {
+        return sendJson(res, 503, { error: "login page unavailable" });
+      }
+    }
+  } else if (!authGate.isAuthenticated(req)) {
     if (url.pathname.startsWith("/api/") || url.pathname === "/api/stream" || url.pathname === "/api/live") {
       return sendJson(res, 401, { error: "authentication required" });
     }
@@ -344,13 +516,45 @@ createServer(async (req, res) => {
       return sendJson(res, 503, { error: "login page unavailable" });
     }
   }
+  if (hostedMode && url.pathname === "/api/provider-session") {
+    const method = (req.method || "GET").toUpperCase();
+    try {
+      if (method === "GET") {
+        return sendJson(res, 200, await providerSessionClient.status(hostedUser), corsHeaders(req.headers.origin));
+      }
+      if (method !== "POST") return sendJson(res, 405, { error: "method not allowed" }, corsHeaders(req.headers.origin));
+      const raw = await readBoundedBody(req, 4096);
+      let body;
+      try { body = JSON.parse(raw || "{}"); } catch { return sendJson(res, 400, { error: "invalid request" }, corsHeaders(req.headers.origin)); }
+      const action = String(body.action || "connect").toLowerCase();
+      if (action === "connect") {
+        const result = await providerSessionClient.connect({
+          userId: hostedUser.userId,
+          accessToken: hostedUser.accessToken,
+          key: body.key,
+          secret: body.secret,
+          optionsFeed: body.options_feed,
+          stockFeed: body.stock_feed,
+        });
+        return sendJson(res, 200, { status: result.status, read_only: true }, corsHeaders(req.headers.origin));
+      }
+      if (action === "disconnect") {
+        await providerSessionClient.disconnect(hostedUser);
+        return sendJson(res, 200, { status: "disconnected", read_only: true }, corsHeaders(req.headers.origin));
+      }
+      return sendJson(res, 400, { error: "unknown provider session action" }, corsHeaders(req.headers.origin));
+    } catch (error) {
+      return sendJson(res, 503, { error: String(error?.message || "provider session unavailable").slice(0, 240), read_only: true }, corsHeaders(req.headers.origin));
+    }
+  }
+  const coreUserContext = hostedUser || guestContext;
   if (url.pathname === "/api/stream" || url.pathname === "/api/live") {
     const query = new URLSearchParams(url.searchParams);
     if (query.has("symbol") && !query.has("ticker")) {
       query.set("ticker", query.get("symbol"));
       query.delete("symbol");
     }
-    return proxySSE(req, res, query);
+    return proxySSE(req, res, query, coreUserContext);
   }
   if (routes[url.pathname]) {
     const query = new URLSearchParams(url.searchParams);
@@ -378,8 +582,11 @@ createServer(async (req, res) => {
         if (ct) headers["content-type"] = ct;
       }
       return await proxyCore(res, routes[url.pathname], query, {
-        method, body, headers,
+        method,
+        body,
+        headers: { ...headers, ...trustedCoreHeaders(coreUserContext) },
         acceptEncoding: req.headers["accept-encoding"] || "",
+        requestOrigin: req.headers.origin || "",
       });
     } catch {
       return sendJson(res, 503, {
