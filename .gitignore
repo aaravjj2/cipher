@@ -42,7 +42,16 @@ earnings_model/data/
 "EOD strategy/results/"
 cipher-system/.scanner-ingest-token
 cipher-system/exports/**
-cipher-system/access-obsidian-complete-audit/access-obsidian-audit/scanner-extra-screenshots/XX*
+
+# Removed by the 2026-08-19 ponytail cleanup; vendored third-party bulk,
+# ad-hoc data exports, and ephemeral session/audit artifacts stay out of git.
+Stock data/
+research/
+cipher-system/access-obsidian-complete-audit/
+tradier_option_chains_raw.json
+tradier_option_chains_summary.csv
+cipher_session_log.csv
+cipher_matrix_*.csv
 
 # Frontend (cipher-system/web) — source is tracked, build output is not.
 cipher-system/web/node_modules/
