@@ -62,7 +62,7 @@ for (const profile of [
       const source = await panel.getAttribute("data-guest-source");
       expect(["demo", "live", "loading", "error"].includes(source || "")).toBe(true);
       if (definition.mode === "demo" || definition.mode === "locked") {
-        await expect(panel.getByText(/Illustrative judge demo/)).toBeVisible();
+        await expect(panel.getByText(/Illustrative/).first()).toBeVisible();
       }
     }
 

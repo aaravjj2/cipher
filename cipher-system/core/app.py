@@ -81,6 +81,7 @@ import finviz_discovery
 import autopilot_status
 import ai_synthesizer
 import yfinance_provider
+import skew_map
 from company_research_engine import yahoo_rss_headlines
 from zoneinfo import ZoneInfo
 
@@ -2615,6 +2616,8 @@ class Handler(BaseHTTPRequestHandler):
                     ticker, feed, expiration_count, quote_fn=quote, chain_fn=option_chain,
                     force=str(pget("fresh", "0")).lower() in {"1", "true", "yes"},
                 )
+            elif parsed.path == "/api/skew-map":
+                data = skew_map.build_skew_map(bars)
             elif parsed.path == "/api/portfolio-risk":
                 action = (pget("action") or "status").lower()
                 if action == "export":

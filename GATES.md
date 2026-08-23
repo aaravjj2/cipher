@@ -264,3 +264,41 @@ browser order authority.
 
 - [x] H8: A dated audit records exact guest-panel counts, paper-account canary evidence, order-boundary proof, test results, deployment health, submission artifacts, and deliberately deferred post-hackathon work.
   EVIDENCE: cipher-system/docs/audits/alpaca_hackathon_product_release_2026-08-23.md
+
+---
+
+# Gates: options-first UI overhaul
+
+Scope: Retire the premature hackathon framing, learn from the supplied skew-map
+method, install and apply the requested design guidance, and turn Cipher's guest
+experience into a coherent, responsive trading workstation verified in a real
+browser.
+
+- [x] U1: Requested Taste and Web Interface skills are installed and read completely; a suitable DESIGN.md reference is selected and recorded.
+  EVIDENCE: Installed/read taste-skill, redesign-skill, Vercel web-design-guidelines, and Playwright CLI; read the Binance awesome-design-md reference; recorded the selective use and product dials in cipher-system/DESIGN.md.
+
+- [x] U2: The supplied skew-map article is captured as an implementation brief with formulas, interpretation, data requirements, and honest limitations.
+  EVIDENCE: cipher-system/docs/skew_map_implementation_brief_2026-08-23.md records the mirrored-25-delta formulas, quadrants, raw-vs-normalized use, data contract, event/quality traps, and five-session limitation.
+
+- [x] U3: A headed-browser baseline audit records concrete hierarchy, density, navigation, accessibility, responsiveness, and failure-state defects before edits.
+  EVIDENCE: Headed Chrome baseline artifacts are artifacts/ui-before-desktop.png and artifacts/ui-before-guest-desktop.png; exact defects are recorded in cipher-system/docs/audits/options_ui_skew_overhaul_2026-08-23.md.
+
+- [x] U4: The shared shell and high-value guest surfaces use one restrained design system with clear hierarchy, less clutter, keyboard/focus support, and responsive behavior.
+  EVIDENCE: Shared tokens now use amber action, green/red movement, flat surfaces, 6px radius, tighter padding; page has a skip link, focus-visible treatment, min-h-dvh; guest showcase and ticker strip are flattened. Headed final desktop/mobile screenshots confirm the hierarchy.
+
+- [x] U5: Options skew is presented as a useful, clearly sourced surface that distinguishes available observations from unavailable or illustrative data.
+  EVIDENCE: core/skew_map.py and panels/SkewMap.tsx add the read-only /api/skew-map surface with stored OPRA provenance, aligned returns, raw/normalized skew, quadrants, coverage/history quality, missing states, event caveat, no execution capability, and 2 passing unit tests.
+
+- [x] U6: Playwright CLI verifies the full guest journey at desktop and mobile sizes without console, request, accessibility-basics, or horizontal-overflow failures.
+  CHECK: cd cipher-system/web && CIPHER_E2E_URL=https://cipher-main.tail39504f.ts.net:8443 npx playwright test e2e/guest-complete-audit.spec.ts
+  EXPECT: /2 passed/
+  EVIDENCE: Hosted exhaustive guest audit passed 2/2 across all 29 panels at 1440x900 and 390x844; headed CLI separately loaded the Skew Map and mobile Autopilot with overflow 0 and console 0. Final artifacts: artifacts/ui-after-skew-desktop.png and artifacts/ui-after-guest-mobile.png.
+
+- [x] U7: Node tests, web lint/type/build, security boundaries, build synchronization, and the full relevant Python suite pass after deployment.
+  EVIDENCE: Python 1,114 passed/1 skipped including research-only guard; app Node 33/33; web Node 65/65; skew 2/2; lint/type/build passed; app/public in sync; git diff check and server syntax passed; core/web active after deployment.
+
+- [x] U8: A dated audit records before/after evidence, exact checks, remaining limitations, and confirms no separate hackathon submission work was performed.
+  EVIDENCE: cipher-system/docs/audits/options_ui_skew_overhaul_2026-08-23.md.
+
+- [x] U9: A self-contained Cursor-agent handoff prompt documents architecture, services, data, safety boundaries, skills, MCPs, browser tooling, verification commands, current state, and prioritized next work.
+  EVIDENCE: cipher-system/docs/handoffs/CURSOR_AGENT_HANDOFF_2026-08-23.md.

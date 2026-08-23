@@ -2,7 +2,7 @@
 
 Local-first stocks and options intelligence terminal with an auditable Alpaca
 paper-trading agent. The active app lives in `cipher-system/` and provides
-Autopilot, Strike Matrix, Night Vision, Spyglass, scanners, earnings research,
+Autopilot, Strike Matrix, Skew Map, Night Vision, Spyglass, scanners, earnings research,
 watchlists, portfolios, journal, chart saves, and backtesting labs.
 
 It runs fully local against Alpaca market data or in a hosted multi-user mode
@@ -93,6 +93,7 @@ explicitly unavailable rather than zero.
 | Surface | Data Used |
 |---|---|
 | Strike Matrix | Alpaca OPRA option snapshots joined to option-contract open interest |
+| Skew Map | Stored mirrored 25-delta put/call IV joined to timestamp-aligned one-month underlying returns; positioning context only |
 | Night Vision | Strike Matrix exposure levels plus stock OHLCV bars |
 | Spyglass | Latest option trades from chain snapshots, classified against bid/ask |
 | Scanner | Matrix-derived GEX/VEX, OI, volume, support/resistance, and local scoring |

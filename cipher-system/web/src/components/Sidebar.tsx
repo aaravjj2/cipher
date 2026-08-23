@@ -61,6 +61,7 @@ export const NAV_SECTIONS: NavSection[] = [
       { label: "Ticker Workbench", icon: GridIcon },
       { label: "Night Vision", icon: NightVisionIcon },
       { label: "Options Terminal", icon: OptionsBacktestIcon },
+      { label: "Skew Map", icon: OptionsBacktestIcon },
       { label: "Strike Matrix", icon: GridIcon },
       { label: "Spyglass", icon: SearchIcon },
       { label: "Company Context", icon: NewsIcon },

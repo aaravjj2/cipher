@@ -33,6 +33,7 @@ import { TickerWorkbench as TickerWorkbenchBase } from "@/components/panels/Tick
 import { GuestShowcase } from "@/components/panels/GuestShowcase";
 import { guestPanelMode } from "@/lib/guestCatalog";
 import { Autopilot as AutopilotBase } from "@/components/panels/Autopilot";
+import { SkewMap as SkewMapBase } from "@/components/panels/SkewMap";
 
 /**
  * One place that maps a sidebar label to the panel it renders.
@@ -80,6 +81,7 @@ const OperatorStatus = memo(OperatorStatusBase);
 const ResearchDesk = memo(ResearchDeskBase);
 const TickerWorkbench = memo(TickerWorkbenchBase);
 const Autopilot = memo(AutopilotBase);
+const SkewMap = memo(SkewMapBase);
 
 /** Uppercase display titles — used by Header's subtitle and by dockview tab labels. */
 export const PANEL_TITLES: Record<string, string> = {
@@ -90,6 +92,7 @@ export const PANEL_TITLES: Record<string, string> = {
   "Ticker Workbench": "TICKER WORKBENCH",
   "Strike Matrix": "STRIKE MATRIX",
   "Options Terminal": "OPTIONS TERMINAL",
+  "Skew Map": "SKEW MAP",
   "Chart Workbench": "CHART WORKBENCH",
   "Night Vision": "NIGHT VISION",
   Spyglass: "SPYGLASS",
@@ -169,6 +172,8 @@ export function PanelHost({
       return <StrikeMatrix ticker={ticker} toolbarSlot={toolbarSlot} guestMode={guestMode} />;
     case "Options Terminal":
       return <OptionsTerminal key={ticker} ticker={ticker} onNavigate={onNavigate} />;
+    case "Skew Map":
+      return <SkewMap key={ticker} ticker={ticker} onNavigate={onNavigate} />;
     case "Chart Workbench":
       return <ChartWorkbench key={ticker} ticker={ticker} />;
     case "Night Vision":

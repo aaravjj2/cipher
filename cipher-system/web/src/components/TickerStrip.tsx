@@ -102,9 +102,9 @@ export function TickerStrip({ activeTicker, onSelect, guestMode = false }: Ticke
 
   return (
     <div
-      className="flex flex-row items-center gap-[6px] overflow-x-auto px-4 py-[5px]"
+      className="cipher-no-scrollbar flex flex-row items-center gap-0 overflow-x-auto px-3"
       style={{
-        background: "color-mix(in srgb, var(--panel) 60%, transparent)",
+        background: "var(--panel)",
         borderBottom: "1px solid var(--line)",
         fontFamily: "var(--font-mono)",
         fontSize: "11px",
@@ -120,10 +120,9 @@ export function TickerStrip({ activeTicker, onSelect, guestMode = false }: Ticke
             key={symbol}
             type="button"
             onClick={() => onSelect(symbol)}
-            className="flex shrink-0 flex-row items-baseline gap-[7px] rounded-[6px] px-[9px] py-[3px] whitespace-nowrap"
+            className="flex shrink-0 flex-row items-baseline gap-[6px] border-r border-[var(--line)] px-3 py-[6px] whitespace-nowrap hover:bg-[var(--panel-2)]"
             style={{
-              background: active ? "var(--nav-active)" : "var(--panel-2)",
-              border: "1px solid var(--line)",
+              background: active ? "var(--nav-active)" : "transparent",
               color: active ? "var(--text)" : "var(--text-dim)",
             }}
           >
@@ -133,9 +132,7 @@ export function TickerStrip({ activeTicker, onSelect, guestMode = false }: Ticke
             </span>
             <span
               style={{
-                // Cipher uses purple=up / red=down, not the conventional green=up — same
-                // convention as Header's quote block.
-                color: !row ? "var(--text-mute)" : positive ? "var(--accent)" : "var(--neg)",
+                color: !row ? "var(--text-mute)" : positive ? "var(--positive)" : "var(--neg)",
               }}
             >
               {row ? `${positive ? "+" : ""}${row.changePct.toFixed(2)}%${guestMode ? " demo" : ""}` : "···"}

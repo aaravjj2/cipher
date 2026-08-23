@@ -14,8 +14,8 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Cipher — Strike Matrix",
-  description: "Options research terminal — pixel-perfect UI clone",
+  title: "Cipher — Stocks & Options Research",
+  description: "An auditable, read-only stocks and options research workstation.",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
@@ -29,7 +29,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#07090f",
+  themeColor: "#080a0d",
 };
 
 export default function RootLayout({

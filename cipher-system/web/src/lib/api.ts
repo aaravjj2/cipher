@@ -641,6 +641,22 @@ export function fetchOptionsChain(ticker: string, expirationCount = 6, signal?: 
   return getJson<OptionsChainResponse>(`/api/options-chain?${params.toString()}`, signal);
 }
 
+export type SkewMapPoint = {
+  ticker: string; observed_at: string; market_session_date: string | null; front_expiry: string | null;
+  atm_iv: number | null; raw_skew: number | null; normalized_skew: number | null;
+  return_1m_pct: number | null; price_as_of: string | null; sector: string; quadrant: string;
+  iv_coverage: number; quote_coverage: number; median_spread_pct: number | null;
+  contract_count: number; feed: string | null; sessions: number; quality: string;
+  quality_reasons: string[]; price_error: string | null;
+};
+export type SkewMapResponse = {
+  generated_from: string; as_of: string | null; formula: string; points: SkewMapPoint[];
+  read_only: true; execution_capability: false; caveat: string;
+};
+export function fetchSkewMap(signal?: AbortSignal): Promise<SkewMapResponse> {
+  return getJson<SkewMapResponse>("/api/skew-map", signal);
+}
+
 export type BuilderLeg = Omit<Partial<OptionTerminalContract>, "type"> & {
   contract?: string; type: "call" | "put" | "stock"; side: "buy" | "sell";
   quantity: number; strike?: number; expiration?: string; entry_price?: number;

@@ -50,59 +50,60 @@
 
 :root {
   /* Cipher extras — raw tokens from live app, not mapped to shadcn names */
-  --bg: #07090f;
-  --panel: #0e131c;
-  --panel-2: #141b26;
-  --line: #242d3c;
-  --line-soft: #192130;
-  --text: #e5eaf1;
-  --text-dim: #a3adbc;
-  --text-mute: #738095;
-  --gold: #f7bd29;
-  --neg: #f93a52;
-  /* Success/connected status — the one deliberate exception to the purple=positive /
-     red=negative convention (see Header.tsx quote-change comment). Used for "CONNECTED"
-     style status pills only, never for numeric up/down deltas. */
-  --success: #3ecf8e;
-  --nav-active: color-mix(in srgb, #8b5cf6 25%, #141b26);
+  --bg: #080a0d;
+  --panel: #0e1217;
+  --panel-2: #151a21;
+  --line: #252b33;
+  --line-soft: #1a1f26;
+  --line-strong: #3a424d;
+  --text: #edf0f3;
+  --text-dim: #a8b0bb;
+  --text-mute: #737e8c;
+  --gold: #f0b90b;
+  --gold-strong: #f8c82e;
+  --accent: #f0b90b;
+  --positive: #20bf73;
+  --neg: #f04455;
+  --negative: #f04455;
+  --success: #20bf73;
+  --nav-active: color-mix(in srgb, #f0b90b 16%, #151a21);
   --glass-panel: linear-gradient(
     180deg,
-    color-mix(in srgb, #11161f 80%, transparent),
-    color-mix(in srgb, #0d1118 86%, transparent)
+    color-mix(in srgb, #151a21 82%, transparent),
+    color-mix(in srgb, #0e1217 88%, transparent)
   );
 
-  --background: #07090f;
-  --foreground: #d7dee9;
-  --card: #0d1118;
-  --card-foreground: #d7dee9;
-  --popover: #0d1118;
-  --popover-foreground: #d7dee9;
-  --primary: #9a4ff5;
-  --primary-foreground: #f3e9ff;
-  --secondary: #11161f;
-  --secondary-foreground: #d7dee9;
-  --muted: #11161f;
-  --muted-foreground: #5b6678;
-  --accent: #9a4ff5;
-  --accent-foreground: #f3e9ff;
-  --destructive: #f93a52;
-  --border: #1b2230;
-  --input: #1b2230;
-  --ring: #6c2bff;
-  --chart-1: #9a4ff5;
-  --chart-2: #6c2bff;
-  --chart-3: #f7bd29;
-  --chart-4: #f93a52;
-  --chart-5: #5b6678;
-  --radius: 10px;
-  --sidebar: #0d1118;
-  --sidebar-foreground: #d7dee9;
-  --sidebar-primary: #9a4ff5;
-  --sidebar-primary-foreground: #f3e9ff;
-  --sidebar-accent: #11161f;
-  --sidebar-accent-foreground: #d7dee9;
-  --sidebar-border: #1b2230;
-  --sidebar-ring: #6c2bff;
+  --background: #080a0d;
+  --foreground: #edf0f3;
+  --card: #0e1217;
+  --card-foreground: #edf0f3;
+  --popover: #151a21;
+  --popover-foreground: #edf0f3;
+  --primary: #f0b90b;
+  --primary-foreground: #16120a;
+  --secondary: #151a21;
+  --secondary-foreground: #edf0f3;
+  --muted: #151a21;
+  --muted-foreground: #737e8c;
+  --accent-foreground: #16120a;
+  --destructive: #f04455;
+  --border: #252b33;
+  --input: #252b33;
+  --ring: #f0b90b;
+  --chart-1: #f0b90b;
+  --chart-2: #20bf73;
+  --chart-3: #4a90e2;
+  --chart-4: #f04455;
+  --chart-5: #737e8c;
+  --radius: 6px;
+  --sidebar: #0e1217;
+  --sidebar-foreground: #edf0f3;
+  --sidebar-primary: #f0b90b;
+  --sidebar-primary-foreground: #16120a;
+  --sidebar-accent: #151a21;
+  --sidebar-accent-foreground: #edf0f3;
+  --sidebar-border: #252b33;
+  --sidebar-ring: #f0b90b;
 }
 
 .dark {
@@ -199,11 +200,31 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-feature-settings: "tnum" 1, "ss01" 1;
   }
   html {
     @apply font-sans;
   }
 }
+
+:where(button, a, input, select, textarea):focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+.cipher-skip-link {
+  position: fixed;
+  left: 12px;
+  top: 8px;
+  z-index: 100;
+  transform: translateY(-150%);
+  background: var(--gold);
+  color: #16120a;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 700;
+}
+.cipher-skip-link:focus { transform: translateY(0); }
 /* Horizontal toolbar strips scroll but must not show a scrollbar track: the header row is
    ~44px tall and a visible track eats a meaningful share of it, while ToolbarSlot's edge-fade
    already signals that there is more to reach. Scrolling itself is untouched -- wheel,

@@ -1,19 +1,50 @@
-# Cipher terminal design contract
+# Cipher interface system
 
-Derived selectively from Open Design's `trading-terminal` system:
+Cipher is a dense professional research workstation for everyday stock and
+options traders. It should feel calm under load: near-black surfaces, precise
+typography, one amber action accent, conventional green/red market movement,
+and borders used to organize—not decorate.
 
-- Desktop-first, dense grid panels, stable numeric typography, and border-defined surfaces.
-- No decorative rounded cards or animated data flicker.
-- Visible data gaps are labelled instead of filled with synthetic values.
+## Product dials
 
-Cipher-specific visual constraints from the reference app:
+- Design variance: 4/10
+- Motion: 2/10
+- Information density: 8/10
 
-- Background `#07090e`, charcoal panels, thin blue-black separators.
-- Magenta/purple for positive exposure, red for negative exposure, yellow for the global peak, off-white spot marker.
-- Top header: 29px; left rail: 116px; Matrix values: compact 7–8px data typography.
-- Matrix and Night Vision remain two distinct work surfaces.
+## Foundations
 
-Data integrity:
+- Background `#080a0d`; primary surface `#0e1217`; raised surface `#151a21`.
+- Amber `#f0b90b` is the single interactive/selection accent.
+- Positive market values are green `#20bf73`; negative values are red `#f04455`.
+- Space Grotesk carries navigation and prose. JetBrains Mono carries prices,
+  Greeks, times, identifiers, and tables.
+- Spacing follows a 4px base. Dense controls are 30–34px tall. Primary content
+  uses 12–16px gaps; no page should be a collection of floating rounded cards.
+- Radius is 4px for controls, 6px for panels, and never pill-shaped unless the
+  content is a status.
+- Borders express hierarchy. Shadows are limited to overlays and menus.
 
-- GEX requires both gamma and open interest. Missing input is shown as unknown; never as zero.
-- No order, paper-trading, or execution affordances belong in this UI.
+## Interaction
+
+- Every control has a visible focus ring and readable accessible name.
+- Hover must not move layout. Motion is 120–180ms and disabled for reduced
+  motion.
+- A skip link reaches the main workspace. Mobile navigation is a real drawer.
+- Tables scroll inside labelled regions; the page itself must not overflow.
+- Loading, missing, stale, demo, and live data are distinct visual states.
+
+## Options semantics
+
+- GEX remains a public-OI heuristic, never asserted dealer positioning.
+- Skew is positioning evidence, not prediction. Use mirrored 25-delta options.
+- Raw skew (put IV minus call IV) is shown in volatility points. Normalized skew
+  is secondary and mainly for comparable names.
+- Earnings/event contamination, quote coverage, history depth, and aligned-price
+  availability remain visible. Missing data is never zero.
+
+## Reference choice
+
+The Binance analysis from `voltagent/awesome-design-md` was selected only for
+its dense-market hierarchy, conventional P/L color semantics, compact controls,
+and restrained panel system. Cipher keeps its own identity and does not copy
+Binance assets, layouts, or proprietary UI.

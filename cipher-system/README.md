@@ -11,7 +11,7 @@ only broker client is isolated, limit-only, and hard-locked to Alpaca paper.
 ## Daily workflow
 
 ```text
-Morning Brief → Setup Scanner → Night Vision → Options Terminal
+Morning Brief → Setup Scanner → Night Vision → Skew Map → Options Terminal
               → Research / Journal → Paper Portfolios
 ```
 
@@ -136,6 +136,8 @@ automatic paper-trading promotion is enabled.
 
 - **Strike Matrix** — OPRA chain + contract OI → GEX/VEX heatmap, ±% windows, live SSE refresh
 - **Night Vision** — SIP/IEX candles + exposure level overlays (canvas)
+- **Skew Map** — stored 25-delta put/call IV versus aligned one-month returns,
+  with history depth, quote coverage, and provisional-data warnings
 - **Evidence timeline** — observed/captured times, freshness, coverage, missing
   inputs, caveats, replay identity, and live-versus-cached state beside the chart
 - **Spyglass** — latest option prints with inferred bid/ask aggressor and premium tiers

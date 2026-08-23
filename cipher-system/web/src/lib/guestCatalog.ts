@@ -24,6 +24,7 @@ export const GUEST_PANEL_CATALOG: readonly GuestPanelDefinition[] = [
   { label: "Ticker Workbench", section: "ANALYZE", mode: "hybrid" },
   { label: "Night Vision", section: "ANALYZE", mode: "hybrid" },
   { label: "Options Terminal", section: "ANALYZE", mode: "demo" },
+  { label: "Skew Map", section: "ANALYZE", mode: "live" },
   { label: "Strike Matrix", section: "ANALYZE", mode: "hybrid" },
   { label: "Spyglass", section: "ANALYZE", mode: "demo" },
   { label: "Company Context", section: "ANALYZE", mode: "demo" },

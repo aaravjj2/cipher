@@ -16,7 +16,7 @@ const tickers = catalog.match(/export const GUEST_TICKERS = \[([\s\S]*?)\] as co
   .match(/"[A-Z]+"/g)?.map((ticker) => ticker.slice(1, -1)) ?? [];
 
 test("guest catalog is the complete unique safe product surface", () => {
-  assert.equal(panels.length, 28);
+  assert.equal(panels.length, 29);
   assert.equal(new Set(panels.map((panel) => panel.label)).size, panels.length);
   assert.deepEqual(new Set(panels.map((panel) => panel.section)), new Set(["TODAY", "DISCOVER", "ANALYZE", "PLAN", "REVIEW", "LABS"]));
   assert.equal(panels.some((panel) => panel.label === "Autopilot" && panel.mode === "demo"), true);

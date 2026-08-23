@@ -116,7 +116,8 @@ function TerminalHome({ session = null }: { session?: AuthIdentity | null }) {
       : panelTitle(activePanel);
 
   return (
-    <div className="flex h-screen overflow-hidden" style={{ background: "var(--bg)" }}>
+    <div className="flex min-h-dvh overflow-hidden" style={{ background: "var(--bg)" }}>
+      <a className="cipher-skip-link" href="#cipher-workspace">Skip to workspace</a>
       <Sidebar
         activePanel={activePanel}
         onActivePanelChange={handleActivePanelChange}
@@ -151,15 +152,15 @@ function TerminalHome({ session = null }: { session?: AuthIdentity | null }) {
         {tiledMode ? (
           // Workspace mode owns its own scrolling: the grid must fill the viewport exactly
           // (dockview sizes itself from its container), and each tile scrolls internally.
-          <main className="flex-1 min-h-0 overflow-hidden">
+          <main id="cipher-workspace" tabIndex={-1} className="flex-1 min-h-0 overflow-hidden">
             <Workspace ticker={ticker} openRequest={openRequest} />
           </main>
         ) : (
-          <main className="flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-6">
+          <main id="cipher-workspace" tabIndex={-1} className="flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-4 xl:p-5">
             {guestMode && (
-              <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2 text-[11px]" style={{ borderColor: "var(--gold)", color: "var(--text-dim)", background: "var(--panel)" }}>
-                <span>Guest showcase · the full read-only workflow across MAG7, indices, and liquid leaders. Static demo values are labelled; live market panels are marked separately. Private writes, provider connections, system controls, and all order authority stay locked.</span>
-                <button type="button" onClick={() => void signOut()} className="rounded-md border px-2 py-1 font-semibold" style={{ borderColor: "var(--gold)", color: "var(--gold)" }}>Sign in for full access</button>
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border-l-2 border-[var(--gold)] bg-[var(--panel)] px-3 py-2 text-[10px] text-[var(--text-dim)]">
+                <span><strong className="text-[var(--text)]">Guest · read only.</strong> Live and illustrative values are labelled. Private data, writes, provider controls, and every order capability are locked.</span>
+                <button type="button" onClick={() => void signOut()} className="border border-[var(--line)] px-2 py-1 font-semibold text-[var(--gold)] hover:border-[var(--gold)]">Sign in</button>
               </div>
             )}
             {session?.mode === "developer" && (

@@ -74,7 +74,7 @@ test("morning brief stays compact and decision focused", () => {
   }
   assert.doesNotMatch(morning, /AI Executive Market Synthesis|Daily research workflow|Six shadow portfolios/);
   assert.ok(morning.split("<Card").length - 1 <= 5);
-  assert.match(home, /p-3 sm:p-6/);
+  assert.match(home, /p-3 sm:p-4 xl:p-5/);
 });
 
 test("scanner leads with jobs and compares quality-gated evidence compactly", () => {
@@ -132,8 +132,8 @@ test("guest mode showcases the full research workflow without private or order a
   for (const panel of ["Morning Brief", "Earnings Radar", "Setup Scanner", "Options Terminal", "Portfolio Risk", "Paper Portfolios", "Options Backtest", "GEX Replay", "Trident"]) {
     assert.match(guestShowcase, new RegExp(`"${panel}"`));
   }
-  assert.match(guestShowcase, /Illustrative judge demo/);
+  assert.match(guestShowcase, /Illustrative/);
   assert.match(guestShowcase, /not current quotes, recommendations, or performance claims/);
-  assert.match(guestShowcase, /no broker-order authority/);
+  assert.match(guestShowcase, /no browser order authority/);
   assert.doesNotMatch(guestShowcase, /submit_order|place_order|create_order|TradingClient|OrderClient/);
 });

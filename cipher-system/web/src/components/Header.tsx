@@ -242,7 +242,7 @@ export function Header({
 
   return (
     <header
-      className="topbar flex flex-col lg:flex-row lg:items-center gap-2 lg:gap-[14px] px-4 py-[10px] sticky top-0 z-30 text-[13px]"
+      className="topbar sticky top-0 z-30 flex flex-col gap-2 px-3 py-2 text-[13px] lg:flex-row lg:items-center lg:gap-3"
       style={{
         background: "color-mix(in srgb, var(--panel) 85%, transparent)",
         borderBottom: "1px solid var(--line)",
@@ -441,8 +441,7 @@ export function Header({
             className="quote-change"
             style={{
               fontFamily: "var(--font-mono)",
-              // Cipher uses purple=up / red=down, NOT the conventional green=up.
-              color: changePct == null ? "var(--text-mute)" : isPositive ? "var(--accent)" : "var(--neg)",
+              color: changePct == null ? "var(--text-mute)" : isPositive ? "var(--positive)" : "var(--neg)",
             }}
           >
             {changePct == null ? "···" : `${isPositive ? "+" : ""}${changePct.toFixed(2)}%`}
@@ -516,7 +515,7 @@ export function Header({
           badge below it so the right edge still pins.
         */}
         <span className="hidden min-[1850px]:inline min-[1850px]:ml-auto" style={{ color: "var(--text-mute)" }}>
-          Welcome {displayName}! 🚀
+          {displayName}
         </span>
         {/*
           This slot held a "Logout" button with no onClick, cloned from the reference site.
