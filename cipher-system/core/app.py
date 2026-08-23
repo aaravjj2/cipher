@@ -79,6 +79,7 @@ import options_backtest_jobs
 import market_research_agent
 import finviz_discovery
 import autopilot_status
+import ai_synthesizer
 import yfinance_provider
 from company_research_engine import yahoo_rss_headlines
 from zoneinfo import ZoneInfo
@@ -316,6 +317,23 @@ EARNINGS_RADAR_PATH = Path(
 )
 
 
+def _latest_due_earnings_run(now: datetime, *, grace_hours: float = 2.0) -> datetime:
+    """Return the latest weekday 08:15 ET run whose grace period has elapsed."""
+    local = (now - timedelta(hours=grace_hours)).astimezone(ET_ZONE)
+    scheduled = local.replace(hour=8, minute=15, second=0, microsecond=0)
+    if local < scheduled:
+        scheduled -= timedelta(days=1)
+    while scheduled.weekday() >= 5:
+        scheduled -= timedelta(days=1)
+    return scheduled.astimezone(timezone.utc)
+
+
+def _earnings_radar_is_stale(produced: datetime, now: datetime) -> bool:
+    # Allow a small early-start window for manually triggered or slightly
+    # early timer runs while still detecting a missed weekday refresh.
+    return produced.astimezone(timezone.utc) < _latest_due_earnings_run(now) - timedelta(minutes=15)
+
+
 def earnings_radar() -> dict:
     """Serve the latest earnings radar JSON written by the digest pass.
 
@@ -336,10 +354,12 @@ def earnings_radar() -> dict:
                 "as_of": utcnow(), "count": 0, "cards": []}
     try:
         produced = datetime.fromisoformat(str(payload.get("as_of")).replace("Z", "+00:00"))
-        age_hours = (datetime.now(timezone.utc) - produced.astimezone(timezone.utc)).total_seconds() / 3600
+        now = datetime.now(timezone.utc)
+        age_hours = (now - produced.astimezone(timezone.utc)).total_seconds() / 3600
+        stale = _earnings_radar_is_stale(produced, now)
     except (TypeError, ValueError):
         age_hours = None
-    stale = age_hours is not None and age_hours > 30.0
+        stale = True
     return {
         "status": "stale" if stale else "current",
         "age_hours": round(age_hours, 2) if age_hours is not None else None,
@@ -347,7 +367,12 @@ def earnings_radar() -> dict:
         "days_ahead": payload.get("days_ahead"),
         "count": len(payload.get("cards", [])),
         "cards": payload.get("cards", []),
-        "caveat": "Earnings dates are schedule estimates from the data provider, not guarantees.",
+        "paper_scorecard": payload.get("paper_scorecard"),
+        "validation": payload.get("validation"),
+        "caveat": (
+            "Earnings dates are provider estimates. Model structures are paper-only research; "
+            "historical classification accuracy is not live option P&L and no live performance is claimed."
+        ),
     }
 
 
@@ -2552,6 +2577,25 @@ class Handler(BaseHTTPRequestHandler):
                     ticker=ticker, quote_fn=bounded_quote, flow_fn=flow,
                     status_payload=freshness,
                 )
+            elif parsed.path == "/api/morning-brief/synthesize":
+                current_quote = bounded_quote(ticker)
+                freshness = product_status.status(
+                    ticker=ticker,
+                    quote=current_quote,
+                    flow_session=tradier_flow.latest_session(ticker),
+                    universe_meta=UNIVERSE_META,
+                )
+                base_brief = morning_brief.build(
+                    ticker=ticker, quote_fn=bounded_quote, flow_fn=flow,
+                    status_payload=freshness,
+                )
+                chosen_model = pget("model") or None
+                force = str(pget("force", "1")).lower() in {"1", "true", "yes"}
+                data = ai_synthesizer.synthesize_morning_brief(
+                    base_brief, model=chosen_model, force_refresh=force
+                )
+            elif parsed.path == "/api/ai-models":
+                data = {"models": ai_synthesizer.get_available_models()}
             elif parsed.path == "/api/research-desk":
                 action = (pget("action") or "latest").lower()
                 if action == "history":

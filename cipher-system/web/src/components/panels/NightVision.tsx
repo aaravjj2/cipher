@@ -20,6 +20,7 @@ import { addChartSave } from "@/lib/chartSaves";
 import { isSupabaseConfigured } from "@/lib/supabase";
 import { buildNightVisionGeometry, isRegularSessionBar, nearestBarIndex, visibleTail } from "@/lib/nightVisionGeometry";
 import type { ExposureMetric } from "@/types/cipher";
+import { GuestShowcase } from "@/components/panels/GuestShowcase";
 
 /**
  * Night Vision panel — candlestick chart with 5 overlay toggles, backed by the real
@@ -402,10 +403,12 @@ function XRayLadder({
 export function NightVision({
   ticker = "AAPL",
   toolbarSlot = null,
+  guestMode = false,
 }: {
   ticker?: string;
   /** DOM node (from Header's toolbarSlotRef) to portal the overlay-toggle row into. */
   toolbarSlot?: HTMLDivElement | null;
+  guestMode?: boolean;
 }) {
   const [expirationMode, setExpirationMode] = useState<ExpirationMode>("1exp");
   // Night Vision is primarily an intraday hedging view — the real product opens on an
@@ -867,6 +870,8 @@ export function NightVision({
 
   return (
     <section
+      data-guest-panel={guestMode ? "Night Vision" : undefined}
+      data-guest-source={guestMode ? (status === "ready" ? "live" : status) : undefined}
       className="night-vision flex flex-col gap-3"
       style={{ fontFamily: "var(--font-mono)", color: "var(--text)" }}
     >
@@ -1059,7 +1064,9 @@ export function NightVision({
         <SkeletonChart label={`Loading live ${ticker} chart and gamma levels…`} />
       )}
 
-      {status === "error" && (
+      {status === "error" && guestMode && <GuestShowcase panel="Night Vision" ticker={ticker} />}
+
+      {status === "error" && !guestMode && (
         <div
           className="flex flex-col items-center gap-2 rounded-[10px] py-16 text-[13px] text-center px-4"
           style={{ border: "1px solid var(--line)", color: "var(--neg)" }}

@@ -8,7 +8,10 @@ server:
   approved_origins: []
 
 scanner:
-  accepted_types: [flash_agentic]
+  # The primary RTH confirmation source is the regular-session Cipher scan;
+  # Flash-Agentic cards may merge as a secondary source. Both must be admitted
+  # so autopilot entries no longer depend on Flash-Agentic alone.
+  accepted_types: [cipher, flash, flash_agentic]
   episode_cooldown_minutes: 30
   maximum_signal_age_seconds: 120
   maximum_level_distance_pct: 12.0
@@ -17,11 +20,48 @@ strategy:
   allowed_tickers: [SPY, QQQ, IWM, AAPL, MSFT, NVDA, AMZN, GOOGL, META, TSLA, AVGO, AMD, MU, SNDK, NFLX, PLTR, COIN, IBIT]
   entry_window_et_start: "09:35"
   entry_window_et_end: "11:30"
+  # Autopilot premarket-entry mode: cipher cards may enter before 09:35 ET on
+  # the fresh premarket setup (the window close still binds; other scanner types
+  # are unaffected). The scheduler submits these only when
+  # CIPHER_AUTOPILOT_PREMARKET_ENTRY=1.
+  allow_premarket_entries: true
   # Setup names contain commas, so block mappings with quoted values are required:
   # YAML flow mappings ({...}) split every value at the first comma, which silently
   # truncated setups like "triple cluster (3 peaks" and made every card fail the
   # allowed-pattern filter (all entries SKIPPED_SETUP_DISABLED).
   allowed_patterns:
+    # Primary RTH confirmation scanner (cipher). Its setup labels are the GEX
+    # zone names from core/scanner.py plus the CIPHER MODEL fallback.
+    - {scanner_type: cipher, setup: "triple cluster (3 peaks, above)", direction: bullish}
+    - {scanner_type: cipher, setup: "triple cluster (3 peaks, above)", direction: bearish}
+    - {scanner_type: cipher, setup: "triple cluster (3 peaks, below)", direction: bullish}
+    - {scanner_type: cipher, setup: "triple cluster (3 peaks, below)", direction: bearish}
+    - {scanner_type: cipher, setup: "quad cluster (4 peaks, above)", direction: bullish}
+    - {scanner_type: cipher, setup: "quad cluster (4 peaks, above)", direction: bearish}
+    - {scanner_type: cipher, setup: "quad cluster (4 peaks, below)", direction: bullish}
+    - {scanner_type: cipher, setup: "quad cluster (4 peaks, below)", direction: bearish}
+    - {scanner_type: cipher, setup: "golden / top-pull", direction: bullish}
+    - {scanner_type: cipher, setup: "golden / top-pull", direction: bearish}
+    - {scanner_type: cipher, setup: "battle zone", direction: bullish}
+    - {scanner_type: cipher, setup: "battle zone", direction: bearish}
+    - {scanner_type: cipher, setup: "call wall", direction: bullish}
+    - {scanner_type: cipher, setup: "call wall", direction: bearish}
+    - {scanner_type: cipher, setup: "put floor", direction: bullish}
+    - {scanner_type: cipher, setup: "put floor", direction: bearish}
+    - {scanner_type: cipher, setup: "cipher model", direction: bullish}
+    - {scanner_type: cipher, setup: "cipher model", direction: bearish}
+    # Secondary merge source (flash) with the same narrative setups the general
+    # paper executor admits.
+    - {scanner_type: flash, setup: "floor bounce", direction: bullish}
+    - {scanner_type: flash, setup: "ceiling rejection", direction: bearish}
+    - {scanner_type: flash, setup: "momentum push", direction: bullish}
+    - {scanner_type: flash, setup: "momentum push", direction: bearish}
+    - {scanner_type: flash, setup: "rejection reversal", direction: bullish}
+    - {scanner_type: flash, setup: "rejection reversal", direction: bearish}
+    - {scanner_type: flash, setup: "breakout continuation", direction: bullish}
+    - {scanner_type: flash, setup: "breakdown continuation", direction: bearish}
+    - {scanner_type: flash, setup: "breakout attempt", direction: bullish}
+    - {scanner_type: flash, setup: "breakdown attempt", direction: bearish}
     - {scanner_type: flash_agentic, setup: "triple cluster (3 peaks, above)", direction: bullish}
     - {scanner_type: flash_agentic, setup: "triple cluster (3 peaks, above)", direction: bearish}
     - {scanner_type: flash_agentic, setup: "triple cluster (3 peaks, below)", direction: bullish}
@@ -86,6 +126,15 @@ simulation:
   exit_at_bid: true
   minimum_slippage_dollars: 0.01
   slippage_pct: 0.5
+
+execution:
+  # Explicitly authorized zero-capital forward test. The adapter rejects every
+  # host except Alpaca's paper endpoint and starts in shadow for reconciliation.
+  backend: alpaca_paper
+  order_timeout_seconds: 20
+  poll_interval_seconds: 1.0
+  auto_promote_paper: true
+  paper_forward_test_authorized: true
 
 vm_forwarding:
   enabled: false

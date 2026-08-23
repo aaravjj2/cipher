@@ -1,7 +1,7 @@
 """Idempotent daily Discord digest for the six option shadow portfolios."""
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 import json
 from pathlib import Path
 import sqlite3
@@ -10,6 +10,10 @@ from typing import Callable
 from core.fronttest_portfolios import DEFAULT_DB, NY, ACTIVE_SPECS, connect, portfolio_status
 from core.paper_portfolio_api import _open_mark
 from core.prospective_fronttests import DEFAULT_DB as DEFAULT_PROSPECTIVE_DB
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_AUTOPILOT_DB = Path("/home/aarav/Aarav/cipher/runtime/data/paper_runtime/data/paper_trades/autopilot_shadow.sqlite")
+DEFAULT_EARNINGS_PAPER_DB = REPO_ROOT / "earnings_model/data/paper_portfolio.sqlite"
 
 
 def ensure_schema(db: sqlite3.Connection) -> None:
@@ -59,9 +63,94 @@ def _prospective_snapshot(path: Path, report_day: date) -> list[dict]:
         return programs
 
 
+def _autopilot_snapshot(path: Path, report_day: date, starting_cash: float = 25_000.0) -> dict:
+    empty = {
+        "available": False, "operating_state": "UNAVAILABLE", "signals": 0,
+        "candidates": 0, "entries": 0, "exits": 0, "wins": 0, "losses": 0,
+        "entry_blocks": 0, "data_failures": 0, "open_positions": 0,
+        "daily_realized_pnl": 0.0, "unrealized_pnl": 0.0,
+        "opening_equity": starting_cash, "closing_marked_equity": starting_cash,
+    }
+    if not path.is_file():
+        return empty
+    start = datetime(report_day.year, report_day.month, report_day.day, tzinfo=NY).astimezone(timezone.utc)
+    end = (datetime(report_day.year, report_day.month, report_day.day, tzinfo=NY) + timedelta(days=1)).astimezone(timezone.utc)
+    window = (start.isoformat(), end.isoformat())
+    with sqlite3.connect(f"file:{path.resolve()}?mode=ro", uri=True, timeout=2) as db:
+        db.row_factory = sqlite3.Row
+        entries = int(db.execute(
+            "select count(*) from paper_positions where datetime(opened_at)>=datetime(?) and datetime(opened_at)<datetime(?)", window,
+        ).fetchone()[0])
+        closed = [dict(row) for row in db.execute(
+            "select * from paper_positions where status='CLOSED' and datetime(closed_at)>=datetime(?) and datetime(closed_at)<datetime(?)", window,
+        )]
+        all_closed = [dict(row) for row in db.execute(
+            "select * from paper_positions where status='CLOSED'",
+        )]
+        daily_pnl = sum((float(row["exit_price"]) - float(row["entry_price"])) * int(row["quantity"]) * 100 for row in closed)
+        total_pnl = sum((float(row["exit_price"]) - float(row["entry_price"])) * int(row["quantity"]) * 100 for row in all_closed)
+        open_rows = [dict(row) for row in db.execute(
+            """select p.*,
+                      (select m.bid from paper_marks m where m.position_id=p.id order by m.marked_at desc limit 1) mark_bid
+                 from paper_positions p where p.status in ('OPEN','SHADOW_OPEN')"""
+        )]
+        unrealized = sum(
+            (float(row["mark_bid"]) - float(row["entry_price"])) * int(row["quantity"]) * 100
+            for row in open_rows if row["mark_bid"] is not None
+        )
+        failures = int(db.execute(
+            """select count(*) from system_events where datetime(event_time)>=datetime(?) and datetime(event_time)<datetime(?)
+                 and (event_type in ('WORKER_ERROR','MARKET_DATA_PROBE_FAILED')
+                      or (event_type='ENTRY_BLOCKED' and payload_json like '%SKIPPED_MARKET_DATA%'))""", window,
+        ).fetchone()[0])
+        blocks = int(db.execute(
+            """select count(*) from system_events where event_type='ENTRY_BLOCKED'
+                 and datetime(event_time)>=datetime(?) and datetime(event_time)<datetime(?)""", window,
+        ).fetchone()[0])
+        signals = int(db.execute(
+            "select count(*) from signal_cards where datetime(captured_at)>=datetime(?) and datetime(captured_at)<datetime(?)", window,
+        ).fetchone()[0])
+        candidates = int(db.execute(
+            "select count(*) from contract_candidates where datetime(quote_timestamp)>=datetime(?) and datetime(quote_timestamp)<datetime(?)", window,
+        ).fetchone()[0])
+    state = "DATA_FAILURE" if failures else ("ACTIVE_POSITION" if open_rows else ("SETUP_REJECTED" if blocks else "HEALTHY_NO_SETUP"))
+    return {
+        "available": True, "operating_state": state, "signals": signals,
+        "candidates": candidates, "entries": entries, "exits": len(closed),
+        "wins": sum((float(row["exit_price"]) - float(row["entry_price"])) > 0 for row in closed),
+        "losses": sum((float(row["exit_price"]) - float(row["entry_price"])) < 0 for row in closed),
+        "entry_blocks": blocks, "data_failures": failures, "open_positions": len(open_rows),
+        "daily_realized_pnl": round(daily_pnl, 2), "unrealized_pnl": round(unrealized, 2),
+        "opening_equity": round(starting_cash + total_pnl - daily_pnl, 2),
+        "closing_marked_equity": round(starting_cash + total_pnl + unrealized, 2),
+    }
+
+
+def _earnings_snapshot(path: Path) -> dict:
+    empty = {"available": False, "open": 0, "settled": 0, "wins": 0, "estimated_realized_pnl": 0.0}
+    if not path.is_file():
+        return empty
+    with sqlite3.connect(f"file:{path.resolve()}?mode=ro", uri=True, timeout=2) as db:
+        row = db.execute(
+            """select count(*),
+                      coalesce(sum(case when status='OPEN' then 1 else 0 end),0),
+                      coalesce(sum(case when status='SETTLED' then 1 else 0 end),0),
+                      coalesce(sum(case when status='SETTLED' and realized_pnl>0 then 1 else 0 end),0),
+                      coalesce(sum(case when status='SETTLED' then realized_pnl else 0 end),0)
+                 from paper_positions"""
+        ).fetchone()
+    return {
+        "available": True, "total": int(row[0]), "open": int(row[1]),
+        "settled": int(row[2]), "wins": int(row[3]),
+        "estimated_realized_pnl": float(row[4]),
+    }
+
+
 def snapshot(
     db: sqlite3.Connection, report_day: date,
     prospective_db_path: Path = DEFAULT_PROSPECTIVE_DB,
+    autopilot_db_path: Path = DEFAULT_AUTOPILOT_DB,
+    earnings_db_path: Path = DEFAULT_EARNINGS_PAPER_DB,
 ) -> dict:
     day = report_day.isoformat()
     mark_now = datetime.now(timezone.utc)
@@ -130,6 +219,8 @@ def snapshot(
         "daily_trades": sum(row["daily_trades"] for row in portfolios),
         "portfolios": portfolios,
         "prospective_programs": _prospective_snapshot(prospective_db_path, report_day),
+        "autopilot": _autopilot_snapshot(autopilot_db_path, report_day),
+        "earnings": _earnings_snapshot(earnings_db_path),
     }
 
 
@@ -163,6 +254,19 @@ def format_message(data: dict) -> str:
                 f"{row['closed_signals']}/{row['minimum_sample']} closed | "
                 f"{row['wins']} positive | option Δ ${row['option_pnl_today']:+,.2f}"
             )
+    autopilot = data.get("autopilot") or {}
+    if autopilot.get("available"):
+        lines.append(
+            f"Local autopilot: {autopilot['operating_state']} | eq ${autopilot['opening_equity']:,.2f} → "
+            f"${autopilot['closing_marked_equity']:,.2f} | {autopilot['entries']} in / {autopilot['exits']} out | "
+            f"{autopilot['wins']}W/{autopilot['losses']}L | block {autopilot['entry_blocks']} / data {autopilot['data_failures']}"
+        )
+    earnings = data.get("earnings") or {}
+    if earnings.get("available"):
+        lines.append(
+            f"Earnings legacy: {earnings['open']} open / {earnings['settled']} settled / "
+            f"{earnings['wins']} wins | est. P&L ${earnings['estimated_realized_pnl']:+,.2f}"
+        )
     lines.append("Paper simulation only — no broker orders.")
     message = "\n".join(lines)
     if len(message) > 1900:
@@ -173,6 +277,8 @@ def format_message(data: dict) -> str:
 def deliver(
     sender: Callable[[str], None], *, db_path: Path = DEFAULT_DB,
     prospective_db_path: Path = DEFAULT_PROSPECTIVE_DB,
+    autopilot_db_path: Path = DEFAULT_AUTOPILOT_DB,
+    earnings_db_path: Path = DEFAULT_EARNINGS_PAPER_DB,
     now: datetime | None = None, force: bool = False,
 ) -> dict:
     moment = (now or datetime.now(timezone.utc)).astimezone(NY)
@@ -186,7 +292,7 @@ def deliver(
         if existing and existing["delivered_at"] and not force:
             return {"status": "already_delivered", "report_day": moment.date().isoformat(),
                     "delivered_at": existing["delivered_at"]}
-        data = snapshot(db, moment.date(), prospective_db_path)
+        data = snapshot(db, moment.date(), prospective_db_path, autopilot_db_path, earnings_db_path)
         message = format_message(data)
         generated = datetime.now(timezone.utc).isoformat()
         db.execute(
@@ -211,12 +317,14 @@ def deliver(
 def preview(
     db_path: Path = DEFAULT_DB, now: datetime | None = None,
     prospective_db_path: Path = DEFAULT_PROSPECTIVE_DB,
+    autopilot_db_path: Path = DEFAULT_AUTOPILOT_DB,
+    earnings_db_path: Path = DEFAULT_EARNINGS_PAPER_DB,
 ) -> dict:
     moment = (now or datetime.now(timezone.utc)).astimezone(NY)
     db = connect(db_path)
     try:
         ensure_schema(db)
-        data = snapshot(db, moment.date(), prospective_db_path)
+        data = snapshot(db, moment.date(), prospective_db_path, autopilot_db_path, earnings_db_path)
         return {"snapshot": data, "message": format_message(data)}
     finally:
         db.close()

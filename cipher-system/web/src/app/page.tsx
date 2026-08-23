@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Header } from "@/components/Header";
-import { Sidebar } from "@/components/Sidebar";
+import { GUEST_NAV_SECTIONS, Sidebar } from "@/components/Sidebar";
 import { CommandPalette, useCommandPaletteShortcut } from "@/components/CommandPalette";
 import { PanelHost, panelTitle } from "@/components/PanelHost";
 import { TickerStrip } from "@/components/TickerStrip";
@@ -10,8 +10,9 @@ import { Workspace } from "@/components/panels/Workspace";
 import { SpyglassHeaderTabs, type SpyglassTab } from "@/components/panels/Spyglass";
 import { fetchQuote, type RealQuote } from "@/lib/api";
 import { AuthPanel } from "@/components/auth/AuthPanel";
-import { useAuthSession } from "@/lib/auth";
+import { signOut, useAuthSession, type AuthIdentity } from "@/lib/auth";
 import { isSupabaseConfigured } from "@/lib/supabase";
+import { GUEST_PANEL_LABELS, GUEST_TICKER_SET } from "@/lib/guestCatalog";
 
 const QUOTE_REFRESH_MS = 10_000;
 
@@ -25,8 +26,12 @@ const SPYGLASS_SUB_TITLES: Record<SpyglassTab, string> = {
 
 const WORKSPACE_COUNT = 2;
 
-function TerminalHome({ guestMode = false }: { guestMode?: boolean }) {
-  const [activePanel, setActivePanel] = useState(guestMode ? "Strike Matrix" : "Morning Brief");
+function TerminalHome({ session = null }: { session?: AuthIdentity | null }) {
+  const guestMode = session?.mode === "guest";
+  const defaultPanel = guestMode
+    ? "Autopilot"
+    : session?.settings.defaultPanel || (session?.mode === "developer" ? "Operator Status" : "Morning Brief");
+  const [activePanel, setActivePanel] = useState(defaultPanel);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [spyglassTab, setSpyglassTab] = useState<SpyglassTab>("spyglass");
   /**
@@ -45,12 +50,14 @@ function TerminalHome({ guestMode = false }: { guestMode?: boolean }) {
   // Workspace tabs (real site's "1"/"2" next to the quote) — each slot keeps its own
   // active ticker; navigation/sidebar state stays shared across both, per the header
   // layout (tabs sit next to the ticker search, not the sidebar).
-  const [workspaceTickers, setWorkspaceTickers] = useState<string[]>(() => Array(WORKSPACE_COUNT).fill("AAPL"));
+  const [workspaceTickers, setWorkspaceTickers] = useState<string[]>(() => Array(WORKSPACE_COUNT).fill(session?.settings.defaultTicker || (guestMode ? "SPY" : "AAPL")));
   const [activeWorkspace, setActiveWorkspace] = useState(1);
   const ticker = workspaceTickers[activeWorkspace - 1];
   const setTicker = useCallback((next: string) => {
-    setWorkspaceTickers((prev) => prev.map((t, i) => (i === activeWorkspace - 1 ? next : t)));
-  }, [activeWorkspace]);
+    const normalized = next.trim().toUpperCase();
+    if (guestMode && !GUEST_TICKER_SET.has(normalized)) return;
+    setWorkspaceTickers((prev) => prev.map((t, i) => (i === activeWorkspace - 1 ? normalized : t)));
+  }, [activeWorkspace, guestMode]);
   const [quote, setQuote] = useState<RealQuote | null>(null);
   const [toolbarSlot, setToolbarSlot] = useState<HTMLDivElement | null>(null);
 
@@ -76,10 +83,11 @@ function TerminalHome({ guestMode = false }: { guestMode?: boolean }) {
   // Stable callback identities so Sidebar/Header (and, by extension, memoized panels)
   // don't see a "changed" prop on every quote-poll re-render of Home.
   const handleActivePanelChange = useCallback((panel: string) => {
+    if (guestMode && !GUEST_PANEL_LABELS.has(panel)) return;
     setActivePanel(panel);
     if (panel === "Spyglass") setSpyglassTab("spyglass");
     setOpenRequest((prev) => ({ label: panel, seq: prev.seq + 1 }));
-  }, []);
+  }, [guestMode]);
   const handleMobileOpenChange = useCallback((open: boolean) => setMobileNavOpen(open), []);
   const handleMenuClick = useCallback(() => setMobileNavOpen(true), []);
   const handlePaletteOpen = useCallback(() => setPaletteOpen(true), []);
@@ -115,8 +123,9 @@ function TerminalHome({ guestMode = false }: { guestMode?: boolean }) {
         mobileOpen={mobileNavOpen}
         onMobileOpenChange={handleMobileOpenChange}
         tiledMode={tiledMode}
-        onTiledModeChange={setTiledMode}
-        onCommandPaletteOpen={handlePaletteOpen}
+        onTiledModeChange={guestMode ? undefined : setTiledMode}
+        onCommandPaletteOpen={guestMode ? undefined : handlePaletteOpen}
+        sections={guestMode ? GUEST_NAV_SECTIONS : undefined}
       />
 
       <div className="flex flex-1 flex-col min-w-0 overflow-hidden">
@@ -132,9 +141,12 @@ function TerminalHome({ guestMode = false }: { guestMode?: boolean }) {
           workspaceCount={WORKSPACE_COUNT}
           activeWorkspace={activeWorkspace}
           onWorkspaceChange={setActiveWorkspace}
+          displayName={session?.settings.displayName || session?.user?.email?.split("@")[0] || (guestMode ? "Guest" : "Trader")}
+          accessMode={session?.mode || "local"}
+          onSignOut={session ? () => void signOut() : undefined}
         />
 
-        <TickerStrip activeTicker={ticker} onSelect={setTicker} />
+        <TickerStrip activeTicker={ticker} onSelect={setTicker} guestMode={guestMode} />
 
         {tiledMode ? (
           // Workspace mode owns its own scrolling: the grid must fill the viewport exactly
@@ -145,8 +157,14 @@ function TerminalHome({ guestMode = false }: { guestMode?: boolean }) {
         ) : (
           <main className="flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-6">
             {guestMode && (
-              <div className="mb-3 rounded-lg border px-3 py-2 text-[11px]" style={{ borderColor: "var(--gold)", color: "var(--text-dim)", background: "var(--panel)" }}>
-                Guest mode · delayed/unofficial Yahoo Finance data. Strike Matrix, quotes, bars, and limited option chains are available; saved data, OPRA flow, and Alpaca connections require sign-in.
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border px-3 py-2 text-[11px]" style={{ borderColor: "var(--gold)", color: "var(--text-dim)", background: "var(--panel)" }}>
+                <span>Guest showcase · the full read-only workflow across MAG7, indices, and liquid leaders. Static demo values are labelled; live market panels are marked separately. Private writes, provider connections, system controls, and all order authority stay locked.</span>
+                <button type="button" onClick={() => void signOut()} className="rounded-md border px-2 py-1 font-semibold" style={{ borderColor: "var(--gold)", color: "var(--gold)" }}>Sign in for full access</button>
+              </div>
+            )}
+            {session?.mode === "developer" && (
+              <div className="mb-3 rounded-lg border px-3 py-2 text-[11px]" style={{ borderColor: "var(--accent)", color: "var(--text-dim)", background: "var(--panel)" }}>
+                Developer profile · operational panels and diagnostics are enabled. The enforced research-only boundary still applies; developer mode never grants live-order authority.
               </div>
             )}
             <PanelHost
@@ -156,27 +174,30 @@ function TerminalHome({ guestMode = false }: { guestMode?: boolean }) {
               spyglassTab={spyglassTab}
               onSpyglassTabChange={setSpyglassTab}
               onNavigate={handlePanelNavigate}
+              guestMode={guestMode}
             />
           </main>
         )}
       </div>
 
-      <CommandPalette
+      {!guestMode && <CommandPalette
         open={paletteOpen}
         onOpenChange={setPaletteOpen}
         onPanelSelect={handleActivePanelChange}
         onTickerSelect={setTicker}
-      />
+      />}
     </div>
   );
 }
 
 export default function Home() {
   const auth = useAuthSession();
-  const [guestMode, setGuestMode] = useState(false);
   if (!isSupabaseConfigured()) return <TerminalHome />;
-  if (auth.loading) return <AuthPanel onGuestContinue={() => setGuestMode(true)} />;
-  if (auth.session) return <TerminalHome />;
-  if (guestMode) return <TerminalHome guestMode />;
-  return <AuthPanel onGuestContinue={() => setGuestMode(true)} />;
+  if (auth.loading) return (
+    <main data-testid="auth-loading" className="grid min-h-screen place-items-center" style={{ background: "var(--bg)", color: "var(--text-dim)" }}>
+      <p className="text-sm">Checking secure session…</p>
+    </main>
+  );
+  if (auth.session) return <TerminalHome key={auth.session.mode} session={auth.session} />;
+  return <AuthPanel authError={auth.error} />;
 }

@@ -2,15 +2,16 @@
 
 import { FormEvent, useState } from "react";
 import { createBrowserSupabaseClient, isSupabaseConfigured } from "@/lib/supabase";
-import { establishCookieSession, signOut, useAuthSession } from "@/lib/auth";
+import { establishCookieSession, establishGuestSession } from "@/lib/auth";
 
-export function AuthPanel({ onGuestContinue }: { onGuestContinue: () => void }) {
-  const auth = useAuthSession();
+export function AuthPanel({ authError = null }: { authError?: string | null }) {
   const [mode, setMode] = useState<"sign-in" | "sign-up">("sign-in");
   const [email, setEmail] = useState("");
+  const [resetMode, setResetMode] = useState(false);
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [guestBusy, setGuestBusy] = useState(false);
 
   if (!isSupabaseConfigured()) return null;
 
@@ -20,6 +21,16 @@ export function AuthPanel({ onGuestContinue }: { onGuestContinue: () => void }) 
     setMessage(null);
     try {
       const client = createBrowserSupabaseClient();
+      if (resetMode) {
+        const result = await client.auth.resetPasswordForEmail(email.trim(), {
+          redirectTo: window.location.origin,
+        });
+        if (result.error) throw result.error;
+        setMessage("If that email is registered, Supabase sent password reset instructions. If nothing arrives, check spam or ask the Cipher operator to configure Supabase SMTP.");
+        setResetMode(false);
+        setPassword("");
+        return;
+      }
       const result = mode === "sign-in"
         ? await client.auth.signInWithPassword({ email: email.trim(), password })
         : await client.auth.signUp({ email: email.trim(), password });
@@ -40,23 +51,6 @@ export function AuthPanel({ onGuestContinue }: { onGuestContinue: () => void }) 
     }
   };
 
-  if (auth.session) {
-    return (
-      <section className="flex min-h-screen items-center justify-center p-6" style={{ background: "var(--bg)", color: "var(--text)" }}>
-        <div className="flex w-full max-w-md flex-col gap-5 rounded-xl p-7" style={{ background: "var(--panel)", border: "1px solid var(--line)" }}>
-          <div>
-            <p className="text-[11px] font-bold uppercase tracking-[0.14em]" style={{ color: "var(--accent)" }}>Cipher</p>
-            <h1 className="mt-2 text-2xl font-semibold">Session active</h1>
-            <p className="mt-2 text-sm" style={{ color: "var(--text-dim)" }}>You are authenticated. Provider credentials are entered separately and remain session-only.</p>
-          </div>
-          <button type="button" onClick={() => void signOut()} className="rounded-md px-3 py-2 text-sm font-semibold" style={{ background: "var(--nav-active)", color: "var(--text)" }}>
-            Sign out
-          </button>
-        </div>
-      </section>
-    );
-  }
-
   return (
     <main className="flex min-h-screen items-center justify-center p-6" style={{ background: "var(--bg)", color: "var(--text)" }}>
       <section data-testid="auth-panel" className="flex w-full max-w-md flex-col gap-6 rounded-xl p-7" style={{ background: "var(--panel)", border: "1px solid var(--line)" }}>
@@ -73,30 +67,33 @@ export function AuthPanel({ onGuestContinue }: { onGuestContinue: () => void }) 
             <span style={{ color: "var(--text-dim)" }}>Email</span>
             <input required type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} className="rounded-md px-3 py-2" style={{ background: "var(--panel-2)", border: "1px solid var(--line)", color: "var(--text)" }} />
           </label>
-          <label className="flex flex-col gap-1.5 text-sm">
+          {!resetMode && <label className="flex flex-col gap-1.5 text-sm">
             <span style={{ color: "var(--text-dim)" }}>Password</span>
             <input required minLength={8} type="password" autoComplete={mode === "sign-in" ? "current-password" : "new-password"} value={password} onChange={(event) => setPassword(event.target.value)} className="rounded-md px-3 py-2" style={{ background: "var(--panel-2)", border: "1px solid var(--line)", color: "var(--text)" }} />
-          </label>
+          </label>}
           <button type="submit" disabled={submitting} className="rounded-md px-3 py-2 text-sm font-semibold disabled:opacity-50" style={{ background: "var(--accent)", color: "var(--bg)" }}>
-            {submitting ? "Working…" : mode === "sign-in" ? "Sign in" : "Create account"}
+            {submitting ? "Working…" : resetMode ? "Send reset email" : mode === "sign-in" ? "Sign in" : "Create account"}
           </button>
         </form>
 
         <div className="rounded-lg border p-3" style={{ borderColor: "var(--line)", background: "var(--panel-2)" }}>
           <p className="text-[12px] leading-relaxed" style={{ color: "var(--text-dim)" }}>
-            Want to explore without an account? Guest mode uses delayed/unofficial Yahoo Finance data only. Saved workspace data and Alpaca connections require sign-in.
+            Explore the complete read-only Cipher workflow without an account. Guest sessions include clearly labelled MAG7 showcase content plus bounded live charts, Night Vision, and Strike Matrix views. Private writes, provider connections, system controls, and every order capability stay locked.
           </p>
-          <button type="button" onClick={onGuestContinue} className="mt-3 rounded-md border px-3 py-2 text-sm font-semibold" style={{ borderColor: "var(--line)", color: "var(--text)" }}>
-            Continue as guest
+          <button type="button" disabled={guestBusy} onClick={() => { setGuestBusy(true); setMessage(null); void establishGuestSession().catch((error) => setMessage(error instanceof Error ? error.message : "Guest access failed.")).finally(() => setGuestBusy(false)); }} className="mt-3 rounded-md border px-3 py-2 text-sm font-semibold disabled:opacity-50" style={{ borderColor: "var(--line)", color: "var(--text)" }}>
+            {guestBusy ? "Opening demo…" : "Continue as guest"}
           </button>
         </div>
 
         {message && <p role="status" className="text-sm" style={{ color: "var(--text-dim)" }}>{message}</p>}
-        {auth.error && <p role="alert" className="text-sm" style={{ color: "var(--neg)" }}>{auth.error}</p>}
+        {authError && <p role="alert" className="text-sm" style={{ color: "var(--neg)" }}>{authError}</p>}
 
-        <button type="button" className="self-start text-sm underline underline-offset-4" style={{ color: "var(--text-dim)" }} onClick={() => { setMode((current) => current === "sign-in" ? "sign-up" : "sign-in"); setMessage(null); }}>
+        {mode === "sign-in" && <button type="button" className="self-start text-sm underline underline-offset-4" style={{ color: "var(--text-dim)" }} onClick={() => { setResetMode((current) => !current); setMessage(null); }}>
+          {resetMode ? "Back to sign in" : "Forgot password?"}
+        </button>}
+        {!resetMode && <button type="button" className="self-start text-sm underline underline-offset-4" style={{ color: "var(--text-dim)" }} onClick={() => { setMode((current) => current === "sign-in" ? "sign-up" : "sign-in"); setMessage(null); }}>
           {mode === "sign-in" ? "Need an account? Sign up" : "Already have an account? Sign in"}
-        </button>
+        </button>}
       </section>
     </main>
   );

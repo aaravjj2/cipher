@@ -1,7 +1,8 @@
-"""Paper-only local options executor for Cipher.
+"""Fail-closed simulation and explicitly authorized Alpaca-paper execution.
 
-This package intentionally contains no live-trading mode and no broker order
-submission code. The Windows SQLite ledger is the authoritative paper account.
+The browser and research API remain read-only. Broker activity is confined to
+the hardcoded Alpaca paper host, and Cipher's SQLite intent ledger remains the
+authoritative audit trail. Live-capital execution is intentionally absent.
 """
 
 from .config import ExecutorConfig, load_config

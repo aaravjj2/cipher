@@ -1,0 +1,275 @@
+{
+  "generated_at": "2026-08-19T15:21:48.770069+00:00",
+  "capture_root": "/home/aarav/Aarav/cipher/cipher-system/data/scan_history",
+  "mode": "exact_current_autopilot_signal_replay",
+  "coverage": {
+    "days_present": 9,
+    "exact_days": [
+      "2026-08-18"
+    ],
+    "day_status": [
+      {
+        "market_date": "2026-08-10",
+        "status": "legacy_or_missing_premarket_contract",
+        "premarket_scans": 0,
+        "rth_confirmation_scans": 0
+      },
+      {
+        "market_date": "2026-08-11",
+        "status": "legacy_or_missing_premarket_contract",
+        "premarket_scans": 0,
+        "rth_confirmation_scans": 0
+      },
+      {
+        "market_date": "2026-08-12",
+        "status": "legacy_or_missing_premarket_contract",
+        "premarket_scans": 0,
+        "rth_confirmation_scans": 0
+      },
+      {
+        "market_date": "2026-08-13",
+        "status": "legacy_or_missing_premarket_contract",
+        "premarket_scans": 0,
+        "rth_confirmation_scans": 0
+      },
+      {
+        "market_date": "2026-08-14",
+        "status": "legacy_or_missing_premarket_contract",
+        "premarket_scans": 0,
+        "rth_confirmation_scans": 0
+      },
+      {
+        "market_date": "2026-08-16",
+        "status": "legacy_or_missing_premarket_contract",
+        "premarket_scans": 0,
+        "rth_confirmation_scans": 0
+      },
+      {
+        "market_date": "2026-08-17",
+        "status": "legacy_or_missing_premarket_contract",
+        "premarket_scans": 0,
+        "rth_confirmation_scans": 0
+      },
+      {
+        "market_date": "2026-08-18",
+        "status": "exact_current_contract",
+        "premarket_scans": 2,
+        "rth_confirmation_scans": 23
+      },
+      {
+        "market_date": "2026-08-19",
+        "status": "legacy_or_missing_premarket_contract",
+        "premarket_scans": 0,
+        "rth_confirmation_scans": 0
+      }
+    ]
+  },
+  "summary": {
+    "replayed_days": 1,
+    "confirmation_events": 6,
+    "unique_confirmations": 5,
+    "target_hits": 0,
+    "invalidation_hits": 2,
+    "unresolved": 3,
+    "wins": 0,
+    "losses": 2,
+    "win_rate_on_resolved_pct": 0.0,
+    "option_pnl_available": false
+  },
+  "days": [
+    {
+      "market_date": "2026-08-18",
+      "mode": "exact_current_autopilot_signal_replay",
+      "plan_source": "cc5035c95f24.json",
+      "plan_id": "premarket_plan_9529e0f67d0f4f2b37044171",
+      "plan_candidates": 8,
+      "confirmation_events": 6,
+      "unique_confirmations": 5,
+      "target_hits": 0,
+      "invalidation_hits": 2,
+      "unresolved": 3,
+      "option_pnl_available": false,
+      "trades": [
+        {
+          "ticker": "COIN",
+          "direction": "BULLISH",
+          "entry_time": "2026-08-18T13:35:44.095078+00:00",
+          "entry_spot": 148.3,
+          "target": 149.49,
+          "invalidation": 148.0,
+          "exit_time": "2026-08-18T14:06:12.248280+00:00",
+          "exit_spot": 147.62,
+          "outcome": "invalidation_hit",
+          "win": false,
+          "directional_move_pct": -0.4585,
+          "option_pnl": null,
+          "option_mark_status": "unavailable",
+          "path_observations": 2,
+          "source_scan": "fa5325f02dce.json"
+        },
+        {
+          "ticker": "AMD",
+          "direction": "BULLISH",
+          "entry_time": "2026-08-18T13:45:26.858378+00:00",
+          "entry_spot": 486.20000000000005,
+          "target": 492.75,
+          "invalidation": 485.0,
+          "exit_time": "2026-08-18T14:05:23.343053+00:00",
+          "exit_spot": 481.22,
+          "outcome": "invalidation_hit",
+          "win": false,
+          "directional_move_pct": -1.0243,
+          "option_pnl": null,
+          "option_mark_status": "unavailable",
+          "path_observations": 1,
+          "source_scan": "ad857c6e18fa.json"
+        },
+        {
+          "ticker": "ASML",
+          "direction": "BULLISH",
+          "entry_time": "2026-08-18T13:55:25.666052+00:00",
+          "entry_spot": 1793.79,
+          "target": 1832.98,
+          "invalidation": 1790.0,
+          "exit_time": "2026-08-18T14:35:25.087174+00:00",
+          "exit_spot": 1801.73,
+          "outcome": "unresolved_capture_path",
+          "win": null,
+          "directional_move_pct": 0.4426,
+          "option_pnl": null,
+          "option_mark_status": "unavailable",
+          "path_observations": 6,
+          "source_scan": "e463a96ae345.json"
+        },
+        {
+          "ticker": "MDB",
+          "direction": "BULLISH",
+          "entry_time": "2026-08-18T14:25:23.518249+00:00",
+          "entry_spot": 440.925,
+          "target": 445.47,
+          "invalidation": 440.0,
+          "exit_time": null,
+          "exit_spot": null,
+          "outcome": "unresolved_no_future_snapshot",
+          "win": null,
+          "directional_move_pct": null,
+          "option_pnl": null,
+          "option_mark_status": "unavailable",
+          "path_observations": 0,
+          "source_scan": "a5f77e080c91.json"
+        },
+        {
+          "ticker": "APP",
+          "direction": "BULLISH",
+          "entry_time": "2026-08-18T14:45:30.007928+00:00",
+          "entry_spot": 310.695,
+          "target": 314.02,
+          "invalidation": 310.0,
+          "exit_time": "2026-08-18T15:25:46.424565+00:00",
+          "exit_spot": 310.845,
+          "outcome": "unresolved_capture_path",
+          "win": null,
+          "directional_move_pct": 0.0483,
+          "option_pnl": null,
+          "option_mark_status": "unavailable",
+          "path_observations": 2,
+          "source_scan": "ab9e8d373955.json"
+        }
+      ]
+    }
+  ],
+  "trades": [
+    {
+      "ticker": "COIN",
+      "direction": "BULLISH",
+      "entry_time": "2026-08-18T13:35:44.095078+00:00",
+      "entry_spot": 148.3,
+      "target": 149.49,
+      "invalidation": 148.0,
+      "exit_time": "2026-08-18T14:06:12.248280+00:00",
+      "exit_spot": 147.62,
+      "outcome": "invalidation_hit",
+      "win": false,
+      "directional_move_pct": -0.4585,
+      "option_pnl": null,
+      "option_mark_status": "unavailable",
+      "path_observations": 2,
+      "source_scan": "fa5325f02dce.json"
+    },
+    {
+      "ticker": "AMD",
+      "direction": "BULLISH",
+      "entry_time": "2026-08-18T13:45:26.858378+00:00",
+      "entry_spot": 486.20000000000005,
+      "target": 492.75,
+      "invalidation": 485.0,
+      "exit_time": "2026-08-18T14:05:23.343053+00:00",
+      "exit_spot": 481.22,
+      "outcome": "invalidation_hit",
+      "win": false,
+      "directional_move_pct": -1.0243,
+      "option_pnl": null,
+      "option_mark_status": "unavailable",
+      "path_observations": 1,
+      "source_scan": "ad857c6e18fa.json"
+    },
+    {
+      "ticker": "ASML",
+      "direction": "BULLISH",
+      "entry_time": "2026-08-18T13:55:25.666052+00:00",
+      "entry_spot": 1793.79,
+      "target": 1832.98,
+      "invalidation": 1790.0,
+      "exit_time": "2026-08-18T14:35:25.087174+00:00",
+      "exit_spot": 1801.73,
+      "outcome": "unresolved_capture_path",
+      "win": null,
+      "directional_move_pct": 0.4426,
+      "option_pnl": null,
+      "option_mark_status": "unavailable",
+      "path_observations": 6,
+      "source_scan": "e463a96ae345.json"
+    },
+    {
+      "ticker": "MDB",
+      "direction": "BULLISH",
+      "entry_time": "2026-08-18T14:25:23.518249+00:00",
+      "entry_spot": 440.925,
+      "target": 445.47,
+      "invalidation": 440.0,
+      "exit_time": null,
+      "exit_spot": null,
+      "outcome": "unresolved_no_future_snapshot",
+      "win": null,
+      "directional_move_pct": null,
+      "option_pnl": null,
+      "option_mark_status": "unavailable",
+      "path_observations": 0,
+      "source_scan": "a5f77e080c91.json"
+    },
+    {
+      "ticker": "APP",
+      "direction": "BULLISH",
+      "entry_time": "2026-08-18T14:45:30.007928+00:00",
+      "entry_spot": 310.695,
+      "target": 314.02,
+      "invalidation": 310.0,
+      "exit_time": "2026-08-18T15:25:46.424565+00:00",
+      "exit_spot": 310.845,
+      "outcome": "unresolved_capture_path",
+      "win": null,
+      "directional_move_pct": 0.0483,
+      "option_pnl": null,
+      "option_mark_status": "unavailable",
+      "path_observations": 2,
+      "source_scan": "ab9e8d373955.json"
+    }
+  ],
+  "caveats": [
+    "Only scans carrying the current evidence/session contract are replayed as exact autopilot decisions.",
+    "Repeated confirmations for one ticker are deduplicated to one candidate entry, matching the executor episode policy.",
+    "Underlying target/invalidation outcomes use sparse regular-session snapshots; intrabar touches between snapshots remain unknown.",
+    "Historical option contract selection, bid/ask fills, option take-profit, and option stop-loss are unavailable, so option P/L is not calculated.",
+    "This is a paper/read-only research replay and does not place or route orders."
+  ]
+}

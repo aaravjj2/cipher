@@ -61,7 +61,36 @@ if [[ "${1:-}" == "--rollback" ]]; then
 fi
 
 echo "Building frontend…"
+# The hosted browser build needs only Supabase's public URL and anon key. Read
+# them server-side from the deployment environment when available; never print
+# or persist the values in the repository. Preserve any explicitly supplied
+# web/.env.local values for local development.
+TEMP_ENV=""
+if [[ -f /etc/cipher/cipher.env ]]; then
+  TEMP_ENV="$ROOT/web/.env.local"
+  if [[ ! -f "$TEMP_ENV" ]]; then
+    umask 077
+    read_deployment_env() {
+      if [[ -r /etc/cipher/cipher.env ]]; then
+        awk -F= "$@" /etc/cipher/cipher.env
+      else
+        sudo -n awk -F= "$@" /etc/cipher/cipher.env
+      fi
+    }
+    read_deployment_env '
+      $1 == "SUPABASE_URL" { print "NEXT_PUBLIC_SUPABASE_URL=" substr($0, index($0, "=") + 1) }
+      $1 == "SUPABASE_ANON_KEY" { print "NEXT_PUBLIC_SUPABASE_ANON_KEY=" substr($0, index($0, "=") + 1) }
+    ' > "$TEMP_ENV"
+    [[ -s "$TEMP_ENV" ]] || { rm -f -- "$TEMP_ENV"; echo "Supabase public build configuration is unavailable."; exit 1; }
+    trap 'rm -f -- "$TEMP_ENV"; cleanup' EXIT
+  fi
+fi
 npm run build --prefix "$ROOT/web"
+if [[ -n "$TEMP_ENV" ]]; then
+  rm -f -- "$TEMP_ENV"
+  TEMP_ENV=""
+  trap cleanup EXIT
+fi
 
 releases="$ROOT/app/.releases"
 mkdir -p "$releases"

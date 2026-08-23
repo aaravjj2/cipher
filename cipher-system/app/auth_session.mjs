@@ -3,6 +3,7 @@ import { randomBytes } from "node:crypto";
 export const AUTH_COOKIE_NAME = "cipher_session";
 const DEFAULT_INACTIVITY_MS = 30 * 60 * 1000;
 const DEFAULT_ABSOLUTE_MS = 12 * 60 * 60 * 1000;
+const DEFAULT_GUEST_ABSOLUTE_MS = 2 * 60 * 60 * 1000;
 
 function parseCookies(header) {
   const values = {};
@@ -34,21 +35,27 @@ export function createAuthSessionStore({
   randomId = () => randomBytes(32).toString("base64url"),
   inactivityMs = DEFAULT_INACTIVITY_MS,
   absoluteMs = DEFAULT_ABSOLUTE_MS,
+  guestAbsoluteMs = DEFAULT_GUEST_ABSOLUTE_MS,
 } = {}) {
   const sessions = new Map();
   const inactivity = positive(inactivityMs, DEFAULT_INACTIVITY_MS);
   const absolute = positive(absoluteMs, DEFAULT_ABSOLUTE_MS);
+  const guestAbsolute = positive(guestAbsoluteMs, DEFAULT_GUEST_ABSOLUTE_MS);
 
-  function create({ userId, accessToken }) {
+  function create({ userId, accessToken, email = null, profile = null, guest = false }) {
     const id = String(randomId());
     const createdAt = now();
     sessions.set(id, {
       userId: String(userId),
-      accessToken: String(accessToken),
+      accessToken: accessToken ? String(accessToken) : null,
+      email: email ? String(email) : null,
+      profile,
+      guest: Boolean(guest),
       createdAt,
       lastSeenAt: createdAt,
     });
-    return serialize(id, Math.ceil(Math.min(inactivity, absolute) / 1000));
+    const sessionAbsolute = guest ? guestAbsolute : absolute;
+    return serialize(id, Math.ceil(Math.min(inactivity, sessionAbsolute) / 1000));
   }
 
   function get(request) {
@@ -57,12 +64,23 @@ export function createAuthSessionStore({
     const session = sessions.get(id);
     if (!session) return null;
     const current = now();
-    if (current - session.createdAt >= absolute || current - session.lastSeenAt >= inactivity) {
+    const sessionAbsolute = session.guest ? guestAbsolute : absolute;
+    if (current - session.createdAt >= sessionAbsolute || current - session.lastSeenAt >= inactivity) {
       sessions.delete(id);
       return null;
     }
     session.lastSeenAt = current;
-    return { userId: session.userId, accessToken: session.accessToken };
+    return {
+      userId: session.userId,
+      accessToken: session.accessToken,
+      email: session.email,
+      profile: session.profile,
+      guest: session.guest,
+    };
+  }
+
+  function createGuest(profile) {
+    return create({ userId: "guest", accessToken: null, profile, guest: true });
   }
 
   function clear(request) {
@@ -71,5 +89,5 @@ export function createAuthSessionStore({
     return serialize("", 0);
   }
 
-  return { create, get, clear, size: () => sessions.size };
+  return { create, createGuest, get, clear, size: () => sessions.size };
 }

@@ -232,7 +232,7 @@ class PaperExecutorDatabase:
             )
 
     def rows(self, table: str) -> list[dict[str, Any]]:
-        if table not in {"signal_batches", "signal_cards", "signal_episodes", "contract_candidates", "paper_positions", "paper_marks", "paper_events", "system_events", "forward_queue"}:
+        if table not in {"signal_batches", "signal_cards", "signal_episodes", "contract_candidates", "paper_orders", "paper_positions", "paper_marks", "paper_events", "system_events", "forward_queue"}:
             raise ValueError("unsupported table")
         with self.connect() as db:
             return [dict(row) for row in db.execute(f"select * from {table}").fetchall()]
@@ -241,9 +241,14 @@ class PaperExecutorDatabase:
         with self.connect() as db:
             counts = {
                 "signal_batches": db.execute("select count(*) from signal_batches").fetchone()[0],
+                "signal_cards": db.execute("select count(*) from signal_cards").fetchone()[0],
                 "signal_episodes": db.execute("select count(*) from signal_episodes").fetchone()[0],
+                "contract_candidates": db.execute("select count(*) from contract_candidates").fetchone()[0],
+                "paper_orders": db.execute("select count(*) from paper_orders").fetchone()[0],
                 "open_shadow_positions": db.execute("select count(*) from paper_positions where status = 'SHADOW_OPEN'").fetchone()[0],
                 "open_paper_positions": db.execute("select count(*) from paper_positions where status = 'OPEN'").fetchone()[0],
+                "closed_positions": db.execute("select count(*) from paper_positions where status = 'CLOSED'").fetchone()[0],
+                "entry_blocks": db.execute("select count(*) from system_events where event_type = 'ENTRY_BLOCKED'").fetchone()[0],
                 "forward_backlog": db.execute("select count(*) from forward_queue where status != 'SENT'").fetchone()[0],
             }
             latest_batch = db.execute("select received_at from signal_batches order by received_at desc limit 1").fetchone()
@@ -252,13 +257,27 @@ class PaperExecutorDatabase:
             latest_worker_error = db.execute(
                 "select event_time, payload_json from system_events where event_type = 'WORKER_ERROR' order by event_time desc limit 1"
             ).fetchone()
+            latest_entry_block = db.execute(
+                "select event_time, payload_json from system_events where event_type = 'ENTRY_BLOCKED' order by event_time desc limit 1"
+            ).fetchone()
             return {
                 "counts": counts,
                 "last_batch_at": latest_batch["received_at"] if latest_batch else None,
                 "last_episode_at": latest_episode["last_seen_at"] if latest_episode else None,
                 "last_mark_at": latest_mark["marked_at"] if latest_mark else None,
-                "last_worker_exception": dict(latest_worker_error) if latest_worker_error else None,
+                "last_worker_exception": self._event(latest_worker_error),
+                "last_entry_block": self._event(latest_entry_block),
             }
+
+    @staticmethod
+    def _event(row: sqlite3.Row | None) -> dict[str, Any] | None:
+        if not row:
+            return None
+        try:
+            payload = json.loads(row["payload_json"])
+        except (TypeError, json.JSONDecodeError):
+            payload = {"reason": "unreadable event payload"}
+        return {"event_time": row["event_time"], **payload}
 
     def due_forward_items(self, now_text: str) -> list[str]:
         with self.connect() as db:
@@ -390,6 +409,36 @@ class PaperExecutorDatabase:
                 (today, new_positions + 1, stopped, json.dumps(account_payload)),
             )
         return True, None
+
+    def insert_order(
+        self, *, order_id: str, episode_id: str | None, position_id: str,
+        side: str, symbol: str, quantity: int, status: str,
+        fill: dict[str, Any], created_at: str,
+    ) -> bool:
+        """Persist a deterministic simulated order; duplicate recovery is a no-op."""
+        with self.connect() as db:
+            cursor = db.execute(
+                """insert or ignore into paper_orders(
+                       id,episode_id,position_id,side,symbol,quantity,status,fill_json,created_at)
+                   values(?,?,?,?,?,?,?,?,?)""",
+                (order_id, episode_id, position_id, side, symbol, quantity, status,
+                 json.dumps(fill, default=str), created_at),
+            )
+            return cursor.rowcount == 1
+
+    def update_order(self, order_id: str, status: str, payload: dict[str, Any]) -> bool:
+        """Replace the mutable broker snapshot while retaining the stable local ID."""
+        with self.connect() as db:
+            cursor = db.execute(
+                "update paper_orders set status = ?, fill_json = ? where id = ?",
+                (status, json.dumps(payload, default=str), order_id),
+            )
+            return cursor.rowcount == 1
+
+    def order(self, order_id: str) -> dict[str, Any] | None:
+        with self.connect() as db:
+            row = db.execute("select * from paper_orders where id = ?", (order_id,)).fetchone()
+            return dict(row) if row else None
 
     def insert_mark(self, position_id: str, payload: dict[str, Any]) -> str:
         from .models import sha256_id

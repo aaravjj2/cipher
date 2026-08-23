@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import urllib.parse
 import urllib.request
@@ -84,11 +85,28 @@ def executor_payload(strategy: str, scan: dict[str, Any], captured_at: str) -> d
 
 def request_json(url: str, *, payload: dict[str, Any] | None = None, timeout: int = 600) -> dict[str, Any]:
     data = json.dumps(payload).encode("utf-8") if payload is not None else None
+    headers = {"Accept": "application/json"}
+    if payload is not None:
+        headers["Content-Type"] = "application/json"
+    # Local systemd schedulers authenticate to the hosted core with the
+    # server-side proxy token. Guest context is deliberately provider-session
+    # free; the core will return an explicit unavailable response rather than
+    # allowing a service to impersonate a user session.
+    internal_token = os.environ.get("CIPHER_INTERNAL_PROXY_TOKEN")
+    if internal_token:
+        headers.update({
+            "X-Cipher-Internal-Token": internal_token,
+            "X-Cipher-Guest": "1",
+            "X-Cipher-User-Id": "guest",
+        })
+    provider_session = os.environ.get("CIPHER_PROVIDER_SESSION")
+    if provider_session:
+        headers["X-Cipher-Provider-Session"] = provider_session
     request = urllib.request.Request(
         url,
         data=data,
         method="POST" if payload is not None else "GET",
-        headers={"Content-Type": "application/json"} if payload is not None else {},
+        headers=headers,
     )
     with urllib.request.urlopen(request, timeout=timeout) as response:
         result = json.loads(response.read().decode("utf-8"))

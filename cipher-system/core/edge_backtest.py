@@ -24,13 +24,10 @@ import math
 from collections import defaultdict
 from typing import Callable
 
-from price_backtest import (
-    PriceTrade,
-    _sma,
-    _rsi,
-    _atr,
-    compute_price_metrics,
-)
+try:
+    from .price_backtest import PriceTrade, _sma, _rsi, _atr, compute_price_metrics
+except ImportError:  # standalone legacy script compatibility
+    from price_backtest import PriceTrade, _sma, _rsi, _atr, compute_price_metrics
 
 
 def _utcnow():

@@ -342,6 +342,8 @@ export function fetchPaperPortfolios(signal?: AbortSignal): Promise<PaperPortfol
 export type EarningsRadarCard = {
   symbol: string;
   scheduled_date: string;
+  earnings_date_sources?: string[];
+  earnings_date_confirmation?: string;
   days_until: number;
   eps_estimate_avg: number | null;
   eps_estimate_range: string | null;
@@ -362,6 +364,36 @@ export type EarningsRadarResponse = {
   days_ahead?: number;
   count: number;
   cards: EarningsRadarCard[];
+  paper_scorecard?: {
+    total: number;
+    open: number;
+    settled: number;
+    wins: number;
+    realized_pnl: number;
+    win_rate_pct: number | null;
+    cohorts: Array<{
+      model_version: string;
+      validation_status: string;
+      total: number;
+      open: number;
+      settled: number;
+      wins: number;
+      realized_pnl: number | null;
+    }>;
+  };
+  validation?: {
+    status: string;
+    model_version?: string | null;
+    test_samples: number | null;
+    day5_direction_accuracy_pct: number | null;
+    day5_baseline_accuracy_pct?: number | null;
+    day5_gated_samples?: number | null;
+    day5_gated_accuracy_pct?: number | null;
+    expected_gap_mae_pct: number | null;
+    expected_gap_baseline_mae_pct?: number | null;
+    strategy_gate?: string | null;
+    method: string;
+  } | null;
   caveat: string;
 };
 
@@ -424,11 +456,41 @@ export function fetchProspectiveFronttests(signal?: AbortSignal): Promise<Prospe
   return getJson<ProspectiveFronttestsResponse>("/api/prospective-fronttests", signal);
 }
 
+export type AiSynthesis = {
+  headline: string;
+  market_regime: string;
+  gamma_structure_analysis: string;
+  whale_flow_insights: string[];
+  actionable_paper_setups: Array<{
+    ticker: string;
+    direction: string;
+    setup: string;
+    entry_level: string | number;
+    target: string | number;
+    thesis?: string;
+    invalidation?: string | number;
+  }>;
+  risk_and_integrity_flags: string[];
+  model_used: string;
+  provider?: string;
+  generated_at: string;
+  is_ai_generated?: boolean;
+};
+
+export type AiModelInfo = {
+  id: string;
+  name: string;
+  provider: string;
+  status: string;
+  default: boolean;
+};
+
 export type MorningBriefResponse = {
   generated_at: string;
   ticker: string;
   session: ProductStatus["session"];
   freshness: ProductStatus;
+  ai_synthesis?: AiSynthesis;
   market: Array<{
     ticker: string; price: number | null; day_change_pct: number | null;
     as_of: string | null; feed: string; availability?: RealFlowResponse["availability"];
@@ -494,6 +556,16 @@ export type MorningBriefResponse = {
 
 export function fetchMorningBrief(ticker: string, signal?: AbortSignal): Promise<MorningBriefResponse> {
   return getJson<MorningBriefResponse>(`/api/morning-brief?symbol=${encodeURIComponent(ticker)}`, signal);
+}
+
+export function fetchAiModels(signal?: AbortSignal): Promise<{ models: AiModelInfo[] }> {
+  return getJson<{ models: AiModelInfo[] }>("/api/ai-models", signal);
+}
+
+export function synthesizeMorningBrief(ticker: string, model?: string, signal?: AbortSignal): Promise<AiSynthesis> {
+  const q = new URLSearchParams({ symbol: ticker, force: "1" });
+  if (model) q.set("model", model);
+  return getJson<AiSynthesis>(`/api/morning-brief/synthesize?${q.toString()}`, signal);
 }
 
 export type ResearchCandidate = {
@@ -2157,15 +2229,56 @@ export type AutopilotStatus = {
   plan: {
     available: boolean; plan_id?: string | null; market_date?: string | null;
     state: string; created_at?: string | null; candidate_count: number;
-    candidates: Array<{ ticker: string; direction: string; score: number; reward_risk: number; sentiment_status?: string }>;
+    candidates: Array<{
+      ticker: string;
+      direction: string;
+      score: number;
+      reward_risk: number;
+      sentiment_status?: string;
+      ai_evaluation?: {
+        thesis?: string;
+        regime_confluence_score?: number;
+        catalyst_risk?: string;
+        recommended_structure?: string;
+        model?: string;
+        evaluated_at?: string;
+      };
+    }>;
   };
   executor: {
     reachable: boolean; mode: string; reconciliation_passed?: boolean;
+    operating_state: "HEALTHY_NO_SETUP" | "SETUP_REJECTED" | "DATA_FAILURE" | "ACTIVE_POSITION" | "AWAITING_DATA_CHECK";
     quote_feed_degraded?: boolean; open_shadow_positions: number;
+    provider_session_ready?: boolean | null; market_data_ready: boolean;
+    last_chain_success_at?: string | null; entry_blocked_reason?: string | null;
+    last_entry_block?: { event_time?: string; ticker?: string; reason?: string; error?: string } | null;
+    counts: {
+      signal_batches?: number; signal_cards?: number; signal_episodes?: number;
+      contract_candidates?: number; paper_orders?: number; open_shadow_positions?: number;
+      open_paper_positions?: number; closed_positions?: number; entry_blocks?: number;
+    };
     last_mark_at?: string | null; last_worker_exception?: unknown;
+    execution_backend?: "simulated" | "alpaca_paper" | "unavailable";
+    paper_broker?: {
+      backend: string; ready: boolean; paper_only: true; last_error?: string | null;
+      account?: { status?: string; currency?: string; equity?: string; buying_power?: string; paper_only?: true } | null;
+      unknown_positions?: string[];
+      recent_orders?: Array<{
+        id?: string; client_order_id?: string; symbol?: string; side?: string; quantity?: number;
+        limit_price?: number; status?: string; filled_quantity?: number; average_fill_price?: number;
+        submitted_at?: string; filled_at?: string;
+      }>;
+    };
   };
   learning: { training_status: string; samples: number; market_dates: number; blockers: string[] };
-  models: { finbert: string; fingpt: string; custom_model: string; model_may_authorize_entry: false };
+  models: {
+    finbert: string;
+    openrouter_model?: string;
+    ai_multi_factor?: string;
+    fingpt: string;
+    custom_model: string;
+    model_may_authorize_entry: false;
+  };
   daily_trace: {
     market_date: string; trace_available: boolean; cycles: number;
     actions: Record<string, number>; rejection_reason_counts: Record<string, number>;

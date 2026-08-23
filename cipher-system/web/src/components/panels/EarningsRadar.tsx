@@ -24,7 +24,7 @@ export function EarningsRadar() {
     <div className="space-y-4" style={{ fontFamily: "var(--font-mono)" }}>
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div><h1 className="text-xl font-semibold">Earnings Radar</h1>
-          <p className="text-[11px]" style={{ color: "var(--text-mute)" }}>Upcoming earnings in the universe with model direction, expected gap, and recommended defined-risk structure. Refreshed by the daily 08:15 ET digest.</p>
+          <p className="text-[11px]" style={{ color: "var(--text-mute)" }}>Upcoming reports, expected underlying gap, and evidence-gated paper decisions. Refreshed daily at 08:15 ET.</p>
         </div>
         <div className="text-right text-xs">
           <span className="rounded-full border px-2.5 py-1 text-[9px] font-bold uppercase" style={{ borderColor: "var(--line)", color: data.status === "current" ? "var(--positive)" : data.status === "stale" ? "var(--gold)" : "var(--negative)" }}>
@@ -34,16 +34,31 @@ export function EarningsRadar() {
         </div>
       </div>
       {data.status === "unavailable" && <p className="rounded-lg border px-3 py-2 text-[11px]" style={{ borderColor: "var(--gold)", color: "var(--gold)" }}>No radar artifact yet — it is written after the first 08:15 ET digest run. Missing data is shown as unavailable, never zero.</p>}
+      {data.validation && <p className="rounded-lg border px-3 py-2 text-[10px]" style={{ borderColor: "var(--gold)", color: "var(--gold)" }}>
+        {data.validation.strategy_gate?.replaceAll("_", " ") ?? data.validation.status.replaceAll("_", " ")} · day-5 {number(data.validation.day5_direction_accuracy_pct)}% vs baseline {number(data.validation.day5_baseline_accuracy_pct)}% · gated {number(data.validation.day5_gated_accuracy_pct)}% (N={data.validation.day5_gated_samples ?? "—"}) · gap MAE {number(data.validation.expected_gap_mae_pct)}% vs {number(data.validation.expected_gap_baseline_mae_pct)}% baseline · holdout N={data.validation.test_samples ?? "—"}
+      </p>}
+      {data.paper_scorecard && <section className="rounded-xl border p-3" style={{ borderColor: "var(--line)", background: "var(--panel)" }}>
+        <div className="grid grid-cols-2 gap-3 text-[10px] sm:grid-cols-5">
+          <span><small className="block" style={{ color: "var(--text-mute)" }}>Open</small>{data.paper_scorecard.open}</span>
+          <span><small className="block" style={{ color: "var(--text-mute)" }}>Settled</small>{data.paper_scorecard.settled}</span>
+          <span><small className="block" style={{ color: "var(--text-mute)" }}>Estimated wins</small>{data.paper_scorecard.wins}</span>
+          <span><small className="block" style={{ color: "var(--text-mute)" }}>Estimated win rate</small>{number(data.paper_scorecard.win_rate_pct)}%</span>
+          <span><small className="block" style={{ color: "var(--text-mute)" }}>Estimated P&amp;L</small>${number(data.paper_scorecard.realized_pnl)}</span>
+        </div>
+        <p className="mt-2 text-[9px]" style={{ color: "var(--text-mute)" }}>
+          {data.paper_scorecard.cohorts.map((row) => `${row.model_version}: ${row.settled} settled`).join(" · ") || "No model cohorts yet"}. Legacy entries use heuristic premiums; new entries require the independent holdout gate.
+        </p>
+      </section>}
       {data.cards.length === 0 && data.status !== "unavailable" && <p className="text-[11px]" style={{ color: "var(--text-mute)" }}>No earnings scheduled inside the scan window.</p>}
       {data.cards.length > 0 && <div className="overflow-x-auto rounded-xl border" style={{ borderColor: "var(--line)" }}>
         <table aria-label="Upcoming earnings radar" className="w-full text-left text-[10px]">
           <thead><tr className="border-b" style={{ borderColor: "var(--line)" }}>
-            {["symbol", "reports", "in", "est eps", "hist beat", "bias", "confidence", "exp gap", "reversal risk", "recommended", "rationale"].map((h) => <th key={h} className="px-3 py-2">{h}</th>)}
+            {["symbol", "reports / in", "est eps", "hist beat", "bias", "confidence", "exp gap", "reversal risk", "recommended", "rationale"].map((h) => <th key={h} className="px-3 py-2">{h}</th>)}
           </tr></thead>
           <tbody>{data.cards.map((card) => (
             <tr key={`${card.symbol}-${card.scheduled_date}`} className="border-b align-top" style={{ borderColor: "var(--line)" }}>
               <td className="px-3 py-2 font-semibold">{card.symbol}</td>
-              <td className="px-3 py-2">{card.scheduled_date} · {card.days_until}d</td>
+              <td className="px-3 py-2">{card.scheduled_date} · {card.days_until}d<br /><small style={{ color: "var(--text-mute)" }}>{card.earnings_date_confirmation === "single_source_unconfirmed" ? "Yahoo only · unconfirmed" : "cross-checked"}</small></td>
               <td className="px-3 py-2">{number(card.eps_estimate_avg)}</td>
               <td className="px-3 py-2">{percent(card.hist_beat_rate)} ({card.total_hist_reports})</td>
               <td className="px-3 py-2">{card.direction_bias}</td>

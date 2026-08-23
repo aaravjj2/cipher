@@ -15,6 +15,7 @@ def test_nanosecond_timestamp_is_utc_and_truncated_safely():
 
 def test_alpaca_core_adapter_normalizes_chain_and_quotes(monkeypatch):
     adapter = _adapter()
+    adapter._provider_session_id = "test-session"
     chain_payload = {
         "feed": "opra",
         "expirations": [{
@@ -46,6 +47,8 @@ def test_alpaca_core_adapter_normalizes_chain_and_quotes(monkeypatch):
     quotes = adapter.quotes(["NVDA", "NVDA260821C00225000"])
     assert quotes["NVDA"].midpoint == 226.41
     assert quotes["NVDA260821C00225000"].open_interest == 1200
+    assert adapter.status()["market_data_ready"] is True
+    assert adapter.status()["last_chain_success_at"] is not None
 
 
 def test_alpaca_core_adapter_rejects_non_opra_chain(monkeypatch):
@@ -57,3 +60,37 @@ def test_alpaca_core_adapter_rejects_non_opra_chain(monkeypatch):
         assert "OPRA" in str(exc)
     else:
         raise AssertionError("indicative fallback must not authorize paper entry")
+
+
+def test_hosted_adapter_establishes_guest_provider_session(monkeypatch):
+    adapter = _adapter()
+    monkeypatch.setenv("CIPHER_INTERNAL_PROXY_TOKEN", "internal-token")
+    monkeypatch.setenv("ALPACA_API_KEY", "key")
+    monkeypatch.setenv("ALPACA_API_SECRET", "secret")
+    requests = []
+
+    class Response:
+        def __init__(self, payload):
+            self.payload = payload
+        def __enter__(self):
+            return self
+        def __exit__(self, *_args):
+            return False
+        def read(self):
+            import json
+            return json.dumps(self.payload).encode()
+
+    def fake_urlopen(request, timeout):
+        requests.append(request)
+        if request.get_method() == "POST":
+            return Response({"provider_session_id": "session-1"})
+        return Response({"ticker": "SPY", "bid": 1, "ask": 1.01, "as_of": "2026-08-21T15:00:00Z"})
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    payload = adapter._request("/api/quote", {"ticker": "SPY"})
+    assert payload["ticker"] == "SPY"
+    assert len(requests) == 2
+    assert requests[0].method == "POST"
+    assert requests[1].headers["X-cipher-internal-token"] == "internal-token"
+    assert requests[1].headers["X-cipher-provider-session"] == "session-1"
+    assert adapter.provider_session_ready is True

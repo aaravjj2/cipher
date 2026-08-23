@@ -9,6 +9,7 @@ import { createAuthGate } from "./auth.mjs";
 import { createSupabaseAuth } from "./supabase_auth.mjs";
 import { createProviderSessionClient } from "./provider_session_client.mjs";
 import { createAuthSessionStore } from "./auth_session.mjs";
+import { createAccessProfileResolver } from "./access_profile.mjs";
 import { createScannerIngestHandler } from "./scanner_ingest.mjs";
 
 const root = dirname(fileURLToPath(import.meta.url));
@@ -41,6 +42,16 @@ const hostedOrigins = new Set(
     .filter(Boolean),
 );
 const guestMode = process.env.CIPHER_GUEST_MODE === "1";
+const accessProfiles = createAccessProfileResolver({
+  developerUserIds: process.env.CIPHER_DEVELOPER_USER_IDS,
+  developerEmails: process.env.CIPHER_DEVELOPER_EMAILS,
+});
+// PWA assets must be fetchable without a session so Chrome can load the manifest
+// and register the service worker during "Add to Home Screen". They contain no
+// secrets (app name, icons, and caching logic only).
+const publicAssetPaths = new Set(["/manifest.webmanifest", "/sw.js"]);
+const isPublicStaticAsset = (pathname) =>
+  publicAssetPaths.has(pathname) || pathname.startsWith("/icons/");
 const guestMarketRoutes = new Set([
   "/api/quote",
   "/api/bars",
@@ -50,6 +61,10 @@ const guestMarketRoutes = new Set([
   "/api/night-vision",
   "/api/provider-capabilities",
 ]);
+const guestSymbols = new Set([
+  ...String(process.env.CIPHER_GUEST_SYMBOLS || "").split(",").map((symbol) => symbol.trim().toUpperCase()).filter(Boolean),
+  ..."SPY,QQQ,AAPL,MSFT,NVDA,AMZN,GOOGL,META,TSLA,AMD,MU,AVGO".split(","),
+]);
 const supabaseAuth = createSupabaseAuth({
   supabaseUrl: process.env.SUPABASE_URL,
   anonKey: process.env.SUPABASE_ANON_KEY,
@@ -57,6 +72,7 @@ const supabaseAuth = createSupabaseAuth({
 const authSessions = createAuthSessionStore({
   inactivityMs: Number(process.env.CIPHER_AUTH_SESSION_INACTIVITY_MS || 30 * 60 * 1000),
   absoluteMs: Number(process.env.CIPHER_AUTH_SESSION_ABSOLUTE_MS || 12 * 60 * 60 * 1000),
+  guestAbsoluteMs: Number(process.env.CIPHER_GUEST_SESSION_ABSOLUTE_MS || 2 * 60 * 60 * 1000),
 });
 const providerSessionClient = createProviderSessionClient({
   coreUrl,
@@ -68,7 +84,9 @@ if (hostedMode && !internalProxyToken) {
 async function validateHostedRequest(req) {
   const cookieSession = authSessions.get(req);
   if (cookieSession) return cookieSession;
-  return supabaseAuth.validateRequest(req);
+  const validated = await supabaseAuth.validateRequest(req);
+  if (!validated) return null;
+  return { ...validated, profile: accessProfiles.authenticated(validated, validated.databaseAccess) };
 }
 
 if (authGate.enabled && !authGate.configured && !hostedMode) {
@@ -86,6 +104,7 @@ const mime = {
   ".css": "text/css; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
   ".json": "application/json; charset=utf-8",
+  ".webmanifest": "application/manifest+json",
   ".png": "image/png",
   ".svg": "image/svg+xml",
   ".ico": "image/x-icon",
@@ -168,6 +187,11 @@ function guestRateAllowed(req) {
   const now = Date.now();
   const current = guestRateBuckets.get(key);
   if (!current || current.expiresAt <= now) {
+    if (guestRateBuckets.size > 2_000) {
+      for (const [bucketKey, bucket] of guestRateBuckets) {
+        if (bucket.expiresAt <= now) guestRateBuckets.delete(bucketKey);
+      }
+    }
     guestRateBuckets.set(key, { count: 1, expiresAt: now + GUEST_RATE_WINDOW_MS });
     return true;
   }
@@ -180,8 +204,34 @@ function guestAccessAllowed(req, url) {
   if (!hostedMode || !guestMode) return false;
   if ((req.method || "GET").toUpperCase() !== "GET") return false;
   if (!guestMarketRoutes.has(url.pathname)) return false;
-  if (!hostedOrigins.has(String(req.headers.origin || ""))) return false;
+  const origin = String(req.headers.origin || "");
+  if (origin && !hostedOrigins.has(origin)) return false;
+  const symbol = String(url.searchParams.get("ticker") || url.searchParams.get("symbol") || "SPY").trim().toUpperCase();
+  if (!guestSymbols.has(symbol)) return false;
+  if (url.searchParams.get("fresh") === "1" || url.searchParams.get("refresh") === "1") return false;
+  const limit = Number(url.searchParams.get("limit") || url.searchParams.get("bars") || 0);
+  if (Number.isFinite(limit) && limit > 500) return false;
+  const expirations = Number(url.searchParams.get("expirations") || 0);
+  if (Number.isFinite(expirations) && expirations > 4) url.searchParams.set("expirations", "4");
+  if (url.pathname === "/api/matrix") {
+    // Core accepts a numeric spot-distance (or "all") here. "compact" is a
+    // UI concept, not a valid exposure-engine depth, and used to make every
+    // guest Strike Matrix request fail with a float-conversion 422.
+    url.searchParams.set("depth", "0.06");
+  }
   return guestRateAllowed(req);
+}
+
+function sessionPayload(session) {
+  const profile = session.profile || (session.guest ? accessProfiles.guest() : accessProfiles.authenticated(session));
+  return {
+    authenticated: !session.guest,
+    mode: profile.mode,
+    role: profile.role,
+    user: session.guest ? null : { id: session.userId, email: session.email || null },
+    capabilities: profile.capabilities,
+    settings: profile.settings,
+  };
 }
 
 async function sendLoginPage(res, status = 200) {
@@ -219,6 +269,7 @@ const routes = {
   "/api/prospective-fronttests": "/api/prospective-fronttests",
   "/api/autopilot-status": "/api/autopilot-status",
   "/api/options-chain": "/api/options-chain",
+  "/api/earnings-radar": "/api/earnings-radar",
   "/api/options-builder": "/api/options-builder",
   "/api/portfolio-risk": "/api/portfolio-risk",
   "/api/watchlists": "/api/watchlists",
@@ -396,7 +447,7 @@ createServer(async (req, res) => {
     // Authenticated callers still get the full core health below.
     if (hostedMode) {
       const userContext = await validateHostedRequest(req);
-      if (!userContext) return sendJson(res, 200, { status: "ok" }, corsHeaders(req.headers.origin));
+      if (!userContext || userContext.guest) return sendJson(res, 200, { status: "ok" }, corsHeaders(req.headers.origin));
       try {
         return await proxyCore(res, "/health", new URLSearchParams(), {
           acceptEncoding: req.headers["accept-encoding"] || "",
@@ -421,29 +472,51 @@ createServer(async (req, res) => {
     const headers = corsHeaders(req.headers.origin);
     if (method === "GET") {
       const session = authSessions.get(req);
-      if (!session) return sendJson(res, 401, { authenticated: false }, headers);
-      return sendJson(res, 200, { authenticated: true, user: { id: session.userId } }, headers);
+      // Session discovery is not an authorization attempt. A clean browser is
+      // an expected state, so report it without creating a noisy failed request;
+      // protected API routes still return 401 independently.
+      if (!session) return sendJson(res, 200, { authenticated: false }, headers);
+      return sendJson(res, 200, sessionPayload(session), headers);
     }
     if (method === "POST") {
       const validated = await supabaseAuth.validateRequest(req);
       if (!validated) return sendJson(res, 401, { error: "authentication required" }, headers);
-      const cookie = authSessions.create(validated);
+      const profile = accessProfiles.authenticated(validated, validated.databaseAccess);
+      const session = { ...validated, profile };
+      const cookie = authSessions.create(session);
       return sendJson(
         res,
         200,
-        { authenticated: true, user: { id: validated.userId } },
+        sessionPayload(session),
         { ...headers, "set-cookie": cookie },
       );
     }
     if (method === "DELETE") {
       const session = authSessions.get(req);
       if (session) {
-        await providerSessionClient.disconnect(session).catch(() => {});
+        // Browser logout must not wait on the loopback provider bridge. A stalled
+        // market-data service previously kept the auth cookie alive and made the
+        // profile badge appear to do nothing. Revoke the web session immediately;
+        // provider cleanup is best-effort and its server-side entry expires separately.
+        void providerSessionClient.disconnect(session).catch(() => {});
       }
       const cookie = authSessions.clear(req);
       return sendJson(res, 200, { authenticated: false }, { ...headers, "set-cookie": cookie });
     }
     return sendJson(res, 405, { error: "method not allowed" }, { ...headers, allow: "GET, POST, DELETE" });
+  }
+  if (hostedMode && url.pathname === "/auth/guest") {
+    const headers = corsHeaders(req.headers.origin);
+    if (!guestMode) return sendJson(res, 404, { error: "guest access is disabled" }, headers);
+    if ((req.method || "GET").toUpperCase() !== "POST") {
+      return sendJson(res, 405, { error: "method not allowed" }, { ...headers, allow: "POST" });
+    }
+    const origin = String(req.headers.origin || "");
+    if (!origin || !hostedOrigins.has(origin)) return sendJson(res, 403, { error: "origin not allowed" }, headers);
+    if (!guestRateAllowed(req)) return sendJson(res, 429, { error: "guest rate limit exceeded" }, headers);
+    const profile = accessProfiles.guest();
+    const cookie = authSessions.createGuest(profile);
+    return sendJson(res, 200, sessionPayload({ userId: "guest", guest: true, profile }), { ...headers, "set-cookie": cookie });
   }
   if (hostedMode && (url.pathname === "/api/login" || url.pathname === "/api/logout")) {
     return sendJson(res, 404, { error: "local authentication is disabled in hosted mode" }, corsHeaders(req.headers.origin));
@@ -490,31 +563,38 @@ createServer(async (req, res) => {
   let guestContext = null;
   if (hostedMode) {
     hostedUser = await validateHostedRequest(req);
-    if (!hostedUser && guestAccessAllowed(req, url)) {
-      guestContext = { userId: "guest", accessToken: null, guest: true };
+    if (hostedUser?.guest) {
+      if (guestAccessAllowed(req, url)) {
+        guestContext = hostedUser;
+      } else if (url.pathname.startsWith("/api/")) {
+        return sendJson(res, 403, { error: "This feature is not available in guest mode." }, corsHeaders(req.headers.origin));
+      }
+      hostedUser = null;
     }
     if (!hostedUser && !guestContext) {
       if (url.pathname.startsWith("/api/") || url.pathname === "/api/stream" || url.pathname === "/api/live") {
         return sendJson(res, 401, { error: "authentication required" }, corsHeaders(req.headers.origin));
       }
-      try {
-        return await sendLoginPage(res);
-      } catch {
-        return sendJson(res, 503, { error: "login page unavailable" });
-      }
+      // Hosted mode uses the built Next frontend's Supabase AuthPanel. The
+      // legacy password page is local-development-only and must never be shown
+      // when CIPHER_HOSTED=1.
+      // Static assets fall through to the file handler below.
     }
-  } else if (!authGate.isAuthenticated(req)) {
+  } else if (!hostedMode && !authGate.isAuthenticated(req)) {
     if (url.pathname.startsWith("/api/") || url.pathname === "/api/stream" || url.pathname === "/api/live") {
       return sendJson(res, 401, { error: "authentication required" });
     }
     if ((req.method || "GET").toUpperCase() !== "GET") {
       return sendJson(res, 401, { error: "authentication required" });
     }
-    try {
-      return await sendLoginPage(res);
-    } catch {
-      return sendJson(res, 503, { error: "login page unavailable" });
+    if (!isPublicStaticAsset(url.pathname)) {
+      try {
+        return await sendLoginPage(res);
+      } catch {
+        return sendJson(res, 503, { error: "login page unavailable" });
+      }
     }
+    // PWA assets fall through to the static-file handler below.
   }
   if (hostedMode && url.pathname === "/api/provider-session") {
     const method = (req.method || "GET").toUpperCase();

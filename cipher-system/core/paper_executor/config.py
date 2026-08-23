@@ -58,6 +58,10 @@ class StrategyConfig:
     allowed_tickers: tuple[str, ...] = ("NVDA", "GOOGL", "AVGO")
     entry_window_et_start: str | None = None
     entry_window_et_end: str | None = None
+    # Opt-in premarket-entry mode for the autopilot: cipher-scanner cards may
+    # enter before the regular window opens (only during premarket hours; the
+    # window close still binds). All other scanner types are unaffected.
+    allow_premarket_entries: bool = False
     allowed_patterns: tuple[dict[str, str], ...] = ()
 
 
@@ -126,6 +130,15 @@ class SimulationConfig:
 
 
 @dataclass(frozen=True)
+class ExecutionConfig:
+    backend: str = "simulated"
+    order_timeout_seconds: int = 20
+    poll_interval_seconds: float = 1.0
+    auto_promote_paper: bool = False
+    paper_forward_test_authorized: bool = False
+
+
+@dataclass(frozen=True)
 class VmForwardingConfig:
     enabled: bool = True
     asynchronous: bool = True
@@ -154,6 +167,7 @@ class ExecutorConfig:
     portfolio: PortfolioConfig = field(default_factory=PortfolioConfig)
     exit: ExitConfig = field(default_factory=ExitConfig)
     simulation: SimulationConfig = field(default_factory=SimulationConfig)
+    execution: ExecutionConfig = field(default_factory=ExecutionConfig)
     vm_forwarding: VmForwardingConfig = field(default_factory=VmForwardingConfig)
     safety: SafetyConfig = field(default_factory=SafetyConfig)
 
@@ -164,7 +178,7 @@ class ExecutorConfig:
 
 _TOP = {
     "mode", "runtime_root", "database_path", "server", "scanner", "strategy",
-    "market_data", "instrument", "contract", "portfolio", "exit", "simulation",
+    "market_data", "instrument", "contract", "portfolio", "exit", "simulation", "execution",
     "vm_forwarding", "safety",
 }
 
@@ -203,12 +217,14 @@ def load_config(path: str | Path | None = None) -> ExecutorConfig:
     portfolio_data = data.get("portfolio", {})
     exit_data = data.get("exit", {})
     simulation_data = data.get("simulation", {})
+    execution_data = data.get("execution", {})
     vm_data = data.get("vm_forwarding", {})
     safety_data = data.get("safety", {})
     for name, section in {
         "server": server_data, "scanner": scanner_data, "strategy": strategy_data,
         "market_data": market_data, "instrument": instrument_data, "contract": contract_data, "portfolio": portfolio_data,
         "exit": exit_data, "simulation": simulation_data, "vm_forwarding": vm_data,
+        "execution": execution_data,
         "safety": safety_data,
     }.items():
         if not isinstance(section, dict):
@@ -254,6 +270,7 @@ def load_config(path: str | Path | None = None) -> ExecutorConfig:
             allowed_tickers=tuple(str(t).upper() for t in strategy_data.get("allowed_tickers", ("NVDA", "GOOGL", "AVGO"))),
             entry_window_et_start=strategy_data.get("entry_window_et_start"),
             entry_window_et_end=strategy_data.get("entry_window_et_end"),
+            allow_premarket_entries=bool(strategy_data.get("allow_premarket_entries", False)),
             allowed_patterns=tuple(
                 {
                     "scanner_type": str(p.get("scanner_type") or p.get("scanner") or "").lower(),
@@ -270,6 +287,7 @@ def load_config(path: str | Path | None = None) -> ExecutorConfig:
         portfolio=PortfolioConfig(**{**PortfolioConfig().__dict__, **portfolio_data}),
         exit=ExitConfig(**{**ExitConfig().__dict__, **exit_data}),
         simulation=SimulationConfig(**{**SimulationConfig().__dict__, **simulation_data}),
+        execution=ExecutionConfig(**{**ExecutionConfig().__dict__, **execution_data}),
         vm_forwarding=VmForwardingConfig(**{**VmForwardingConfig().__dict__, **vm_data}),
         safety=safety,
     )
@@ -279,4 +297,10 @@ def load_config(path: str | Path | None = None) -> ExecutorConfig:
         raise ValueError("Market data provider must be tradier_production or alpaca_core.")
     if cfg.market_data.provider == "alpaca_core" and not cfg.market_data.core_url.startswith("http://127.0.0.1:"):
         raise ValueError("Alpaca core market data must use a loopback Cipher API URL.")
+    if cfg.execution.backend not in {"simulated", "alpaca_paper"}:
+        raise ValueError("Execution backend must be simulated or alpaca_paper.")
+    if cfg.execution.backend == "alpaca_paper" and cfg.instrument.model != "long_option":
+        raise ValueError("Alpaca paper execution currently supports long_option only.")
+    if cfg.execution.order_timeout_seconds < 1 or cfg.execution.poll_interval_seconds <= 0:
+        raise ValueError("Execution polling values must be positive.")
     return cfg

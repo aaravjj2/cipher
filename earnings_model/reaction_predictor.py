@@ -172,12 +172,13 @@ def build_reaction_dataset(conn=None, symbol=None) -> pd.DataFrame:
 
     df['prior_streak'] = grouped['is_beat_num'].apply(calc_streaks).fillna(0)
 
-    # Clean / neutral news metrics
-    df['pre_news_count'] = df['pre_news_count'].fillna(0)
-    df['pre_news_sentiment_avg'] = df['pre_news_sentiment_avg'].fillna(0.0)
-    df['pre_news_pos_ratio'] = df['pre_news_pos_ratio'].fillna(0.0)
-    df['pre_news_neg_ratio'] = df['pre_news_neg_ratio'].fillna(0.0)
-    df['pre_news_unc_ratio'] = df['pre_news_unc_ratio'].fillna(0.0)
+    # SQLite may return all-null joined columns as object dtype. Normalize once
+    # at the boundary so fillna remains stable across pandas releases.
+    for col in (
+        'pre_news_count', 'pre_news_sentiment_avg', 'pre_news_pos_ratio',
+        'pre_news_neg_ratio', 'pre_news_unc_ratio',
+    ):
+        df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0.0)
 
     return df
 

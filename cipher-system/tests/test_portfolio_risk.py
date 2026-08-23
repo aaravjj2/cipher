@@ -33,7 +33,7 @@ def test_stock_and_option_risk_and_csv_roundtrip(tmp_path: Path):
 
 def test_unknown_option_mark_and_greek_stay_unknown(tmp_path: Path):
     path = tmp_path / "portfolio.json"
-    portfolio_risk.add_position({"asset_type": "option", "ticker": "X", "option_type": "put", "strike": 90, "expiration": "2026-08-21", "quantity": 1, "entry_price": 1}, path)
+    portfolio_risk.add_position({"asset_type": "option", "ticker": "X", "option_type": "put", "strike": 90, "expiration": "2099-08-21", "quantity": 1, "entry_price": 1}, path)
     result = portfolio_risk.status(quote_fn=_quote, chain_fn=lambda *_: [], path=path)
     assert result["positions"][0]["current_mark"] is None
     assert result["summary"]["aggregate_greeks"]["delta"] is None

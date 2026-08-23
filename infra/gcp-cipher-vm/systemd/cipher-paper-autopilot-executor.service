@@ -1,0 +1,30 @@
+[Unit]
+Description=Cipher fail-closed Alpaca paper autopilot executor
+Wants=network-online.target cipher-core.service
+After=network-online.target cipher-core.service
+Conflicts=cipher-paper-executor.service
+
+[Service]
+Type=simple
+User=aarav
+Group=aarav
+WorkingDirectory=/home/aarav/Aarav/cipher/cipher-system
+EnvironmentFile=-/etc/cipher/cipher.env
+Environment=CIPHER_PAPER_RUNTIME=/home/aarav/Aarav/cipher/runtime/data/paper_runtime
+Environment=PYTHONPATH=/home/aarav/Aarav/cipher/cipher-system
+ExecStart=/home/aarav/.venvs/cipher/bin/python -m core.paper_executor.service /home/aarav/Aarav/cipher/cipher-system/config/paper_autopilot_shadow.yaml
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/aarav/Aarav/cipher/runtime/data/paper_runtime
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+LockPersonality=yes
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=cipher-paper-autopilot-executor
+
+[Install]
+WantedBy=multi-user.target

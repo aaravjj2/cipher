@@ -4,12 +4,13 @@ These instructions apply to `/home/aarav/Aarav/cipher`.
 
 ## Project Identity
 
-- Personal-use, private, local-only options research terminal.
+- Personal-use options research terminal with a public, judge-safe showcase.
 - Active product is `cipher-system/`.
 - Not a commercial product and not for redistribution.
 - Clean-room reconstruction only. Do not copy proprietary AccessObsidian,
   APEX, Hermes, Fincept, or commercial Cipher internals.
-- Read-only intelligence in v1. No auto-execution and no order endpoints.
+- Browser research remains read-only. An isolated, loopback-only executor may
+  automate explicitly authorized Alpaca paper-account orders; live orders are forbidden.
 
 ## Active Runtime
 
@@ -26,7 +27,7 @@ The active app is:
 | `cipher-system/core/weight_lab.py` | Local weight fitting/dumps |
 | `cipher-system/core/gex_capture.py` | Local GEX history capture job |
 | `cipher-system/core/research_platform/` | Governance, provenance, experiment, promotion, and prospective-validation plane |
-| `cipher-system/core/paper_executor/` | Separate shadow/paper simulation runtime; no broker orders |
+| `cipher-system/core/paper_executor/` | Separate shadow/simulation and Alpaca-paper runtime |
 | `tests/` | Smoke and safety tests for the active app |
 
 The root `api/`, `relay/`, `shared/`, `storage/`, `exposure_engine/`,
@@ -104,19 +105,21 @@ except as an explicitly labelled visual placeholder.
 
 ## Execution Boundary
 
-- No live order submission code.
+- No live order submission code or live brokerage hostname.
 - The browser/core research terminal remains read-only.
 - `core/paper_executor/` and forward-test modules may simulate entries, exits,
-  fills, positions, and portfolio constraints, but must not contain a broker
-  client or submit an order.
+  fills, positions, and portfolio constraints. The single exception is
+  `core/paper_executor/alpaca_paper_broker.py`, which may submit limit orders
+  only to `https://paper-api.alpaca.markets` after a persisted deterministic
+  intent and successful reconciliation.
 - Governance promotion stops at `LIVE_REVIEW_REQUIRED`; that state does not
   authorize live execution.
-- No scheduled live-order runner.
-- No `/v2/orders`, `submit_order`, `place_order`, `create_order`,
-  `TradingClient`, or `OrderClient` usage in active files.
-- Any future broker adapter requires a separately authorized package, explicit
-  human review, and an updated project boundary. It must not be inferred from
-  paper eligibility or governance state.
+- No scheduled live-order runner and no browser/core order route.
+- `/v2/orders` is permitted only in the named paper adapter. Broker SDKs,
+  `TradingClient`, `OrderClient`, and every live Alpaca hostname remain forbidden.
+- Paper automation must start fail-closed, reconcile account/positions, use
+  idempotent client order IDs, persist intent before submission, and retain a
+  kill switch. Paper eligibility never authorizes live execution.
 
 ## Coding Standards
 

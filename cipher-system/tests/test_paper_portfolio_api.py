@@ -32,9 +32,9 @@ def test_snapshot_audits_signal_disposition_position_and_equity(tmp_path: Path) 
     db_path = tmp_path / "fronttest.sqlite"
     db = fronttest_portfolios.connect(db_path)
     db.execute(
-        """insert into signals values
-           ('s1','v6_nvda_p05','NVDA','P05','short','2026-08-13T14:00:00Z',
-            '2026-08-13T14:01:00Z','{}','OPENED',null)"""
+        """insert into signals(signal_id,portfolio_id,symbol,setup_id,direction,signal_at,detected_at,payload_json,disposition,skip_reason)
+           values ('s1','v6_nvda_p05','NVDA','P05','short','2026-08-13T14:00:00Z',
+                   '2026-08-13T14:01:00Z','{}','OPENED',null)"""
     )
     db.execute(
         """insert into signal_outcomes(

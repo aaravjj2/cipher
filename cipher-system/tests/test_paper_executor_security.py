@@ -23,8 +23,20 @@ def test_source_contains_no_forbidden_url_path_patterns():
     forbidden = ["/accounts/", "/orders", "/placeorder", "/positions"]
     offenders = []
     for path in root.glob("*.py"):
+        if path.name == "alpaca_paper_broker.py":
+            # The only broker exception is separately locked to Alpaca paper,
+            # limit orders, and PK credentials by its adapter/security tests.
+            continue
         text = path.read_text(encoding="utf-8").lower()
         for pattern in forbidden:
             if pattern in text:
                 offenders.append((path.name, pattern))
     assert offenders == []
+
+
+def test_the_broker_exception_is_exactly_one_paper_file():
+    adapter = Path(__file__).resolve().parents[1] / "core" / "paper_executor" / "alpaca_paper_broker.py"
+    text = adapter.read_text(encoding="utf-8").lower()
+    assert "https://paper-api.alpaca.markets" in text
+    assert "https://api.alpaca.markets" not in text
+    assert '"type": "limit"' in text

@@ -56,6 +56,21 @@ def test_market_bound_capture_distinguishes_last_session_from_stale():
     assert operator_status._capture_state("gex_snapshot", recent, regular)["status"] == "STALE"
 
 
+def test_saved_scans_remain_available_as_on_demand_artifacts():
+    from datetime import datetime, timezone
+    old_scan = {
+        "status": "AVAILABLE",
+        "path": "scan_history/example.json",
+        "age_seconds": 7 * 86400,
+        "observed_at": "2026-08-15T12:00:00+00:00",
+    }
+    result = operator_status._capture_state(
+        "saved_scans", old_scan, datetime(2026, 8, 22, 12, 0, tzinfo=timezone.utc)
+    )
+    assert result["status"] == "AVAILABLE"
+    assert result["on_demand"] is True
+
+
 def test_market_bound_capture_treats_friday_as_last_session_through_weekend():
     from datetime import datetime, timezone
     friday_capture = {

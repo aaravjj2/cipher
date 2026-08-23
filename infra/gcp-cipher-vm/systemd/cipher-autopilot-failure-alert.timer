@@ -1,0 +1,11 @@
+[Unit]
+Description=Check Cipher paper-autopilot failures every two minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=2min
+Persistent=true
+Unit=cipher-autopilot-failure-alert.service
+
+[Install]
+WantedBy=timers.target

@@ -21,6 +21,21 @@ from .collector import is_etf
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 
+def current_price_drift(ticker) -> Dict[str, float]:
+    """Return current 5/20-session close drift when enough bars exist."""
+    history = ticker.history(period="2mo", auto_adjust=False)
+    if history.empty or "Close" not in history:
+        return {}
+    closes = history["Close"].dropna()
+    if len(closes) < 6:
+        return {}
+    latest = float(closes.iloc[-1])
+    drift = {"pre_5d_return_pct": (latest / float(closes.iloc[-6]) - 1.0) * 100.0}
+    if len(closes) >= 21:
+        drift["pre_20d_return_pct"] = (latest / float(closes.iloc[-21]) - 1.0) * 100.0
+    return drift
+
+
 def find_upcoming_earnings(
     days_ahead: int = 14,
     tiers: Optional[List[str]] = None,
@@ -28,6 +43,7 @@ def find_upcoming_earnings(
     conn=None
 ) -> List[Dict[str, Any]]:
     """Scan the universe for companies with scheduled earnings announcements."""
+    own_connection = conn is None
     if conn is None:
         conn = init_db()
 
@@ -84,7 +100,8 @@ def find_upcoming_earnings(
             eps_avg = cal.get('Earnings Average')
 
             # Run prediction from model
-            pred = predict_for_symbol(sym, conn=conn)
+            drift = current_price_drift(t)
+            pred = predict_for_symbol(sym, conn=conn, feature_overrides=drift)
 
             # Historical beat rate from DB
             past_events = get_earnings_for_symbol(conn, sym)
@@ -102,6 +119,8 @@ def find_upcoming_earnings(
             upcoming_cards.append({
                 'symbol': sym,
                 'scheduled_date': matched_date.strftime('%Y-%m-%d'),
+                'earnings_date_sources': ['yahoo_finance'],
+                'earnings_date_confirmation': 'single_source_unconfirmed',
                 'days_until': days_to_report,
                 'eps_estimate_avg': eps_avg,
                 'eps_estimate_range': f"${eps_low} - ${eps_high}" if (eps_low and eps_high) else "N/A",
@@ -114,6 +133,8 @@ def find_upcoming_earnings(
                 'recommended_strategy': pred.get('primary_strategy', 'Iron Condor'),
                 'rationale': pred.get('rationale', ''),
                 'pre_drift_5d': pred.get('inputs_snapshot', {}).get('pre_5d_drift_pct', 0.0),
+                'pre_drift_20d': pred.get('inputs_snapshot', {}).get('pre_20d_drift_pct', 0.0),
+                'market_drift_source': pred.get('inputs_snapshot', {}).get('market_drift_source', 'unavailable'),
                 'news_sentiment': pred.get('inputs_snapshot', {}).get('pre_news_sentiment', 0.0)
             })
 
@@ -122,6 +143,8 @@ def find_upcoming_earnings(
 
     # Sort by upcoming date ascending, then confidence descending
     upcoming_cards.sort(key=lambda x: (x['days_until'], -x['confidence']))
+    if own_connection:
+        conn.close()
     return upcoming_cards
 
 

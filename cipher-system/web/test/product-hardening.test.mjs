@@ -13,6 +13,7 @@ const morning = readFileSync(new URL("../src/components/panels/MorningBrief.tsx"
 const home = readFileSync(new URL("../src/app/page.tsx", import.meta.url), "utf8");
 const nightVision = readFileSync(new URL("../src/components/panels/NightVision.tsx", import.meta.url), "utf8");
 const settings = readFileSync(new URL("../src/components/panels/Settings.tsx", import.meta.url), "utf8");
+const guestShowcase = readFileSync(new URL("../src/components/panels/GuestShowcase.tsx", import.meta.url), "utf8");
 
 test("all typed GET helpers pass through the shared request coordinator", () => {
   assert.match(api, /return coordinatedGet\(path/);
@@ -61,17 +62,18 @@ test("ticker workbench unifies the daily analysis context without an order surfa
   assert.doesNotMatch(workbench, /submit_order|place_order|create_order|TradingClient|OrderClient/);
 });
 
-test("morning brief prioritizes integrity and prospective truth before market context", () => {
-  const attention = morning.indexOf("1 · Needs attention");
-  const observations = morning.indexOf("2 · Active paper observations");
-  const setups = morning.indexOf("3 · Review-worthy setups");
-  const market = morning.indexOf("4 · Broad market");
-  const portfolios = morning.indexOf("5 · Six shadow portfolios");
-  assert.ok(attention >= 0 && attention < observations);
-  assert.ok(observations < setups && setups < market && market < portfolios);
-  assert.match(morning, /No backfill, broker connection, or execution authority/);
-  assert.match(morning, /Provider refresh pending; flow is unknown, not zero/);
-  assert.match(morning, /Flow unavailable; no observations are being represented/);
+test("morning brief stays compact and decision focused", () => {
+  for (const section of ["Market now", "Focus ·", "Paper status", "Setups to review"]) {
+    assert.match(morning, new RegExp(section));
+  }
+  assert.match(morning, /Flow refresh pending; unknown, not zero/);
+  assert.match(morning, /Flow unavailable; no observation inferred/);
+  assert.match(morning, /no broker-order capability/);
+  for (const state of ["Healthy · no setup", "Latest setup rejected by rules", "Data failure · entries blocked", "active simulated position"]) {
+    assert.match(morning, new RegExp(state.replace("·", "\\·")));
+  }
+  assert.doesNotMatch(morning, /AI Executive Market Synthesis|Daily research workflow|Six shadow portfolios/);
+  assert.ok(morning.split("<Card").length - 1 <= 5);
   assert.match(home, /p-3 sm:p-6/);
 });
 
@@ -116,4 +118,22 @@ test("paper portfolios distinguish blocked opportunity paths from option P&L", (
   assert.match(paper, /not hypothetical option fills or P&amp;L/);
   assert.match(paper, /Recent signals and subsequent path/);
   assert.match(api, /underlying_path_counterfactual/);
+  for (const state of ["HEALTHY_NO_SETUP", "SETUP_REJECTED", "DATA_FAILURE", "ACTIVE_POSITION"]) {
+    assert.match(api, new RegExp(state));
+  }
+  assert.match(paper, /No simulated fill was created/);
+  assert.match(paper, /OPRA data path verified/);
+});
+
+test("guest mode showcases the full research workflow without private or order authority", () => {
+  assert.match(sidebar, /GUEST_NAV_SECTIONS[\s\S]*GUEST_PANEL_LABELS\.has/);
+  assert.match(sidebar, /filter\(\(section\) => section\.items\.length > 0\)/);
+  assert.match(home, /GUEST_PANEL_LABELS\.has/);
+  for (const panel of ["Morning Brief", "Earnings Radar", "Setup Scanner", "Options Terminal", "Portfolio Risk", "Paper Portfolios", "Options Backtest", "GEX Replay", "Trident"]) {
+    assert.match(guestShowcase, new RegExp(`"${panel}"`));
+  }
+  assert.match(guestShowcase, /Illustrative judge demo/);
+  assert.match(guestShowcase, /not current quotes, recommendations, or performance claims/);
+  assert.match(guestShowcase, /no broker-order authority/);
+  assert.doesNotMatch(guestShowcase, /submit_order|place_order|create_order|TradingClient|OrderClient/);
 });

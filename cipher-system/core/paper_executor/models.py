@@ -184,6 +184,25 @@ class PaperPosition:
     mae_pct: float = 0.0
 
 
+@dataclass(frozen=True)
+class TradeIntent:
+    decision_id: str
+    evidence_snapshot_id: str | None
+    ticker: str
+    contract_symbol: str
+    side: str
+    quantity: int
+    limit_price: float
+    target: float | None
+    invalidation: float | None
+    expires_at: datetime
+
+    @property
+    def client_order_id(self) -> str:
+        digest = hashlib.sha256(self.decision_id.encode("utf-8")).hexdigest()[:24]
+        return f"cipher-{digest}"
+
+
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
 

@@ -5,7 +5,58 @@ from urllib.parse import parse_qs, urlparse
 
 import pytest
 
+from core.paper_executor import local_scan_scheduler
 from core.paper_executor.local_scan_scheduler import executor_payload, in_entry_window, scanner_url
+
+
+class _Response:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        return False
+
+    def read(self):
+        return b'{"ok": true}'
+
+
+
+def test_request_json_adds_internal_guest_context_from_environment(monkeypatch):
+    captured = {}
+    monkeypatch.setenv("CIPHER_INTERNAL_PROXY_TOKEN", "unit-test-token")
+    monkeypatch.setenv("CIPHER_PROVIDER_SESSION", "opaque-session")
+
+    def fake_urlopen(request, timeout):
+        captured["request"] = request
+        captured["timeout"] = timeout
+        return _Response()
+
+    monkeypatch.setattr(local_scan_scheduler.urllib.request, "urlopen", fake_urlopen)
+    assert local_scan_scheduler.request_json("http://127.0.0.1:8282/api/health", timeout=7) == {"ok": True}
+    request = captured["request"]
+    assert request.get_header("X-cipher-internal-token") == "unit-test-token"
+    assert request.get_header("X-cipher-guest") == "1"
+    assert request.get_header("X-cipher-user-id") == "guest"
+    assert request.get_header("X-cipher-provider-session") == "opaque-session"
+    assert captured["timeout"] == 7
+
+
+
+def test_request_json_does_not_create_auth_headers_without_token(monkeypatch):
+    captured = {}
+    monkeypatch.delenv("CIPHER_INTERNAL_PROXY_TOKEN", raising=False)
+    monkeypatch.delenv("CIPHER_PROVIDER_SESSION", raising=False)
+
+    def fake_urlopen(request, timeout):
+        captured["request"] = request
+        return _Response()
+
+    monkeypatch.setattr(local_scan_scheduler.urllib.request, "urlopen", fake_urlopen)
+    local_scan_scheduler.request_json("http://127.0.0.1:8282/api/health")
+    assert captured["request"].get_header("X-cipher-internal-token") is None
+    assert captured["request"].get_header("X-cipher-guest") is None
+
+
 
 
 def test_entry_window_is_new_york_weekday_and_dst_aware():

@@ -53,6 +53,7 @@ EXCLUDED_DIRS: frozenset[str] = frozenset({
 ALLOWED_FILES: frozenset[str] = frozenset({
     "core/research_platform/seven_layer_stack.py",  # declares them
     "core/research_only_guard.py",                  # enforces them
+    "core/paper_executor/alpaca_paper_broker.py",   # isolated Alpaca paper adapter
 })
 
 

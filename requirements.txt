@@ -2,6 +2,7 @@
 # The core API uses stdlib http.server — no web framework needed.
 numpy
 scipy
+lightgbm
 websockets==16.1.1
 anthropic
 openai

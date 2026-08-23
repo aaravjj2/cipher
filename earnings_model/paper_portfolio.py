@@ -9,12 +9,12 @@ max gain, max risk, and settlement tracking.
 import os
 import json
 import sqlite3
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
 from typing import Dict, Any, List, Optional
 import yfinance as yf
 
 from .config import DATA_DIR
-from .reaction_predictor import predict_stock_reaction
+from .model import predict_for_symbol
 
 PAPER_DB_PATH = os.path.join(DATA_DIR, 'paper_portfolio.sqlite')
 
@@ -55,6 +55,11 @@ def init_paper_db(db_path: Optional[str] = None) -> sqlite3.Connection:
 
     c.execute("CREATE INDEX IF NOT EXISTS idx_paper_symbol ON paper_positions(symbol);")
     c.execute("CREATE INDEX IF NOT EXISTS idx_paper_status ON paper_positions(status);")
+    c.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_paper_event ON paper_positions(symbol, report_date);")
+    columns = {row[1] for row in c.execute("PRAGMA table_info(paper_positions)")}
+    for name in ('model_version', 'validation_status'):
+        if name not in columns:
+            c.execute(f"ALTER TABLE paper_positions ADD COLUMN {name} TEXT")
     conn.commit()
     return conn
 
@@ -89,32 +94,37 @@ def upcoming_week_schedule(days_ahead: int = 7, conn=None) -> List[tuple]:
 
 def round_strike(val: float, base: float = 2.5) -> float:
     """Round a price to the nearest strike increment."""
-    if val >= 200:
-        base = 5.0
-    elif val >= 500:
+    if val >= 500:
         base = 10.0
+    elif val >= 200:
+        base = 5.0
     elif val <= 50:
         base = 1.0
     return round(round(val / base) * base, 2)
 
 
-def generate_optimal_paper_setup(symbol: str, spot: float, report_date: str, target_risk: float = 2000.0) -> Dict[str, Any]:
-    """Generate the optimal defined-risk option setup based on reaction model forecast."""
-    res = predict_stock_reaction(symbol)
-    if 'error' in res:
-        # Fallback to standard neutral iron condor
-        exp_gap = 2.5
-        t_state = 'BALANCED'
-        rev_risk = 25.0
-        beat_prob = 75.0
-    else:
-        f = res['fundamental_forecast']
-        m = res['market_reaction_forecast']
-        t = res['expectation_tension']
-        exp_gap = max(1.5, abs(float(m['expected_opening_gap_pct'])))
-        t_state = t['state']
-        rev_risk = float(m['gap_reversal_risk_pct'])
-        beat_prob = float(f['beat_probability_pct'])
+def generate_optimal_paper_setup(
+    symbol: str,
+    spot: float,
+    report_date: str,
+    target_risk: float = 2000.0,
+    prediction: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Generate a defined-risk setup only after the model clears its holdout gate."""
+    prediction = prediction or predict_for_symbol(symbol)
+    if prediction.get('error') or not prediction.get('strategy_eligible'):
+        return {
+            'symbol': symbol.upper(),
+            'report_date': report_date,
+            'skip_reason': prediction.get('error') or prediction.get(
+                'validation_status', 'UNVALIDATED_MODEL'
+            ),
+            'model_version': prediction.get('model_version', 'legacy-unversioned'),
+            'validation_status': prediction.get('validation_status', 'UNVALIDATED_MODEL'),
+        }
+
+    exp_gap = max(1.5, abs(float(prediction['expected_gap_pct'])))
+    direction = prediction['direction']
 
     # Expiry: nearest Friday on or after the report date.
     entry_dt = date.today()
@@ -130,9 +140,9 @@ def generate_optimal_paper_setup(symbol: str, spot: float, report_date: str, tar
     else:
         wing_w = 1.0
 
-    # Decision Matrix:
-    # 1. Oversold relief candidates -> Bull Call Debit Spread
-    if 'OVERSOLD' in t_state and beat_prob >= 65.0:
+    # Only directional debit spreads are eligible. Short-volatility structures
+    # require captured implied moves and are not inferred from underlying gaps.
+    if direction == 'BULLISH':
         strategy_type = 'Debit Bull Call Spread'
         strike_long = round_strike(spot, wing_w)
         strike_short = round_strike(spot * (1.0 + max(0.03, exp_gap / 100.0)), wing_w)
@@ -151,10 +161,9 @@ def generate_optimal_paper_setup(symbol: str, spot: float, report_date: str, tar
             {'action': 'BUY', 'type': 'CALL', 'strike': strike_long, 'expiry': expiry_str},
             {'action': 'SELL', 'type': 'CALL', 'strike': strike_short, 'expiry': expiry_str}
         ]
-        notes = f"Oversold relief play. Model predicts {beat_prob:.1f}% beat with low priced-in expectations."
+        notes = f"Holdout-gated bullish paper cohort; expected underlying gap {exp_gap:.1f}%."
 
-    # 2. Overheated candidates -> Bear Put Debit Spread
-    elif 'OVERHEATED' in t_state and rev_risk >= 20.0:
+    elif direction == 'BEARISH':
         strategy_type = 'Debit Bear Put Spread'
         strike_long = round_strike(spot, wing_w)
         strike_short = round_strike(spot * (1.0 - max(0.03, exp_gap / 100.0)), wing_w)
@@ -173,55 +182,15 @@ def generate_optimal_paper_setup(symbol: str, spot: float, report_date: str, tar
             {'action': 'BUY', 'type': 'PUT', 'strike': strike_long, 'expiry': expiry_str},
             {'action': 'SELL', 'type': 'PUT', 'strike': strike_short, 'expiry': expiry_str}
         ]
-        notes = f"Overheated fade play. Pre-drift run-up priced in; vulnerable to sell-the-news gap down."
+        notes = f"Holdout-gated bearish paper cohort; expected underlying gap {exp_gap:.1f}%."
 
-    # 3. High-conviction beat trenders with balanced drift -> Bull Call Spread
-    elif beat_prob >= 85.0 and exp_gap >= 0.5:
-        strategy_type = 'Debit Bull Call Spread'
-        strike_long = round_strike(spot, wing_w)
-        strike_short = round_strike(spot * 1.04, wing_w)
-        if strike_short <= strike_long:
-            strike_short = strike_long + wing_w
-
-        width = strike_short - strike_long
-        est_unit_debit = round(width * 0.42, 2)
-        est_unit_gain = round(width - est_unit_debit, 2)
-
-        contracts = max(1, int(target_risk / (est_unit_debit * 100)))
-        total_risk = round(contracts * est_unit_debit * 100, 2)
-        total_max_gain = round(contracts * est_unit_gain * 100, 2)
-
-        legs = [
-            {'action': 'BUY', 'type': 'CALL', 'strike': strike_long, 'expiry': expiry_str},
-            {'action': 'SELL', 'type': 'CALL', 'strike': strike_short, 'expiry': expiry_str}
-        ]
-        notes = f"High-conviction beat ({beat_prob:.1f}%) with expected upward PEAD continuation."
-
-    # 4. Balanced / Steady Volatility Crush -> Iron Condor
     else:
-        strategy_type = 'Iron Condor'
-        move_buffer = max(0.035, (exp_gap / 100.0) * 1.35)
-        short_put = round_strike(spot * (1.0 - move_buffer), wing_w)
-        long_put = short_put - wing_w
-        short_call = round_strike(spot * (1.0 + move_buffer), wing_w)
-        long_call = short_call + wing_w
-
-        width = wing_w
-        est_unit_credit = round(width * 0.32, 2)
-        est_unit_risk = round(width - est_unit_credit, 2)
-
-        contracts = max(1, int(target_risk / (est_unit_risk * 100)))
-        total_risk = round(contracts * est_unit_risk * 100, 2)
-        total_max_gain = round(contracts * est_unit_credit * 100, 2)
-        est_unit_debit = -est_unit_credit
-
-        legs = [
-            {'action': 'BUY', 'type': 'PUT', 'strike': long_put, 'expiry': expiry_str},
-            {'action': 'SELL', 'type': 'PUT', 'strike': short_put, 'expiry': expiry_str},
-            {'action': 'SELL', 'type': 'CALL', 'strike': short_call, 'expiry': expiry_str},
-            {'action': 'BUY', 'type': 'CALL', 'strike': long_call, 'expiry': expiry_str}
-        ]
-        notes = f"Volatility crush play outside ±{move_buffer*100:.1f}% expected range. Balanced pre-drift."
+        return {
+            'symbol': symbol.upper(), 'report_date': report_date,
+            'skip_reason': 'NO_VALIDATED_DIRECTION',
+            'model_version': prediction['model_version'],
+            'validation_status': prediction['validation_status'],
+        }
 
     return {
         'symbol': symbol.upper(),
@@ -236,21 +205,24 @@ def generate_optimal_paper_setup(symbol: str, spot: float, report_date: str, tar
         'total_cost': total_risk,
         'max_gain': total_max_gain,
         'max_loss': total_risk,
-        'notes': notes
+        'notes': notes,
+        'model_version': prediction['model_version'],
+        'validation_status': prediction['validation_status'],
     }
 
 
 def execute_paper_order(conn: sqlite3.Connection, setup: Dict[str, Any]) -> int:
     """Record a paper options position into the persistent database."""
     c = conn.cursor()
-    now_str = datetime.utcnow().isoformat()
+    now_str = datetime.now(timezone.utc).isoformat()
 
     c.execute("""
         INSERT INTO paper_positions (
             symbol, strategy_type, report_date, entry_date, expiry_date,
             spot_at_entry, legs_json, contracts, unit_debit, total_cost,
-            max_gain, max_loss, status, notes, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'OPEN', ?, ?)
+            max_gain, max_loss, status, notes, created_at, model_version,
+            validation_status
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'OPEN', ?, ?, ?, ?)
     """, (
         setup['symbol'],
         setup['strategy_type'],
@@ -265,7 +237,9 @@ def execute_paper_order(conn: sqlite3.Connection, setup: Dict[str, Any]) -> int:
         setup['max_gain'],
         setup['max_loss'],
         setup['notes'],
-        now_str
+        now_str,
+        setup.get('model_version'),
+        setup.get('validation_status'),
     ))
     conn.commit()
     return c.lastrowid
@@ -300,12 +274,25 @@ def enter_this_week_paper_book(
             continue
         try:
             t = yf.Ticker(sym)
-            h = t.history(period='5d')
+            h = t.history(period='2mo', auto_adjust=False)
             if h.empty:
                 continue
             spot = float(h['Close'].iloc[-1])
 
-            setup = generate_optimal_paper_setup(sym, spot, rep_date, target_risk=target_risk_per_trade)
+            closes = h['Close'].dropna()
+            drift = {}
+            if len(closes) >= 6:
+                drift['pre_5d_return_pct'] = (spot / float(closes.iloc[-6]) - 1.0) * 100.0
+            if len(closes) >= 21:
+                drift['pre_20d_return_pct'] = (spot / float(closes.iloc[-21]) - 1.0) * 100.0
+            prediction = predict_for_symbol(sym, feature_overrides=drift)
+            setup = generate_optimal_paper_setup(
+                sym, spot, rep_date, target_risk=target_risk_per_trade,
+                prediction=prediction,
+            )
+            if setup.get('skip_reason'):
+                print(f"Skipping {sym} {rep_date}: {setup['skip_reason']}")
+                continue
             order_id = execute_paper_order(conn, setup)
             setup['id'] = order_id
             placed_orders.append(setup)
@@ -318,6 +305,7 @@ def enter_this_week_paper_book(
 
 def get_active_paper_positions(conn: Optional[sqlite3.Connection] = None) -> List[Dict[str, Any]]:
     """Fetch all open paper positions."""
+    own_connection = conn is None
     if conn is None:
         conn = init_paper_db()
     c = conn.cursor()
@@ -328,7 +316,108 @@ def get_active_paper_positions(conn: Optional[sqlite3.Connection] = None) -> Lis
         d = dict(r)
         d['legs'] = json.loads(d['legs_json'])
         positions.append(d)
+    if own_connection:
+        conn.close()
     return positions
+
+
+def get_paper_scorecard(conn: Optional[sqlite3.Connection] = None) -> Dict[str, Any]:
+    """Return a compact outcome summary without treating open trades as wins."""
+    own_connection = conn is None
+    if conn is None:
+        conn = init_paper_db()
+    row = conn.execute(
+        "SELECT COUNT(*) AS total, "
+        "SUM(CASE WHEN status='OPEN' THEN 1 ELSE 0 END) AS open, "
+        "SUM(CASE WHEN status='SETTLED' THEN 1 ELSE 0 END) AS settled, "
+        "SUM(CASE WHEN status='SETTLED' AND realized_pnl > 0 THEN 1 ELSE 0 END) AS wins, "
+        "SUM(CASE WHEN status='SETTLED' THEN realized_pnl ELSE 0 END) AS realized_pnl "
+        "FROM paper_positions"
+    ).fetchone()
+    result = dict(row)
+    result.update({key: int(result[key] or 0) for key in ('total', 'open', 'settled', 'wins')})
+    result['realized_pnl'] = round(float(result['realized_pnl'] or 0.0), 2)
+    result['win_rate_pct'] = (
+        round(result['wins'] / result['settled'] * 100.0, 2) if result['settled'] else None
+    )
+    result['cohorts'] = [dict(row) for row in conn.execute(
+        "SELECT COALESCE(model_version, 'legacy-unversioned') AS model_version, "
+        "COALESCE(validation_status, 'LEGACY_ESTIMATED_ENTRY') AS validation_status, "
+        "COUNT(*) AS total, SUM(CASE WHEN status='OPEN' THEN 1 ELSE 0 END) AS open, "
+        "SUM(CASE WHEN status='SETTLED' THEN 1 ELSE 0 END) AS settled, "
+        "SUM(CASE WHEN status='SETTLED' AND realized_pnl > 0 THEN 1 ELSE 0 END) AS wins, "
+        "SUM(CASE WHEN status='SETTLED' THEN realized_pnl ELSE 0 END) AS realized_pnl "
+        "FROM paper_positions GROUP BY 1, 2 ORDER BY 1, 2"
+    )]
+    if own_connection:
+        conn.close()
+    return result
+
+
+def _expiry_close(symbol: str, expiry_date: str) -> float:
+    """Load the last underlying close on or before expiry."""
+    expiry = date.fromisoformat(expiry_date)
+    history = yf.Ticker(symbol).history(
+        start=(expiry - timedelta(days=7)).isoformat(),
+        end=(expiry + timedelta(days=1)).isoformat(),
+        auto_adjust=False,
+    )
+    if history.empty or "Close" not in history or history["Close"].dropna().empty:
+        raise ValueError(f"No expiry close available for {symbol} on {expiry_date}")
+    return float(history["Close"].dropna().iloc[-1])
+
+
+def _settlement_pnl(position: Dict[str, Any], settle_spot: float) -> float:
+    """Value the stored defined-risk legs at intrinsic value on expiry."""
+    payoff = 0.0
+    for leg in json.loads(position["legs_json"]):
+        intrinsic = (
+            max(0.0, settle_spot - float(leg["strike"]))
+            if leg["type"] == "CALL"
+            else max(0.0, float(leg["strike"]) - settle_spot)
+        )
+        payoff += intrinsic if leg["action"] == "BUY" else -intrinsic
+    initial_cashflow = -float(position["unit_debit"])
+    return round((initial_cashflow + payoff) * 100 * int(position["contracts"]), 2)
+
+
+def settle_expired_positions(
+    *,
+    as_of: Optional[date] = None,
+    db_path: Optional[str] = None,
+    close_loader=None,
+) -> Dict[str, Any]:
+    """Settle past-expiry paper positions; unresolved prices remain OPEN."""
+    as_of = as_of or date.today()
+    close_loader = close_loader or _expiry_close
+    conn = init_paper_db(db_path)
+    rows = conn.execute(
+        "SELECT * FROM paper_positions WHERE status = 'OPEN' AND expiry_date < ? "
+        "ORDER BY expiry_date, symbol",
+        (as_of.isoformat(),),
+    ).fetchall()
+    settled, errors = [], []
+    for row in rows:
+        position = dict(row)
+        try:
+            spot = round(float(close_loader(position["symbol"], position["expiry_date"])), 4)
+            pnl = _settlement_pnl(position, spot)
+            risk = float(position["max_loss"])
+            pnl_pct = round(pnl / risk * 100.0, 2) if risk else None
+            settled_at = datetime.now(timezone.utc).isoformat()
+            conn.execute(
+                "UPDATE paper_positions SET status='SETTLED', settle_spot=?, "
+                "realized_pnl=?, realized_pnl_pct=?, settled_at=? WHERE id=?",
+                (spot, pnl, pnl_pct, settled_at, position["id"]),
+            )
+            settled.append({"id": position["id"], "symbol": position["symbol"],
+                            "settle_spot": spot, "realized_pnl": pnl,
+                            "realized_pnl_pct": pnl_pct})
+        except Exception as exc:
+            errors.append({"id": position["id"], "symbol": position["symbol"], "error": str(exc)})
+    conn.commit()
+    conn.close()
+    return {"eligible": len(rows), "settled": settled, "errors": errors}
 
 
 def render_paper_book_table(positions: List[Dict[str, Any]]) -> str:

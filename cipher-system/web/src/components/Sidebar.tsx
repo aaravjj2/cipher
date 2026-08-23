@@ -21,6 +21,7 @@ import {
   ReplayIcon,
   AlertIcon,
 } from "@/components/icons";
+import { GUEST_PANEL_LABELS } from "@/lib/guestCatalog";
 
 type IconComponent = ComponentType<SVGProps<SVGSVGElement>>;
 
@@ -40,6 +41,7 @@ export const NAV_SECTIONS: NavSection[] = [
   {
     label: "TODAY",
     items: [
+      { label: "Autopilot", icon: PortfolioIcon },
       { label: "Morning Brief", icon: GridIcon },
       { label: "Earnings Radar", icon: StarIcon },
       { label: "Research Desk", icon: SearchIcon },
@@ -100,17 +102,24 @@ export const NAV_SECTIONS: NavSection[] = [
   },
 ];
 
+// Guest mode demonstrates the complete research workflow. SYSTEM is omitted and
+// private-write panels render an explicit locked showcase rather than touching user data.
+export const GUEST_NAV_SECTIONS: NavSection[] = NAV_SECTIONS
+  .map((section) => ({ ...section, items: section.items.filter((item) => GUEST_PANEL_LABELS.has(item.label)) }))
+  .filter((section) => section.items.length > 0);
+
 type SidebarNavProps = {
   collapsed: boolean;
   activePanel: string;
   onSelect: (label: string) => void;
+  sections?: NavSection[];
 };
 
-function SidebarNav({ collapsed, activePanel, onSelect }: SidebarNavProps) {
+function SidebarNav({ collapsed, activePanel, onSelect, sections = NAV_SECTIONS }: SidebarNavProps) {
   const [openSections, setOpenSections] = useState(() => new Set(["TODAY", "SYSTEM"]));
   return (
     <nav className="flex flex-col gap-1" aria-label="Primary">
-      {NAV_SECTIONS.map((section) => {
+      {sections.map((section) => {
         const containsActive = section.items.some((item) => item.label === activePanel);
         const expanded = collapsed || containsActive || openSections.has(section.label);
         return <div key={section.label}>
@@ -271,6 +280,8 @@ type SidebarProps = {
   onTiledModeChange?: (tiled: boolean) => void;
   /** Opens the command palette. Omit to hide the button (the Ctrl/Cmd+K shortcut is the page's). */
   onCommandPaletteOpen?: () => void;
+  /** Capability-filtered navigation for guest or other constrained profiles. */
+  sections?: NavSection[];
 };
 
 export function Sidebar({
@@ -281,6 +292,7 @@ export function Sidebar({
   tiledMode = false,
   onTiledModeChange,
   onCommandPaletteOpen,
+  sections = NAV_SECTIONS,
 }: SidebarProps = {}) {
   const [collapsed, setCollapsed] = useState(false);
   const [internalActivePanel, setInternalActivePanel] = useState("Strike Matrix");
@@ -372,7 +384,7 @@ export function Sidebar({
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto">
-          <SidebarNav collapsed={collapsed} activePanel={activePanel} onSelect={setActivePanel} />
+          <SidebarNav collapsed={collapsed} activePanel={activePanel} onSelect={setActivePanel} sections={sections} />
         </div>
         <SidebarFooter
           collapsed={collapsed}
@@ -414,6 +426,7 @@ export function Sidebar({
               setActivePanel(label);
               setMobileOpen(false);
             }}
+            sections={sections}
           />
         </div>
         <SidebarFooter

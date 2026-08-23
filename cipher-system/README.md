@@ -1,12 +1,12 @@
 # Cipher — Auditable AI Options Copilot
 
-Cipher is a private, local-first stocks-and-options research workstation. It
+Cipher is a local-first stocks-and-options research workstation. It
 connects discovery, chart and market-structure analysis, contract liquidity,
 research agents, journaling, prospective validation, and autonomous **paper**
-simulation through one evidence trail.
+execution through one evidence trail.
 
-Cipher is not a live-trading bot. The active application has no broker-order
-endpoint or live-order client.
+Cipher is not a live-trading bot. The browser has no broker-order endpoint; the
+only broker client is isolated, limit-only, and hard-locked to Alpaca paper.
 
 ## Daily workflow
 

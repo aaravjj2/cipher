@@ -144,7 +144,7 @@ class EightLayerStackSpec:
                     writes=("execution_audit",),
                     allowed_use=(AllowedUse.CONTEXT,),
                     live_capital_access=False,
-                    notes="The isolated paper executor records virtual fills and positions; it has no broker-order path.",
+                    notes="The isolated executor supports virtual fills and an explicitly authorized Alpaca-paper adapter; it has no live-capital path.",
                 ),
                 StackLayer(
                     8,

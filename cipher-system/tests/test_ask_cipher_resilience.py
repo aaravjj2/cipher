@@ -43,8 +43,30 @@ def test_workspace_context_is_available_to_openai_compatible_providers():
             "ticker": "NVDA", "read_only": True, "execution_capability": False,
         }}
     )
-    assert '"ticker": "NVDA"' in result
-    assert '"execution_capability": false' in result
+    assert '"ticker":"NVDA"' in result
+    assert '"execution_capability":false' in result
+
+
+def test_groq_context_budgets_keep_valid_json_and_recent_history():
+    history = [
+        {"role": "user" if i % 2 == 0 else "assistant", "content": str(i) * 2_000}
+        for i in range(8)
+    ]
+    bounded = ask_cipher._bounded_history(history, ask_cipher.GROQ_HISTORY_CHARS)
+    assert sum(len(row["content"]) for row in bounded) <= ask_cipher.GROQ_HISTORY_CHARS
+    assert bounded[-1]["content"].startswith("7")
+
+    result = ask_cipher._dispatch_openai_tool(
+        "get_workspace_context",
+        {},
+        {"get_workspace_context": lambda: {
+            "rows": [{"payload": "x" * 1_000} for _ in range(30)]
+        }},
+        max_chars=ask_cipher.GROQ_TOOL_RESULT_CHARS,
+    )
+    decoded = __import__("json").loads(result)
+    assert len(result) <= ask_cipher.GROQ_TOOL_RESULT_CHARS
+    assert decoded["truncated"] is True
 
 
 class _ProviderRefusal(Exception):

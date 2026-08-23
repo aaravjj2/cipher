@@ -484,7 +484,7 @@ function AccountCard() {
       <CardHeading icon={KeyIcon} title="Account" />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="text-[13px]" style={{ color: "var(--text)" }}>{auth.session.user.email ?? "Authenticated user"}</p>
+          <p className="text-[13px]" style={{ color: "var(--text)" }}>{auth.session.user?.email ?? "Authenticated user"}</p>
           <p className="mt-1 text-[11px]" style={{ color: "var(--text-mute)" }}>Signing out also clears the session-only Alpaca connection.</p>
         </div>
         <button type="button" onClick={() => void signOut()} className="rounded-md border px-3 py-2 text-[12px] font-semibold" style={{ borderColor: "var(--line)", color: "var(--text)" }}>

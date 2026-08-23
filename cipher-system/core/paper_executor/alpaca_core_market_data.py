@@ -1,17 +1,20 @@
 """Paper-executor market data through Cipher's local Alpaca-backed API.
 
-This adapter deliberately talks only to the read-only core service.  It has no
-Alpaca credentials and cannot reach a brokerage endpoint, which keeps the
-autopilot boundary independently auditable.
+This adapter deliberately talks only to the read-only core service.  It may use
+server-side Alpaca credentials to establish a guest-scoped provider session;
+those credentials never enter the plan, browser, executor payload, or broker
+order path.
 """
 from __future__ import annotations
 
 import json
+import os
 import re
 import threading
 import time
 import urllib.parse
 import urllib.request
+import urllib.error
 from datetime import datetime, timezone
 from typing import Any
 
@@ -47,20 +50,115 @@ class AlpacaCoreMarketData:
         self._lock = threading.RLock()
         self._chains: dict[str, tuple[float, dict[str, Any]]] = {}
         self._contracts: dict[str, dict[str, Any]] = {}
+        self._provider_session_id: str | None = None
+        self.last_chain_success_at: str | None = None
+        self.last_error: dict[str, Any] | None = None
+
+    @property
+    def provider_session_ready(self) -> bool:
+        with self._lock:
+            return bool(self._provider_session_id)
+
+    @property
+    def market_data_ready(self) -> bool:
+        return self.provider_session_ready and self.last_chain_success_at is not None
+
+    def status(self) -> dict[str, Any]:
+        return {
+            "provider": "alpaca_core",
+            "provider_session_ready": self.provider_session_ready,
+            "market_data_ready": self.market_data_ready,
+            "last_chain_success_at": self.last_chain_success_at,
+            "last_error": self.last_error,
+        }
+
+    def _auth_headers(self) -> dict[str, str]:
+        """Build hosted-core guest context; credentials never enter GET requests."""
+        token = os.environ.get("CIPHER_INTERNAL_PROXY_TOKEN", "")
+        if not token:
+            return {"Accept": "application/json"}
+        with self._lock:
+            session_id = self._provider_session_id
+        if not session_id:
+            session_id = self._connect_provider_session(token)
+        return {"Accept": "application/json", "X-Cipher-Internal-Token": token,
+                "X-Cipher-User-Id": "guest", "X-Cipher-Guest": "1",
+                "X-Cipher-Provider-Session": session_id}
+
+    def _connect_provider_session(self, token: str) -> str:
+        key = (os.environ.get("ALPACA_ALGO_KEY") or os.environ.get("ALPACA_ALGO_PLUS_KEY")
+               or os.environ.get("ALPACA_API_KEY"))
+        secret = (os.environ.get("ALPACA_ALGO_SECRET") or os.environ.get("ALPACA_ALGO_PLUS_SECRET")
+                  or os.environ.get("ALPACA_API_SECRET"))
+        if not key or not secret:
+            raise RuntimeError("hosted Alpaca credentials are not configured for the paper executor")
+        body = json.dumps({"action": "connect", "key": key, "secret": secret,
+                           "options_feed": "opra", "stock_feed": "sip"}).encode("utf-8")
+        request = urllib.request.Request(f"{self.base_url}/internal/provider-session", data=body,
+            method="POST", headers={"Content-Type": "application/json", "Accept": "application/json",
+            "X-Cipher-Internal-Token": token, "X-Cipher-User-Id": "guest", "X-Cipher-Guest": "1"})
+        try:
+            with urllib.request.urlopen(request, timeout=self.cfg.request_timeout_seconds) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+        except Exception as exc:
+            raise RuntimeError("Cipher core provider-session connection failed") from exc
+        session_id = str(payload.get("provider_session_id") or "") if isinstance(payload, dict) else ""
+        if not session_id:
+            raise RuntimeError("Cipher core did not return a provider session")
+        with self._lock:
+            self._provider_session_id = session_id
+        return session_id
+
+    def _clear_provider_session(self) -> None:
+        with self._lock:
+            self._provider_session_id = None
 
     def _request(self, path: str, params: dict[str, Any]) -> dict[str, Any]:
         if path not in {"/api/quote", "/api/options-chain"}:
             raise ValueError("Alpaca core adapter is restricted to read-only quote endpoints.")
         url = f"{self.base_url}{path}?{urllib.parse.urlencode(params)}"
-        request = urllib.request.Request(url, headers={"Accept": "application/json"})
+        request = urllib.request.Request(url, headers=self._auth_headers())
         try:
             with urllib.request.urlopen(request, timeout=self.cfg.request_timeout_seconds) as response:
                 payload = json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            if exc.code == 401 and os.environ.get("CIPHER_INTERNAL_PROXY_TOKEN"):
+                self._clear_provider_session()
+                retry = urllib.request.Request(url, headers=self._auth_headers())
+                try:
+                    with urllib.request.urlopen(retry, timeout=self.cfg.request_timeout_seconds) as response:
+                        payload = json.loads(response.read().decode("utf-8"))
+                except Exception as retry_exc:
+                    self._remember_error(path, retry_exc)
+                    raise RuntimeError(self._error_message(path, retry_exc)) from retry_exc
+            else:
+                self._remember_error(path, exc)
+                raise RuntimeError(self._error_message(path, exc)) from exc
         except Exception as exc:
-            raise RuntimeError(f"Cipher core market-data request failed for {path}") from exc
+            self._remember_error(path, exc)
+            raise RuntimeError(self._error_message(path, exc)) from exc
         if not isinstance(payload, dict) or payload.get("error"):
+            self.last_error = {
+                "at": datetime.now(timezone.utc).isoformat(), "path": path,
+                "status": None, "reason": str(payload.get("error") if isinstance(payload, dict) else "invalid response")[:240],
+            }
             raise RuntimeError(f"Cipher core returned an invalid market-data response for {path}")
         return payload
+
+    def _remember_error(self, path: str, exc: Exception) -> None:
+        self.last_error = {
+            "at": datetime.now(timezone.utc).isoformat(),
+            "path": path,
+            "status": getattr(exc, "code", None),
+            "reason": getattr(exc, "reason", None) or type(exc).__name__,
+        }
+
+    @staticmethod
+    def _error_message(path: str, exc: Exception) -> str:
+        status = getattr(exc, "code", None)
+        reason = getattr(exc, "reason", None) or type(exc).__name__
+        suffix = f" HTTP {status}" if status is not None else ""
+        return f"Cipher core market-data request failed for {path}{suffix}: {reason}"
 
     def _chain_payload(self, ticker: str, *, force: bool = False) -> dict[str, Any]:
         ticker = ticker.upper()
@@ -75,6 +173,10 @@ class AlpacaCoreMarketData:
             "fresh": "1" if force else "0",
         })
         if payload.get("feed") != "opra":
+            self.last_error = {
+                "at": datetime.now(timezone.utc).isoformat(), "path": "/api/options-chain",
+                "status": None, "reason": "OPRA_REQUIRED",
+            }
             raise RuntimeError("OPRA is unavailable; paper entries are blocked on fallback option data.")
         contracts: dict[str, dict[str, Any]] = {}
         for expiration in payload.get("expirations") or []:
@@ -86,6 +188,8 @@ class AlpacaCoreMarketData:
         with self._lock:
             self._chains[ticker] = (time.monotonic(), payload)
             self._contracts.update(contracts)
+            self.last_chain_success_at = datetime.now(timezone.utc).isoformat()
+            self.last_error = None
         return payload
 
     @staticmethod

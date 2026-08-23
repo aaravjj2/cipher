@@ -30,6 +30,7 @@ function MessageBubble({ role, content }: ChatMessage) {
   return (
     <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
       <div
+        data-testid={isUser ? "ask-user-message" : "ask-assistant-message"}
         className="max-w-[75%] rounded-[10px] px-4 py-2.5 text-[13.5px] leading-relaxed"
         style={{
           background: isUser ? "var(--accent)" : "var(--panel-2)",

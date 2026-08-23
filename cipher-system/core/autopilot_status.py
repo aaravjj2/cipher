@@ -58,17 +58,63 @@ def _executor(url: str) -> dict[str, Any]:
         with urlopen(Request(url, headers={"Accept": "application/json"}), timeout=0.75) as response:
             payload = json.loads(response.read().decode("utf-8"))
         observed = payload.get("observability") or {}
+        readiness = payload.get("market_data_readiness") or {}
+        broker = payload.get("paper_broker") or {}
+        execution = payload.get("execution") or {}
+        counts = observed.get("counts") or {}
+        blocked = observed.get("entry_blocked_reason")
+        last_entry_block = observed.get("last_entry_block")
+        block_today = False
+        try:
+            block_time = datetime.fromisoformat(str((last_entry_block or {}).get("event_time")).replace("Z", "+00:00"))
+            block_today = block_time.astimezone(ZoneInfo("America/New_York")).date() == datetime.now(timezone.utc).astimezone(ZoneInfo("America/New_York")).date()
+        except (TypeError, ValueError):
+            pass
+        open_positions = int(observed.get("open_shadow_positions") or 0) + int(observed.get("open_paper_positions") or 0)
+        if blocked:
+            operating_state = "DATA_FAILURE"
+        elif open_positions:
+            operating_state = "ACTIVE_POSITION"
+        elif block_today:
+            operating_state = "SETUP_REJECTED"
+        elif readiness.get("market_data_ready"):
+            operating_state = "HEALTHY_NO_SETUP"
+        else:
+            operating_state = "AWAITING_DATA_CHECK"
         return {
             "reachable": True,
             "mode": payload.get("mode"),
+            "operating_state": operating_state,
             "reconciliation_passed": bool(payload.get("reconciliation_passed")),
             "quote_feed_degraded": bool((payload.get("quote_manager") or {}).get("degraded")),
+            "provider_session_ready": readiness.get("provider_session_ready"),
+            "market_data_ready": bool(readiness.get("market_data_ready")),
+            "last_chain_success_at": readiness.get("last_chain_success_at"),
+            "entry_blocked_reason": blocked,
+            "last_entry_block": last_entry_block,
+            "counts": counts,
             "open_shadow_positions": int(observed.get("open_shadow_positions") or 0),
             "last_mark_at": observed.get("last_mark_at"),
             "last_worker_exception": observed.get("last_worker_exception"),
+            "execution_backend": execution.get("backend") or broker.get("backend") or "simulated",
+            "paper_broker": {
+                "backend": broker.get("backend") or execution.get("backend") or "simulated",
+                "ready": bool(broker.get("ready")),
+                "paper_only": True,
+                "last_error": broker.get("last_error"),
+                "account": broker.get("account"),
+                "unknown_positions": broker.get("unknown_positions") or [],
+                "recent_orders": broker.get("recent_orders") or [],
+            },
         }
     except Exception as exc:
-        return {"reachable": False, "reason": type(exc).__name__, "mode": "offline", "open_shadow_positions": 0}
+        return {
+            "reachable": False, "reason": type(exc).__name__, "mode": "offline",
+            "operating_state": "DATA_FAILURE", "market_data_ready": False,
+            "open_shadow_positions": 0, "counts": {},
+            "execution_backend": "unavailable",
+            "paper_broker": {"backend": "unavailable", "ready": False, "paper_only": True, "recent_orders": []},
+        }
 
 
 def snapshot(*, now: datetime | None = None, executor_url: str = "http://127.0.0.1:8787/api/paper/status") -> dict[str, Any]:
@@ -92,6 +138,7 @@ def snapshot(*, now: datetime | None = None, executor_url: str = "http://127.0.0
                 "ticker": row.get("ticker"), "direction": row.get("direction"),
                 "score": row.get("score"), "reward_risk": row.get("reward_risk"),
                 "sentiment_status": (row.get("sentiment") or {}).get("status"),
+                "ai_evaluation": row.get("ai_evaluation"),
             } for row in candidates],
         },
         "executor": _executor(executor_url),
@@ -101,6 +148,8 @@ def snapshot(*, now: datetime | None = None, executor_url: str = "http://127.0.0
         },
         "models": {
             "finbert": "advisory_only",
+            "openrouter_model": "openai/gpt-4o-mini",
+            "ai_multi_factor": "active_advisory",
             "fingpt": "not_enabled",
             "custom_model": "not_trained",
             "model_may_authorize_entry": False,

@@ -98,7 +98,12 @@ def _groq_api_key() -> str | None:
 GROQ_MODEL = _env_key("CIPHER_GROQ_MODEL") or "openai/gpt-oss-120b"
 # No affordability ceiling here, so this is the real answer-length budget rather than a
 # figure trimmed to fit a balance.
-GROQ_MAX_TOKENS = 4096
+# The configured on-demand Groq organization has an 8k tokens-per-minute request
+# ceiling. A 4096 completion allowance plus history/tool output made ordinary
+# workspace questions request 12k+ tokens and fail with HTTP 413.
+GROQ_MAX_TOKENS = 1024
+GROQ_HISTORY_CHARS = 3_000
+GROQ_TOOL_RESULT_CHARS = 4_000
 
 # Which provider to try first. Anthropic is preferred when configured because it is the
 # model this prompt was written against; Groq comes before OpenRouter because OpenRouter's
@@ -367,16 +372,66 @@ _OPENAI_TOOL_SPECS = [
 ]
 
 
-def _dispatch_openai_tool(name: str, args: dict, tool_impls: dict[str, Callable]) -> str:
+def _bounded_json(value: object, max_chars: int) -> str:
+    """Return valid JSON within a provider context budget."""
+    encoded = json.dumps(value, default=str, separators=(",", ":"))
+    if len(encoded) <= max_chars:
+        return encoded
+
+    def compact(item: object, list_limit: int, string_limit: int, depth: int = 0) -> object:
+        if depth >= 5:
+            return "[nested data omitted]"
+        if isinstance(item, dict):
+            return {str(key): compact(val, list_limit, string_limit, depth + 1) for key, val in item.items()}
+        if isinstance(item, (list, tuple)):
+            rows = [compact(val, list_limit, string_limit, depth + 1) for val in item[:list_limit]]
+            if len(item) > list_limit:
+                rows.append({"omitted_items": len(item) - list_limit})
+            return rows
+        if isinstance(item, str) and len(item) > string_limit:
+            return item[:string_limit] + "…"
+        return item
+
+    for list_limit, string_limit in ((8, 600), (4, 320), (2, 180), (1, 96)):
+        preview = {"truncated": True, "original_chars": len(encoded), "data": compact(value, list_limit, string_limit)}
+        candidate = json.dumps(preview, default=str, separators=(",", ":"))
+        if len(candidate) <= max_chars:
+            return candidate
+    preview_chars = max(0, max_chars - 100)
+    candidate = json.dumps(
+        {"truncated": True, "original_chars": len(encoded), "preview": encoded[:preview_chars]},
+        separators=(",", ":"),
+    )
+    return candidate if len(candidate) <= max_chars else json.dumps({"truncated": True, "original_chars": len(encoded)})
+
+
+def _bounded_history(history: list[dict], max_chars: int) -> list[dict]:
+    """Keep the newest complete conversation messages inside a character budget."""
+    kept: list[dict] = []
+    used = 0
+    for row in reversed(history):
+        content = str(row.get("content") or "")
+        cost = len(content)
+        if kept and used + cost > max_chars:
+            break
+        if cost > max_chars:
+            content = content[:max_chars]
+            cost = len(content)
+        kept.insert(0, {"role": row["role"], "content": content})
+        used += cost
+    return kept
+
+
+def _dispatch_openai_tool(
+    name: str, args: dict, tool_impls: dict[str, Callable], *, max_chars: int = MAX_TOOL_RESULT_CHARS
+) -> str:
     if name == "get_quote":
-        result = json.dumps(tool_impls["get_quote"](args.get("ticker", "")), default=str)
-        return result[:MAX_TOOL_RESULT_CHARS]
+        return _bounded_json(tool_impls["get_quote"](args.get("ticker", "")), max_chars)
     if name == "list_strategies":
-        result = json.dumps(tool_impls["list_strategies"](args.get("family")), default=str)
-        return result[:MAX_TOOL_RESULT_CHARS]
+        return _bounded_json(tool_impls["list_strategies"](args.get("family")), max_chars)
     if name not in tool_impls:
         raise AskCipherError(f"provider requested unknown tool: {name}")
-    return json.dumps(tool_impls[name](), default=str)[:MAX_TOOL_RESULT_CHARS]
+    return _bounded_json(tool_impls[name](), max_chars)
 
 
 def _chunk_text(text: str, size: int = 40) -> list[str]:
@@ -500,8 +555,9 @@ def _run_chat_job_groq(
     `get_quote {"ticker":"SPY"}`, while llama-3.3-70b-versatile failed outright with
     `tool_use_failed`.
     """
+    bounded_history = _bounded_history(history, GROQ_HISTORY_CHARS)
     _run_chat_job_openai_compatible(
-        message, history, tool_impls, append_event, api_key,
+        message, bounded_history, tool_impls, append_event, api_key,
         base_url="https://api.groq.com/openai/v1",
         model=GROQ_MODEL,
         max_tokens=GROQ_MAX_TOKENS,
@@ -603,7 +659,12 @@ def _run_chat_job_openai_compatible(
             append_event({"type": "tool_call", "name": tool_call.function.name})
             try:
                 args = json.loads(tool_call.function.arguments or "{}")
-                result = _dispatch_openai_tool(tool_call.function.name, args, tool_impls)
+                result = _dispatch_openai_tool(
+                    tool_call.function.name,
+                    args,
+                    tool_impls,
+                    max_chars=GROQ_TOOL_RESULT_CHARS if "groq.com" in base_url else MAX_TOOL_RESULT_CHARS,
+                )
             except Exception as exc:  # noqa: BLE001 - a bad tool call must not kill the turn
                 result = json.dumps({"error": f"{type(exc).__name__}: {exc}"})
             messages.append({"role": "tool", "tool_call_id": tool_call.id, "content": result})

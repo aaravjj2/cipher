@@ -19,6 +19,17 @@ function normalizeUserId(value) {
   return userId && userId.length <= 128 ? userId : null;
 }
 
+function normalizeEmail(value) {
+  const email = String(value || "").trim().toLowerCase();
+  return email && email.length <= 320 ? email : null;
+}
+
+function sanitizeAppMetadata(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const role = String(value.cipher_role || "").trim().toLowerCase();
+  return role === "developer" ? { cipher_role: "developer" } : {};
+}
+
 export function createSupabaseAuth({
   supabaseUrl,
   anonKey,
@@ -35,7 +46,7 @@ export function createSupabaseAuth({
     const key = tokenCacheKey(accessToken);
     const cached = cache.get(key);
     if (cached && cached.expiresAt > Date.now()) {
-      return { userId: cached.userId, accessToken };
+      return { userId: cached.userId, email: cached.email, appMetadata: cached.appMetadata, databaseAccess: cached.databaseAccess, accessToken };
     }
     if (cached) cache.delete(key);
 
@@ -52,8 +63,21 @@ export function createSupabaseAuth({
       const payload = await response.json();
       const userId = normalizeUserId(payload?.id || payload?.user?.id);
       if (!userId) return null;
-      cache.set(key, { userId, expiresAt: Date.now() + Math.max(0, Number(cacheTtlMs) || 0) });
-      return { userId, accessToken };
+      const email = normalizeEmail(payload?.email || payload?.user?.email);
+      const appMetadata = sanitizeAppMetadata(payload?.app_metadata || payload?.user?.app_metadata);
+      let databaseAccess = null;
+      try {
+        const accessResponse = await fetchImpl(
+          `${baseUrl}/rest/v1/account_access?select=role,developer_settings&user_id=eq.${encodeURIComponent(userId)}&limit=1`,
+          { headers: { accept: "application/json", apikey: publicKey, authorization: `Bearer ${accessToken}` } },
+        );
+        if (accessResponse.ok) databaseAccess = (await accessResponse.json())?.[0] || null;
+      } catch {
+        // The access table is additive. Existing deployments remain usable until its
+        // migration is applied; app_metadata/operator allowlists still work meanwhile.
+      }
+      cache.set(key, { userId, email, appMetadata, databaseAccess, expiresAt: Date.now() + Math.max(0, Number(cacheTtlMs) || 0) });
+      return { userId, email, appMetadata, databaseAccess, accessToken };
     } catch {
       // Authentication failures are intentionally indistinguishable to callers.
       // Do not include the token, provider response, or exception in an API error.

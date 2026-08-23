@@ -5,6 +5,7 @@ import { MenuIcon, SearchIcon } from "@/components/icons";
 import { addToWatchlist } from "@/lib/watchlist";
 import { addWatchlistMember, createWatchlist, fetchProductStatus, fetchScanUniverse, fetchWatchlists, type ProductStatus } from "@/lib/api";
 import { isSupabaseConfigured } from "@/lib/supabase";
+import { GUEST_TICKERS } from "@/lib/guestCatalog";
 
 type HeaderProps = {
   /** Current panel name, rendered uppercase in `.brand-sub` (e.g. "SETUP SCANNER"). */
@@ -44,6 +45,8 @@ type HeaderProps = {
   toolbarSlotRef?: (el: HTMLDivElement | null) => void;
   /** "Welcome {displayName}!" text */
   displayName?: string;
+  accessMode?: "developer" | "member" | "guest" | "local";
+  onSignOut?: () => void;
 };
 
 /**
@@ -133,6 +136,8 @@ export function Header({
   activeWorkspace = 1,
   onWorkspaceChange,
   displayName = "Trader",
+  accessMode = "local",
+  onSignOut,
 }: HeaderProps) {
   const [searchFocused, setSearchFocused] = useState(false);
   const [inputValue, setInputValue] = useState(ticker);
@@ -148,15 +153,23 @@ export function Header({
   const [highlight, setHighlight] = useState(0);
 
   useEffect(() => {
+    if (accessMode === "guest") {
+      setUniverse([...GUEST_TICKERS]);
+      return;
+    }
     const ctrl = new AbortController();
     fetchScanUniverse(ctrl.signal)
       .then((res) => setUniverse(res.tickers ?? []))
       // A failed universe fetch just means no suggestions; typing still works.
       .catch(() => {});
     return () => ctrl.abort();
-  }, []);
+  }, [accessMode]);
 
   useEffect(() => {
+    if (accessMode === "guest") {
+      setProductStatus(null);
+      return;
+    }
     const ctrl = new AbortController();
     const load = () => fetchProductStatus(ticker, ctrl.signal).then(setProductStatus).catch(() => {
       if (!ctrl.signal.aborted) setProductStatus(null);
@@ -164,7 +177,7 @@ export function Header({
     void load();
     const id = setInterval(load, 60_000);
     return () => { ctrl.abort(); clearInterval(id); };
-  }, [ticker]);
+  }, [ticker, accessMode]);
 
   const query = inputValue.trim().toUpperCase();
   const suggestions = useMemo(() => {
@@ -260,7 +273,7 @@ export function Header({
           Sidebar — lifting the shared state up rather than having either component reach
           into the other.
         */}
-        <button
+        {onMenuClick && <button
           type="button"
           aria-label="Open navigation"
           onClick={onMenuClick}
@@ -268,7 +281,7 @@ export function Header({
           style={{ color: "var(--text)" }}
         >
           <MenuIcon width={24} height={24} />
-        </button>
+        </button>}
 
         {/*
           Brand: mark only. The "CIPHER / <PANEL>" text block held a fixed
@@ -531,6 +544,20 @@ export function Header({
         >
           Research only
         </span>
+        <button
+          type="button"
+          onClick={onSignOut}
+          disabled={!onSignOut}
+          className="shrink-0 rounded-[8px] px-[10px] py-2 text-[10px] font-bold uppercase disabled:cursor-default"
+          style={{
+            border: `1px solid ${accessMode === "developer" ? "var(--accent)" : "var(--line)"}`,
+            color: accessMode === "developer" ? "var(--accent)" : accessMode === "guest" ? "var(--gold)" : "var(--text-mute)",
+            letterSpacing: "0.08em",
+          }}
+          title={onSignOut ? `${accessMode} profile — click to sign out` : `${accessMode} profile`}
+        >
+          {accessMode === "developer" ? "Dev mode" : accessMode}
+        </button>
       </div>
     </header>
   );

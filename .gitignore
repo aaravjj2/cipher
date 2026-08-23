@@ -58,6 +58,8 @@ cipher-system/web/node_modules/
 cipher-system/web/.next/
 cipher-system/web/out/
 cipher-system/web/tsconfig.tsbuildinfo
+cipher-system/web/test-results/
+test-results/
 # Published build + rolling backups produced by cipher-system/web/deploy.sh.
 cipher-system/app/public/
 cipher-system/app/public_new/

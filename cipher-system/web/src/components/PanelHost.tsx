@@ -30,6 +30,9 @@ import { CompanyContext as CompanyContextBase } from "@/components/panels/Compan
 import { OperatorStatus as OperatorStatusBase } from "@/components/panels/OperatorStatus";
 import { ResearchDesk as ResearchDeskBase } from "@/components/panels/ResearchDesk";
 import { TickerWorkbench as TickerWorkbenchBase } from "@/components/panels/TickerWorkbench";
+import { GuestShowcase } from "@/components/panels/GuestShowcase";
+import { guestPanelMode } from "@/lib/guestCatalog";
+import { Autopilot as AutopilotBase } from "@/components/panels/Autopilot";
 
 /**
  * One place that maps a sidebar label to the panel it renders.
@@ -76,9 +79,11 @@ const CompanyContext = memo(CompanyContextBase);
 const OperatorStatus = memo(OperatorStatusBase);
 const ResearchDesk = memo(ResearchDeskBase);
 const TickerWorkbench = memo(TickerWorkbenchBase);
+const Autopilot = memo(AutopilotBase);
 
 /** Uppercase display titles — used by Header's subtitle and by dockview tab labels. */
 export const PANEL_TITLES: Record<string, string> = {
+  Autopilot: "AUTOPILOT",
   "Morning Brief": "MORNING BRIEF",
   "Earnings Radar": "EARNINGS RADAR",
   "Research Desk": "RESEARCH DESK",
@@ -133,6 +138,7 @@ type PanelHostProps = {
   spyglassTab?: SpyglassTab;
   onSpyglassTabChange?: (tab: SpyglassTab) => void;
   onNavigate?: (panel: string, ticker?: string) => void;
+  guestMode?: boolean;
 };
 
 export function PanelHost({
@@ -142,8 +148,15 @@ export function PanelHost({
   spyglassTab,
   onSpyglassTabChange,
   onNavigate,
+  guestMode = false,
 }: PanelHostProps) {
+  const guestModeType = guestPanelMode(panel);
+  if (guestMode && guestModeType !== "hybrid" && guestModeType !== "live") {
+    return <GuestShowcase panel={panel} ticker={ticker} />;
+  }
   switch (panel) {
+    case "Autopilot":
+      return <Autopilot />;
     case "Morning Brief":
       return <MorningBrief ticker={ticker} onNavigate={onNavigate} />;
     case "Earnings Radar":
@@ -151,15 +164,15 @@ export function PanelHost({
     case "Research Desk":
       return <ResearchDesk onNavigate={onNavigate} />;
     case "Ticker Workbench":
-      return <TickerWorkbench ticker={ticker} onNavigate={onNavigate} />;
+      return <TickerWorkbench ticker={ticker} onNavigate={onNavigate} guestMode={guestMode} />;
     case "Strike Matrix":
-      return <StrikeMatrix ticker={ticker} toolbarSlot={toolbarSlot} />;
+      return <StrikeMatrix ticker={ticker} toolbarSlot={toolbarSlot} guestMode={guestMode} />;
     case "Options Terminal":
       return <OptionsTerminal key={ticker} ticker={ticker} onNavigate={onNavigate} />;
     case "Chart Workbench":
       return <ChartWorkbench key={ticker} ticker={ticker} />;
     case "Night Vision":
-      return <NightVision ticker={ticker} toolbarSlot={toolbarSlot} />;
+      return <NightVision ticker={ticker} toolbarSlot={toolbarSlot} guestMode={guestMode} />;
     case "Spyglass":
       return (
         <Spyglass ticker={ticker} activeTab={spyglassTab} onActiveTabChange={onSpyglassTabChange} />

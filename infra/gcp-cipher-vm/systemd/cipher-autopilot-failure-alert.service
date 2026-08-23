@@ -1,0 +1,21 @@
+[Unit]
+Description=Send a deduplicated Cipher paper-autopilot failure alert
+After=cipher-paper-autopilot-executor.service
+
+[Service]
+Type=oneshot
+User=aarav
+Group=aarav
+WorkingDirectory=/home/aarav/Aarav/cipher/cipher-system
+EnvironmentFile=-/etc/cipher/cipher.env
+Environment=CIPHER_PAPER_RUNTIME=/home/aarav/Aarav/cipher/runtime/data/paper_runtime
+ExecStart=/home/aarav/.venvs/cipher/bin/python scripts/send_autopilot_failure_discord.py
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/aarav/Aarav/cipher/runtime/data/paper_runtime/autopilot /home/aarav/Aarav/cipher/runtime/data/paper_runtime/data/paper_trades
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=cipher-autopilot-failure-alert

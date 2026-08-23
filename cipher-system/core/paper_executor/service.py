@@ -6,6 +6,7 @@ import threading
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
+from urllib.parse import parse_qs, urlparse
 
 from .config import ExecutorConfig, load_config
 from .database import PaperExecutorDatabase
@@ -44,6 +45,27 @@ class PaperExecutorApp:
         self.cfg.kill_switch_path.parent.mkdir(parents=True, exist_ok=True)
         self.cfg.kill_switch_path.write_text(datetime.now(timezone.utc).isoformat(), encoding="utf-8")
         return {"kill_switch": True}
+
+    def market_data_probe(self, ticker: str) -> dict[str, Any]:
+        ticker = ticker.strip().upper()
+        if not ticker.isalpha() or not 1 <= len(ticker) <= 6:
+            raise ValueError("ticker must contain 1-6 letters")
+        try:
+            expirations = self.runtime.market_data.expirations(ticker)
+            contracts = sum(len(self.runtime.market_data.chain(ticker, expiration)) for expiration in expirations)
+        except Exception as exc:
+            self.db.insert_system_event("MARKET_DATA_PROBE_FAILED", {
+                "ticker": ticker, "reason": str(exc)[:300],
+            })
+            raise RuntimeError(str(exc)) from exc
+        self.db.insert_system_event("MARKET_DATA_PROBE_OK", {
+            "ticker": ticker, "expirations": len(expirations), "contracts": contracts,
+        })
+        return {
+            "ok": True, "ticker": ticker, "feed": "opra",
+            "expirations": len(expirations), "contracts": contracts,
+            "paper_only": True, "live_execution_capability": False,
+        }
 
     def resume(self, token: str | None) -> dict[str, Any]:
         self._require_token(token)
@@ -92,19 +114,28 @@ def make_handler(app: PaperExecutorApp):
             self.end_headers()
 
         def do_GET(self) -> None:
-            if self.path == "/health":
+            parsed = urlparse(self.path)
+            if parsed.path == "/health":
                 payload = health_payload(app.cfg, app.db, app.runtime.mode, app.runtime.quote_manager.degraded)
                 payload.update(app.runtime.health())
                 self._send(200, payload)
-            elif self.path == "/api/paper/status":
+            elif parsed.path == "/api/paper/status":
                 payload = health_payload(app.cfg, app.db, app.runtime.mode, app.runtime.quote_manager.degraded)
                 payload.update(app.runtime.health())
                 self._send(200, payload)
-            elif self.path == "/api/paper/" + "positions":
+            elif parsed.path == "/api/paper/market-data-probe":
+                try:
+                    ticker = (parse_qs(parsed.query).get("ticker") or ["SPY"])[0]
+                    self._send(200, app.market_data_probe(ticker))
+                except ValueError as exc:
+                    self._send(400, {"error": str(exc), "paper_only": True})
+                except RuntimeError as exc:
+                    self._send(503, {"error": str(exc), "paper_only": True})
+            elif parsed.path == "/api/paper/" + "positions":
                 self._send(200, {"positions": app.db.rows("paper_positions")})
-            elif self.path == "/api/paper/events":
+            elif parsed.path == "/api/paper/events":
                 self._send(200, {"events": []})
-            elif self.path == "/api/paper/episodes":
+            elif parsed.path == "/api/paper/episodes":
                 self._send(200, {"episodes": app.db.rows("signal_episodes")})
             else:
                 self._send(404, {"error": "not found"})

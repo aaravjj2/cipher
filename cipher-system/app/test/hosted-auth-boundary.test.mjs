@@ -133,8 +133,19 @@ test("hosted guest mode allows only bounded read-only market routes", async (t) 
     new Promise((_, reject) => setTimeout(() => reject(new Error("app server did not start")), 5_000)),
   ]);
 
-  const guestQuote = await fetch(`http://127.0.0.1:${appPort}/api/quote?ticker=SPY`, {
+  const anonymousQuote = await fetch(`http://127.0.0.1:${appPort}/api/quote?ticker=SPY`, {
     headers: { origin: "https://cipher.vercel.app" },
+  });
+  assert.equal(anonymousQuote.status, 401);
+
+  const guestLogin = await fetch(`http://127.0.0.1:${appPort}/auth/guest`, {
+    method: "POST",
+    headers: { origin: "https://cipher.vercel.app" },
+  });
+  assert.equal(guestLogin.status, 200);
+  const cookie = guestLogin.headers.get("set-cookie").split(";", 1)[0];
+  const guestQuote = await fetch(`http://127.0.0.1:${appPort}/api/quote?ticker=SPY`, {
+    headers: { origin: "https://cipher.vercel.app", cookie },
   });
   assert.equal(guestQuote.status, 200);
   assert.deepEqual(forwarded, [{
@@ -143,15 +154,21 @@ test("hosted guest mode allows only bounded read-only market routes", async (t) 
     guest: "1",
     accessToken: undefined,
   }]);
+  const guestMag7 = await fetch(`http://127.0.0.1:${appPort}/api/quote?ticker=META`, {
+    headers: { origin: "https://cipher.vercel.app", cookie },
+  });
+  assert.equal(guestMag7.status, 200);
+  assert.equal(forwarded.at(-1).path, "/api/quote?ticker=META");
+  assert.equal(forwarded.at(-1).guest, "1");
 
   const guestState = await fetch(`http://127.0.0.1:${appPort}/api/watchlists`, {
-    headers: { origin: "https://cipher.vercel.app" },
+    headers: { origin: "https://cipher.vercel.app", cookie },
   });
-  assert.equal(guestState.status, 401);
-  assert.equal(forwarded.length, 1);
+  assert.equal(guestState.status, 403);
+  assert.equal(forwarded.length, 2);
 
   const guestProvider = await fetch(`http://127.0.0.1:${appPort}/api/provider-session`, {
-    headers: { origin: "https://cipher.vercel.app" },
+    headers: { origin: "https://cipher.vercel.app", cookie },
   });
-  assert.equal(guestProvider.status, 401);
+  assert.equal(guestProvider.status, 403);
 });

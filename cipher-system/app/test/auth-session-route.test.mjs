@@ -34,6 +34,11 @@ test("hosted login uses an opaque HttpOnly cookie session", async (t) => {
   t.after(() => new Promise((resolve) => core.close(resolve)));
 
   const auth = createServer((req, res) => {
+    if (req.url.startsWith("/rest/v1/account_access")) {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end("[]");
+      return;
+    }
     if (req.url !== "/auth/v1/user" || req.headers.authorization !== "Bearer temporary-token") {
       res.writeHead(401);
       res.end(JSON.stringify({ error: "invalid" }));
@@ -70,6 +75,9 @@ test("hosted login uses an opaque HttpOnly cookie session", async (t) => {
   ]);
 
   const origin = "https://cipher.vercel.app";
+  const initial = await fetch(`http://127.0.0.1:${appPort}/auth/session`, { headers: { origin } });
+  assert.equal(initial.status, 200);
+  assert.deepEqual(await initial.json(), { authenticated: false });
   const exchanged = await fetch(`http://127.0.0.1:${appPort}/auth/session`, {
     method: "POST",
     headers: { origin, authorization: "Bearer temporary-token" },
@@ -86,7 +94,10 @@ test("hosted login uses an opaque HttpOnly cookie session", async (t) => {
     headers: { origin, cookie },
   });
   assert.equal(session.status, 200);
-  assert.deepEqual((await session.json()).user, { id: "user-a" });
+  const sessionPayload = await session.json();
+  assert.deepEqual(sessionPayload.user, { id: "user-a", email: "user@example.com" });
+  assert.equal(sessionPayload.mode, "member");
+  assert.equal(sessionPayload.capabilities.liveOrders, false);
 
   const quote = await fetch(`http://127.0.0.1:${appPort}/api/quote?ticker=SPY`, {
     headers: { origin, cookie },
@@ -105,4 +116,37 @@ test("hosted login uses an opaque HttpOnly cookie session", async (t) => {
     headers: { origin, cookie },
   });
   assert.equal(afterLogout.status, 401);
+
+  const guestLogin = await fetch(`http://127.0.0.1:${appPort}/auth/guest`, {
+    method: "POST",
+    headers: { origin },
+  });
+  assert.equal(guestLogin.status, 200);
+  const guestPayload = await guestLogin.json();
+  assert.equal(guestPayload.mode, "guest");
+  assert.equal(guestPayload.authenticated, false);
+  assert.equal(guestPayload.capabilities.savedWorkspace, false);
+  const guestCookie = guestLogin.headers.get("set-cookie").split(";", 1)[0];
+
+  const guestQuote = await fetch(`http://127.0.0.1:${appPort}/api/quote?ticker=SPY`, {
+    headers: { origin, cookie: guestCookie },
+  });
+  assert.equal(guestQuote.status, 200);
+  assert.equal(forwarded.at(-1).guest, "1");
+  assert.equal(forwarded.at(-1).accessToken, undefined);
+
+  const guestMatrix = await fetch(`http://127.0.0.1:${appPort}/api/matrix?symbol=SPY&expirations=12&depth=full`, {
+    headers: { origin, cookie: guestCookie },
+  });
+  assert.equal(guestMatrix.status, 200);
+  assert.equal(forwarded.at(-1).path, "/api/matrix?expirations=4&depth=0.06&ticker=SPY");
+
+  const guestPrivate = await fetch(`http://127.0.0.1:${appPort}/api/watchlists`, {
+    headers: { origin, cookie: guestCookie },
+  });
+  assert.equal(guestPrivate.status, 403);
+  const guestUnknownSymbol = await fetch(`http://127.0.0.1:${appPort}/api/quote?ticker=GME`, {
+    headers: { origin, cookie: guestCookie },
+  });
+  assert.equal(guestUnknownSymbol.status, 403);
 });

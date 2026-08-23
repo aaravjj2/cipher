@@ -11,6 +11,12 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
+# A few product modules intentionally live beside cipher-system (not inside it),
+# notably the earnings paper portfolio.  Keep imports deterministic whether the
+# suite is launched from the repository root or from cipher-system itself.
+REPOSITORY_ROOT = ROOT.parent
+if str(REPOSITORY_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPOSITORY_ROOT))
 
 
 def load_artifact(relative_path: str):

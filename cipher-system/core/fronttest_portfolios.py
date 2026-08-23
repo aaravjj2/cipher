@@ -110,7 +110,8 @@ def connect(path: Path = DEFAULT_DB) -> sqlite3.Connection:
         signal_id text primary key, portfolio_id text not null references portfolios(portfolio_id),
         symbol text not null, setup_id text not null, direction text not null,
         signal_at text not null, detected_at text not null, payload_json text not null,
-        disposition text not null default 'DETECTED', skip_reason text
+        disposition text not null default 'DETECTED', skip_reason text,
+        configuration_sha256 text
       );
       create table if not exists positions (
         position_id text primary key, portfolio_id text not null references portfolios(portfolio_id),
@@ -157,6 +158,18 @@ def connect(path: Path = DEFAULT_DB) -> sqlite3.Connection:
         db.execute("alter table signals add column disposition text not null default 'DETECTED'")
     if "skip_reason" not in signal_columns:
         db.execute("alter table signals add column skip_reason text")
+    if "configuration_sha256" not in signal_columns:
+        db.execute("alter table signals add column configuration_sha256 text")
+    # Backfill missing configuration_sha256 from portfolios.config_json
+    for p_row in db.execute("select portfolio_id, config_json from portfolios").fetchall():
+        try:
+            cfg_hash = hashlib.sha256(p_row["config_json"].encode("utf-8")).hexdigest()
+            db.execute(
+                "update signals set configuration_sha256 = ? where portfolio_id = ? and (configuration_sha256 is null or configuration_sha256 = '')",
+                (cfg_hash, p_row["portfolio_id"])
+            )
+        except Exception:
+            pass
     position_columns = {row[1] for row in db.execute("pragma table_info(positions)")}
     position_migrations = {
         "structure": "text not null default 'long_option'",
@@ -648,9 +661,13 @@ def run_pass(
                 signal_id = _stable_id(spec.portfolio_id, signal["setup_id"], signal["signal_at"])
                 if db.execute("select 1 from signals where signal_id=?", (signal_id,)).fetchone():
                     continue
-                db.execute("insert into signals(signal_id,portfolio_id,symbol,setup_id,direction,signal_at,detected_at,payload_json) values (?,?,?,?,?,?,?,?)", (
+                cfg_hash = hashlib.sha256(json.dumps(asdict(spec), default=str, sort_keys=True).encode("utf-8")).hexdigest()
+                signal_payload = dict(signal)
+                signal_payload["configuration_sha256"] = cfg_hash
+                db.execute("insert into signals(signal_id,portfolio_id,symbol,setup_id,direction,signal_at,detected_at,payload_json,configuration_sha256) values (?,?,?,?,?,?,?,?,?)", (
                     signal_id, spec.portfolio_id, spec.symbol, signal["setup_id"], signal["direction"],
-                    signal["signal_at"], moment.isoformat(), json.dumps(signal, sort_keys=True),
+                    signal["signal_at"], moment.isoformat(), json.dumps(signal_payload, sort_keys=True),
+                    cfg_hash,
                 ))
                 if db.execute("select 1 from positions where portfolio_id=? and status='OPEN'", (spec.portfolio_id,)).fetchone():
                     db.execute("update signals set disposition='SKIPPED',skip_reason='OPEN_POSITION' where signal_id=?", (signal_id,))

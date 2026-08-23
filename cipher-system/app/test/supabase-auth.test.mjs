@@ -19,10 +19,29 @@ test("validates a bearer token through Supabase Auth and returns the user contex
 
   const result = await auth.validateRequest({ headers: { authorization: "Bearer access-a" } });
 
-  assert.deepEqual(result, { userId: "user-a", accessToken: "access-a" });
+  assert.deepEqual(result, {
+    userId: "user-a",
+    email: "a@example.com",
+    appMetadata: {},
+    databaseAccess: null,
+    accessToken: "access-a",
+  });
   assert.equal(calls[0].url, "https://project.supabase.co/auth/v1/user");
   assert.equal(calls[0].init.headers.authorization, "Bearer access-a");
   assert.equal(calls[0].init.headers.apikey, "public-anon-key");
+});
+
+test("reads operator-owned developer access through the user's RLS-scoped Supabase request", async () => {
+  const auth = createSupabaseAuth({
+    supabaseUrl: "https://project.supabase.co",
+    anonKey: "public-anon-key",
+    fetchImpl: async (url) => url.includes("/auth/v1/user")
+      ? new Response(JSON.stringify({ id: "dev-a", email: "dev@example.com" }), { status: 200 })
+      : new Response(JSON.stringify([{ role: "developer", developer_settings: { display_name: "Aarav" } }]), { status: 200 }),
+  });
+  const result = await auth.validateAccessToken("access-dev");
+  assert.equal(result.databaseAccess.role, "developer");
+  assert.equal(result.databaseAccess.developer_settings.display_name, "Aarav");
 });
 
 

@@ -181,7 +181,7 @@ def build(*, ticker: str, quote_fn: Callable[[str], dict], flow_fn: Callable[...
             "title": f"{len(void_signals)} prospective signal{'s' if len(void_signals) != 1 else ''} excluded",
             "detail": "Preserved in the audit ledger but excluded from eligible results.",
         })
-    return {
+    payload = {
         "generated_at": status_payload["generated_at"], "ticker": ticker.upper(),
         "session": status_payload["session"], "freshness": status_payload,
         "market": market, "recent_scans": scans,
@@ -227,3 +227,4 @@ def build(*, ticker: str, quote_fn: Callable[[str], dict], flow_fn: Callable[...
         "exceptions": all_exceptions,
         "read_only": True,
     }
+    return payload

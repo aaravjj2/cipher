@@ -35,7 +35,9 @@ CAPTURE_EXPECTATIONS = {
     "gex_snapshot": {"current_seconds": 1800, "market_bound": True},
     "fronttest_portfolios": {"current_seconds": 3600, "market_bound": True},
     "prospective_fronttests": {"current_seconds": 3600, "market_bound": True},
-    "saved_scans": {"current_seconds": 3600, "market_bound": False},
+    # Saved scans are user-created snapshots, not a scheduled collector. Their
+    # age remains visible, but age alone must not create an operational alarm.
+    "saved_scans": {"current_seconds": None, "market_bound": False, "on_demand": True},
 }
 
 
@@ -63,6 +65,8 @@ def _capture_state(name: str, item: dict, now: datetime) -> dict:
         return item
     expectation = CAPTURE_EXPECTATIONS.get(name, {"current_seconds": 3600, "market_bound": False})
     age_seconds = float(item.get("age_seconds") or 0)
+    if expectation.get("on_demand"):
+        return {**item, "status": "AVAILABLE", "market_bound": False, "on_demand": True}
     local = now.astimezone(ZoneInfo("America/New_York"))
     regular = local.weekday() < 5 and (local.hour * 60 + local.minute) >= 570 and (local.hour * 60 + local.minute) < 960
     last_session_day: date = local.date()

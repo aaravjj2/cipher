@@ -19,12 +19,18 @@ import pandas as pd
 
 from .collector import run_collection
 from .news import run_news_collection, collect_news_for_symbol
-from .model import train_earnings_models, predict_for_symbol
+from .model import train_earnings_models, predict_for_symbol, load_trained_models
 from .reaction_predictor import predict_stock_reaction, train_reaction_pipeline
 from .report import generate_symbol_report, generate_universe_summary
 from .backtest import run_holdout_backtest
 from .scanner import find_upcoming_earnings, render_radar_table
-from .paper_portfolio import enter_this_week_paper_book, get_active_paper_positions, render_paper_book_table
+from .paper_portfolio import (
+    enter_this_week_paper_book,
+    get_active_paper_positions,
+    get_paper_scorecard,
+    render_paper_book_table,
+    settle_expired_positions,
+)
 from .discord_bot import notify_discord_paper_book, notify_discord_weekly_preview, get_discord_webhook_url
 from .db import init_db, get_all_earnings, get_price_impact
 
@@ -98,6 +104,9 @@ def main():
     paper_enter_parser.add_argument('--risk-per-trade', type=float, default=2000.0, help='Max allocated risk per position ($)')
 
     paper_book_parser = subparsers.add_parser('paper-book', help='Display active paper options positions and risk')
+
+    paper_settle_parser = subparsers.add_parser('paper-settle', help='Settle paper positions after expiry')
+    paper_settle_parser.add_argument('--as-of', type=str, help='Settlement cutoff date (YYYY-MM-DD)')
 
     # 12. Discord Webhook Digest
     discord_parser = subparsers.add_parser('notify-discord', help='Deliver earnings radar and paper book to Discord')
@@ -227,11 +236,36 @@ def main():
             # Write the machine-readable radar for the web core to serve.
             import os
             from pathlib import Path
+            model_results = (load_trained_models() or {}).get("results", {})
+            model_metrics = model_results.get("models", {})
+            direction_metrics = model_metrics.get("day5_direction", {})
+            gap_metrics = model_metrics.get("expected_abs_gap", {})
             payload = {
                 "as_of": pd.Timestamp.now(tz="UTC").isoformat(timespec="seconds"),
                 "days_ahead": args.days,
                 "count": len(cards),
                 "cards": cards,
+                "paper_scorecard": get_paper_scorecard(),
+                "validation": {
+                    "status": "UNVALIDATED_FOR_LIVE_OPTIONS_PNL",
+                    "model_version": model_results.get("model_version"),
+                    "test_samples": model_results.get("test_samples"),
+                    "day5_direction_accuracy_pct": round(
+                        float(direction_metrics.get("accuracy", 0)) * 100, 2
+                    ),
+                    "day5_baseline_accuracy_pct": round(
+                        float(direction_metrics.get("baseline_accuracy", 0)) * 100, 2
+                    ),
+                    "day5_gated_samples": direction_metrics.get("gated_samples"),
+                    "day5_gated_accuracy_pct": (
+                        round(float(direction_metrics["gated_accuracy"]) * 100, 2)
+                        if direction_metrics.get("gated_accuracy") is not None else None
+                    ),
+                    "expected_gap_mae_pct": gap_metrics.get("mae_pct"),
+                    "expected_gap_baseline_mae_pct": gap_metrics.get("baseline_mae_pct"),
+                    "strategy_gate": model_results.get("strategy_gate", {}).get("status"),
+                    "method": "chronological 60/20/20 train-selection-independent holdout",
+                },
             }
             out = Path(args.json_output)
             out.parent.mkdir(parents=True, exist_ok=True)
@@ -297,11 +331,19 @@ def main():
         print(f"Generating optimal defined-risk paper orders for this week ($ {args.risk_per_trade:,.0f} risk per position)...")
         placed = enter_this_week_paper_book(target_risk_per_trade=args.risk_per_trade)
         print(f"\nSuccessfully entered {len(placed)} paper positions into the simulator!\n")
-        print(render_paper_book_table(placed))
+        print(render_paper_book_table(get_active_paper_positions()))
 
     elif args.command == 'paper-book':
         positions = get_active_paper_positions()
         print(render_paper_book_table(positions))
+
+    elif args.command == 'paper-settle':
+        from datetime import date
+        result = settle_expired_positions(as_of=date.fromisoformat(args.as_of) if args.as_of else None)
+        print(f"Settled {len(result['settled'])}/{result['eligible']} eligible paper positions.")
+        for row in result['errors']:
+            print(f"[ERROR] {row['symbol']}: {row['error']}")
+        return 1 if result['errors'] else 0
 
     elif args.command == 'notify-discord':
         webhook_url = args.webhook_url or get_discord_webhook_url()
@@ -311,18 +353,22 @@ def main():
             print("Set DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/... in cipher-system/app/.env or pass --webhook-url")
             print("\nPreviewing formatted Discord payload:")
 
+        results = []
         if args.type in ('preview', 'all'):
             res1 = notify_discord_weekly_preview(webhook_url=webhook_url)
+            results.append(res1)
             print(f"Weekly Preview Notification: {res1.get('status')}")
             if 'payload' in res1 and not webhook_url:
                 print(json.dumps(res1['payload'], indent=2))
 
         if args.type in ('portfolio', 'all'):
             res2 = notify_discord_paper_book(webhook_url=webhook_url)
+            results.append(res2)
             print(f"Paper Portfolio Notification: {res2.get('status')}")
-            if 'payload' in res2 and not webhook_url:
-                print(json.dumps(res2['payload'], indent=2))
+            if 'payloads' in res2 and not webhook_url:
+                print(json.dumps(res2['payloads'], indent=2))
+        return 1 if any(result.get('status') in {'error', 'warning'} for result in results) else 0
 
 
 if __name__ == '__main__':
-    main()
+    raise SystemExit(main())

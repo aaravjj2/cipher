@@ -41,28 +41,35 @@ export function PaperPortfolios() {
   }, []);
   if (error) return <div style={{ color: "var(--negative)" }}>{error}</div>;
   if (!data) return <div style={{ color: "var(--text-mute)" }}>Loading shadow portfolios…</div>;
+  const executorState = autopilot?.executor.operating_state ?? "DATA_FAILURE";
+  const executorTone = executorState === "DATA_FAILURE" ? "var(--negative)" : executorState === "ACTIVE_POSITION" ? "var(--positive)" : executorState === "SETUP_REJECTED" ? "var(--gold)" : "var(--accent)";
+  const executorLabel = executorState.replaceAll("_", " ");
+  const executorCounts = autopilot?.executor.counts ?? {};
   return (
     <div className="space-y-4" style={{ fontFamily: "var(--font-mono)" }}>
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div><h1 className="text-xl font-semibold">Paper Portfolios</h1><p className="text-[11px]" style={{ color: "var(--text-mute)" }}>{data.caveat}</p></div>
         <div className="text-right text-xs"><div>{money(data.combined_marked_equity)} marked</div><div style={{ color: data.combined_realized_pnl >= 0 ? "var(--positive)" : "var(--negative)" }}>{money(data.combined_realized_pnl)} realized</div></div>
       </div>
-      <section className="rounded-xl border p-4" style={{ borderColor: autopilot?.executor.reachable ? "var(--line)" : "var(--gold)", background: "var(--panel)" }}>
+      <section className="rounded-xl border p-4" style={{ borderColor: executorTone, background: "var(--panel)" }}>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div><h2 className="text-sm font-semibold">Paper autopilot control plane</h2><p className="text-[10px]" style={{ color: "var(--text-mute)" }}>Premarket plan → closed-bar confirmation → simulated fill → bounded exit. No broker-order capability.</p></div>
-          <span className="rounded-full border px-2.5 py-1 text-[9px] font-bold uppercase" style={{ borderColor: "var(--line)", color: autopilot?.executor.reachable ? "var(--positive)" : "var(--gold)" }}>{autopilot ? `${autopilot.phase.replaceAll("_", " ")} · ${autopilot.executor.reachable ? "healthy" : "offline"}` : "status unavailable"}</span>
+          <span className="rounded-full border px-2.5 py-1 text-[9px] font-bold uppercase" style={{ borderColor: executorTone, color: executorTone }}>{autopilot ? `${autopilot.phase.replaceAll("_", " ")} · ${executorLabel}` : "status unavailable"}</span>
         </div>
         <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-8">
           <Stat label="Marked equity" value={money(data.combined_marked_equity)} />
           <Stat label="Liquidation equity" value={money(data.combined_liquidation_equity)} />
           <Stat label="Today realized" value={money(data.daily_realized_pnl)} tone={data.daily_realized_pnl >= 0 ? "var(--positive)" : "var(--negative)"} />
           <Stat label="Open mid P&L" value={money(data.combined_unrealized_pnl_mid)} tone={data.combined_unrealized_pnl_mid >= 0 ? "var(--positive)" : "var(--negative)"} />
-          <Stat label="Plan candidates" value={autopilot?.plan.candidate_count ?? "—"} />
-          <Stat label="Plan state" value={autopilot?.plan.state ?? "—"} />
-          <Stat label="Last action" value={autopilot?.scheduler.action.replaceAll("_", " ") ?? "—"} />
-          <Stat label="Learning" value={autopilot ? `${autopilot.learning.samples} / 100` : "—"} />
+          <Stat label="Signals" value={executorCounts.signal_cards ?? "—"} />
+          <Stat label="Candidates" value={executorCounts.contract_candidates ?? "—"} />
+          <Stat label="Orders" value={executorCounts.paper_orders ?? "—"} />
+          <Stat label="Open positions" value={(executorCounts.open_shadow_positions ?? 0) + (executorCounts.open_paper_positions ?? 0)} />
         </div>
         {autopilot?.scheduler.reason && <p className="mt-2 rounded-lg border px-3 py-2 text-[10px]" style={{ borderColor: "var(--gold)", color: "var(--gold)" }}>Blocked: {autopilot.scheduler.reason.replaceAll("_", " ")}</p>}
+        {autopilot?.executor.entry_blocked_reason && <p className="mt-2 rounded-lg border px-3 py-2 text-[10px]" style={{ borderColor: "var(--negative)", color: "var(--negative)" }}>Data blocked: {autopilot.executor.entry_blocked_reason.replaceAll("_", " ")}. No simulated fill was created.</p>}
+        {autopilot?.executor.last_entry_block && !autopilot.executor.entry_blocked_reason && <p className="mt-2 text-[10px]" style={{ color: "var(--gold)" }}>Latest rejected setup: {autopilot.executor.last_entry_block.ticker ?? "unknown"} · {(autopilot.executor.last_entry_block.reason ?? "policy rejection").replaceAll("_", " ")}</p>}
+        {autopilot?.executor.market_data_ready && <p className="mt-2 text-[9px]" style={{ color: "var(--positive)" }}>OPRA data path verified · last chain {autopilot.executor.last_chain_success_at ? new Date(autopilot.executor.last_chain_success_at).toLocaleString() : "available"}</p>}
         {autopilot && <p className="mt-2 text-[9px]" style={{ color: "var(--text-mute)" }}>Decision trace: {autopilot.daily_trace.cycles} cycles · premarket plan {autopilot.daily_trace.premarket_plan_observed ? "captured" : "missing"} · confirmation {autopilot.daily_trace.confirmation_cycle_observed ? "captured" : "missing"} · paper submissions {autopilot.daily_trace.paper_submissions}</p>}
       </section>
       <div className="grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-8">

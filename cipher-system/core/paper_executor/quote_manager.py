@@ -52,8 +52,7 @@ class QuoteManager:
     def subscribe(self, symbols: list[str]) -> None:
         with self._lock:
             self._active.update(s.upper() for s in symbols if s)
-            if self._active:
-                self._degraded = True
+            self._refresh_degraded_locked()
 
     def unsubscribe(self, symbols: list[str]) -> None:
         with self._lock:

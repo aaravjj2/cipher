@@ -1,0 +1,36 @@
+[Unit]
+Description=Run one phase-aware Cipher paper-autopilot pass
+Wants=network-online.target cipher-core.service cipher-paper-autopilot-executor.service
+After=network-online.target cipher-core.service cipher-paper-autopilot-executor.service
+
+[Service]
+Type=oneshot
+User=aarav
+Group=aarav
+WorkingDirectory=/home/aarav/Aarav/cipher/cipher-system
+EnvironmentFile=-/etc/cipher/cipher.env
+Environment=PYTHONPATH=/home/aarav/Aarav/cipher/cipher-system
+ExecStart=/home/aarav/.venvs/cipher/bin/python -m core.paper_executor.autopilot_scheduler
+# Exit 2 means a safety prerequisite (for example today's premarket plan) was
+# absent. That is an observed blocked cycle, not a crashed service.
+SuccessExitStatus=2
+Nice=10
+IOSchedulingClass=idle
+
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/aarav/Aarav/cipher/runtime/data/paper_runtime
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=cipher-paper-autopilot
+
+[Install]
+WantedBy=timers.target

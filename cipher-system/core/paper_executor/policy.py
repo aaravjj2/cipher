@@ -48,6 +48,13 @@ def entry_window_allowed(card: SignalCard, cfg: ExecutorConfig) -> bool:
     start = parse_hhmm(cfg.strategy.entry_window_et_start)
     end = parse_hhmm(cfg.strategy.entry_window_et_end)
     current = to_et_time(card.captured_at)
+    # Opt-in premarket-entry mode: the autopilot (scanner_type "cipher") may
+    # enter during premarket hours on its fresh premarket setup. This is
+    # deliberately bounded to times before the window opens so the window close
+    # still binds, and no other scanner type is affected.
+    if cfg.strategy.allow_premarket_entries and card.scanner_type == "cipher":
+        if start <= end and current < start:
+            return True
     if start <= end:
         return start <= current < end
     return current >= start or current < end

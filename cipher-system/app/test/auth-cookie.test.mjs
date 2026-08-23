@@ -19,7 +19,13 @@ test("auth cookie store uses an opaque identifier and keeps token material serve
   assert.match(cookie, /Secure/);
 
   const context = store.get({ headers: { cookie: "cipher_session=opaque-session-id" } });
-  assert.deepEqual(context, { userId: "user-a", accessToken: "supabase-access-token" });
+  assert.deepEqual(context, {
+    userId: "user-a",
+    accessToken: "supabase-access-token",
+    email: null,
+    profile: null,
+    guest: false,
+  });
 
   now += 501;
   assert.equal(store.get({ headers: { cookie: "cipher_session=opaque-session-id" } }), null);

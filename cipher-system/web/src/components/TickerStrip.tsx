@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { fetchQuote, fetchWatchlists } from "@/lib/api";
 import { loadWatchlistTickers } from "@/lib/watchlist";
 import { isSupabaseConfigured } from "@/lib/supabase";
+import { GUEST_TICKERS } from "@/lib/guestCatalog";
 
 /**
  * Always-visible quote strip under the header — the watchlist as a ticker tape, so the
@@ -23,6 +24,14 @@ const REFRESH_MS = 15_000;
 /** One request per symbol per tick, so the strip is capped rather than fanning out over a
  *  watchlist someone has grown to 60 names. */
 const MAX_SYMBOLS = 12;
+const GUEST_DEMO_QUOTES: Record<string, Exclude<Row, null>> = {
+  SPY: { price: 780.42, changePct: 0.31 }, QQQ: { price: 692.18, changePct: 0.48 },
+  AAPL: { price: 311.24, changePct: -0.22 }, MSFT: { price: 642.73, changePct: 0.67 },
+  NVDA: { price: 204.36, changePct: 1.12 }, AMZN: { price: 264.91, changePct: 0.38 },
+  GOOGL: { price: 353.28, changePct: -0.14 }, META: { price: 606.52, changePct: 0.19 },
+  TSLA: { price: 342.11, changePct: 1.44 }, AMD: { price: 238.64, changePct: 0.82 },
+  MU: { price: 989.18, changePct: 2.06 }, AVGO: { price: 421.76, changePct: 0.55 },
+};
 
 type Row = { price: number; changePct: number } | null;
 
@@ -30,13 +39,19 @@ type TickerStripProps = {
   /** Currently active ticker — highlighted, and always shown even if not on the watchlist. */
   activeTicker: string;
   onSelect: (ticker: string) => void;
+  guestMode?: boolean;
 };
 
-export function TickerStrip({ activeTicker, onSelect }: TickerStripProps) {
+export function TickerStrip({ activeTicker, onSelect, guestMode = false }: TickerStripProps) {
   const [symbols, setSymbols] = useState<string[]>([]);
   const [rows, setRows] = useState<Record<string, Row>>({});
 
   const refresh = useCallback(async () => {
+    if (guestMode) {
+      setSymbols([...GUEST_TICKERS]);
+      setRows(GUEST_DEMO_QUOTES);
+      return;
+    }
     let watchlist: string[] = [];
     try {
       watchlist = isSupabaseConfigured()
@@ -63,7 +78,7 @@ export function TickerStrip({ activeTicker, onSelect }: TickerStripProps) {
     // `rows` — the map is replaced wholesale rather than merged into.
     setSymbols(merged);
     setRows(Object.fromEntries(entries));
-  }, [activeTicker]);
+  }, [activeTicker, guestMode]);
 
   // Self-rescheduling rather than setInterval: the next round starts REFRESH_MS after the
   // previous one *finished*, so a slow response to a dozen quote requests can't stack
@@ -114,7 +129,7 @@ export function TickerStrip({ activeTicker, onSelect }: TickerStripProps) {
           >
             <span style={{ fontWeight: 700, letterSpacing: "0.06em" }}>{symbol}</span>
             <span style={{ color: active ? "var(--text)" : "var(--text-dim)" }}>
-              {row ? `$${row.price.toFixed(2)}` : "···"}
+              {row ? `${guestMode ? "≈" : ""}$${row.price.toFixed(2)}` : "···"}
             </span>
             <span
               style={{
@@ -123,7 +138,7 @@ export function TickerStrip({ activeTicker, onSelect }: TickerStripProps) {
                 color: !row ? "var(--text-mute)" : positive ? "var(--accent)" : "var(--neg)",
               }}
             >
-              {row ? `${positive ? "+" : ""}${row.changePct.toFixed(2)}%` : "···"}
+              {row ? `${positive ? "+" : ""}${row.changePct.toFixed(2)}%${guestMode ? " demo" : ""}` : "···"}
             </span>
           </button>
         );

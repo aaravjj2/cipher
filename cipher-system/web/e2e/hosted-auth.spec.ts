@@ -3,6 +3,49 @@ import { test, expect } from "@playwright/test";
 const email = process.env.CIPHER_E2E_EMAIL || "";
 const password = process.env.CIPHER_E2E_PASSWORD || "";
 const hostedUrl = process.env.CIPHER_E2E_URL || "";
+const signupEmail = process.env.CIPHER_E2E_SIGNUP_EMAIL || "";
+const signupPassword = process.env.CIPHER_E2E_SIGNUP_PASSWORD || "";
+
+test.describe("hosted guest profile", () => {
+  test.skip(!hostedUrl, "set CIPHER_E2E_URL for the hosted guest fixture");
+
+  test("persists a constrained guest session and hides private surfaces", async ({ page }) => {
+    await page.goto(hostedUrl);
+    await page.getByRole("button", { name: "Continue as guest" }).click();
+    await expect(page.getByText(/Guest demo · read-only cached market views/)).toBeVisible();
+    await expect(page.getByRole("button", { name: "guest" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Ticker Workbench" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Settings" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Workspace", exact: true })).toHaveCount(0);
+
+    await page.reload();
+    await expect(page.getByText(/Guest demo · read-only cached market views/)).toBeVisible();
+    await expect(page.getByRole("button", { name: "Settings" })).toHaveCount(0);
+  });
+});
+
+test.describe("hosted public signup", () => {
+  test.skip(!hostedUrl || !signupEmail || !signupPassword, "set the hosted URL and disposable signup credentials");
+
+  test("creates an immediately usable member session", async ({ page }) => {
+    await page.goto(hostedUrl);
+    await page.getByRole("button", { name: "Need an account? Sign up" }).click();
+    await page.getByLabel("Email").fill(signupEmail);
+    await page.getByLabel("Password").fill(signupPassword);
+    await page.getByRole("button", { name: "Create account" }).click();
+    await expect(page.getByRole("button", { name: "member" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Morning Brief" })).toBeVisible();
+
+    const logout = page.waitForResponse((response) => response.url().includes("/auth/session") && response.request().method() === "DELETE");
+    await page.getByRole("button", { name: "member" }).click();
+    await expect((await logout).status()).toBe(200);
+    await expect(page.getByTestId("auth-panel")).toBeVisible();
+    await page.getByLabel("Email").fill(signupEmail);
+    await page.getByLabel("Password").fill(signupPassword);
+    await page.getByRole("button", { name: "Sign in" }).click();
+    await expect(page.getByRole("button", { name: "member" })).toBeVisible();
+  });
+});
 
 // This journey is deliberately opt-in: it uses a disposable operator-created
 // Supabase user and never contains credentials in the repository or CI output.

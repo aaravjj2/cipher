@@ -1,8 +1,9 @@
 # Cipher
 
-Local-first, read-only options research terminal for personal use. The active app lives in
-`cipher-system/` and provides Strike Matrix, Night Vision, Spyglass, scanners,
-watchlists, journal, chart saves, and local ranking/weight labs.
+Local-first stocks and options intelligence terminal with an auditable Alpaca
+paper-trading agent. The active app lives in `cipher-system/` and provides
+Autopilot, Strike Matrix, Night Vision, Spyglass, scanners, earnings research,
+watchlists, portfolios, journal, chart saves, and backtesting labs.
 
 It runs fully local against Alpaca market data or in a hosted multi-user mode
 (Vercel frontend + Supabase Auth/RLS + the Node/Python backend), with a
@@ -31,7 +32,16 @@ Hermes, Fincept, AccessObsidian internals, or any proprietary Cipher clone.
  Alpaca market data        local research files
  OPRA options              scanner/backtest/weights
  SIP/IEX stocks            cipher-system/data/
+
+      deterministic paper policy (loopback only)
+                    |
+          persisted TradeIntent ledger
+                    |
+       Alpaca paper limit-order adapter
 ```
+
+The browser never receives order authority. The adapter is hard-locked to
+`paper-api.alpaca.markets`; live-capital execution is not implemented.
 
 ## Deployment modes
 
@@ -67,8 +77,9 @@ Initialize and inspect it with:
 
 The core API exposes governance status read-only at `/api/governance`.
 
-The maximum promotion state is `LIVE_REVIEW_REQUIRED`. The platform contains no
-broker adapter or live-order path. See
+The maximum governance promotion state is `LIVE_REVIEW_REQUIRED`. A separately
+authorized paper adapter can collect prospective forward-test evidence, but it
+cannot reach a live brokerage host. See
 `cipher-system/core/research_platform/README.md` and
 `docs/architecture/CIPHER_CURRENT_STATE_AND_HYBRID_ARCHITECTURE_THESIS.md` for the complete design.
 

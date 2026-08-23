@@ -7,9 +7,11 @@ import {
   closeHolding,
   deleteHolding,
   fetchBars,
+  fetchPortfolioRisk,
   type HoldingsStatus,
   type HoldingPosition,
   type ClosedHoldingPosition,
+  type PortfolioRiskStatus,
 } from "@/lib/api";
 
 /**
@@ -390,10 +392,13 @@ export function Holdings() {
   const [error, setError] = useState(false);
   const [benchSeries, setBenchSeries] = useState<BenchSeries[] | null>(null);
   const [benchLoading, setBenchLoading] = useState(false);
+  const [portfolioRisk, setPortfolioRisk] = useState<PortfolioRiskStatus | null>(null);
 
   function refresh() {
     const controller = new AbortController();
-    fetchHoldings({}, controller.signal).then(setStatus).catch(() => setError(true));
+    Promise.all([fetchHoldings({}, controller.signal), fetchPortfolioRisk(controller.signal).catch(() => null)])
+      .then(([nextStatus, nextRisk]) => { setStatus(nextStatus); setPortfolioRisk(nextRisk); setError(false); })
+      .catch(() => setError(true));
     return () => controller.abort();
   }
 
@@ -444,6 +449,9 @@ export function Holdings() {
   const openPositions = status?.open_positions ?? [];
   const closedPositions = status?.closed_positions ?? [];
   const summary = status?.summary;
+  const optionPositions = (portfolioRisk?.positions ?? []).filter((position) => position.asset_type === "option");
+  const optionMarketValue = optionPositions.reduce((sum, position) => sum + (position.market_value ?? 0), 0);
+  const optionPnl = optionPositions.reduce((sum, position) => sum + (position.unrealized_pnl ?? 0), 0);
 
   return (
     <section className="flex flex-col gap-5" style={{ fontFamily: "var(--font-sans)", color: "var(--text)" }}>
@@ -462,11 +470,12 @@ export function Holdings() {
 
       {summary && (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-          <StatTile label="Market value" value={formatDollars(summary.total_market_value_open)} />
+          <StatTile label="Market value" value={formatDollars(summary.total_market_value_open + optionMarketValue)} />
           <StatTile label="Cost basis" value={formatDollars(summary.total_cost_basis_open)} />
           <StatTile label="Unrealized P&L" value={formatSignedDollars(summary.total_unrealized_pnl_dollars)} color={pnlColor(summary.total_unrealized_pnl_dollars)} />
           <StatTile label="Today" value={formatSignedDollars(summary.total_day_change_dollars)} color={pnlColor(summary.total_day_change_dollars)} />
           <StatTile label="Realized P&L" value={formatSignedDollars(summary.total_realized_pnl_dollars)} color={pnlColor(summary.total_realized_pnl_dollars)} />
+          <StatTile label="Options P&L" value={formatSignedDollars(optionPnl)} color={pnlColor(optionPnl)} />
         </div>
       )}
 
@@ -483,6 +492,28 @@ export function Holdings() {
               <span>Ticker</span><span>Shares</span><span>Entry</span><span>Date</span><span>Current</span><span>Value</span><span>P&L $</span><span>P&L %</span><span></span>
             </div>
             {openPositions.map((p) => <OpenPositionRow key={p.id} position={p} onChanged={refresh} />)}
+          </div>
+        )}
+      </Section>
+
+      <Section title={`Options · auto-included (${optionPositions.length})`}>
+        <p className="text-[10.5px]" style={{ color: "var(--text-mute)" }}>
+          Option positions already tracked in Portfolio Risk appear here automatically, with its latest bid/ask-derived mark. Cipher does not read a brokerage account or place orders.
+        </p>
+        {optionPositions.length === 0 ? <EmptyRow>No tracked option positions yet. Add one in Portfolio Risk and it will appear here automatically.</EmptyRow> : (
+          <div className="overflow-x-auto">
+            <div className="min-w-[760px] space-y-2">
+              <div className="grid grid-cols-[1.5fr_70px_90px_90px_100px_110px_110px] gap-2 px-2 text-[10px] font-bold uppercase" style={{ color: "var(--text-mute)" }}>
+                <span>Contract</span><span>Qty</span><span>Expiry</span><span>Strike</span><span>Mark</span><span>Value</span><span>P&amp;L</span>
+              </div>
+              {optionPositions.map((position) => <div key={position.id} className="grid grid-cols-[1.5fr_70px_90px_90px_100px_110px_110px] gap-2 rounded-lg px-2 py-2 text-[11.5px]" style={{ background: "var(--panel-2)" }}>
+                <span className="font-semibold">{position.contract_symbol || `${position.ticker} ${position.option_type || "option"}`}</span>
+                <span>{position.quantity}</span><span>{position.expiration || "—"}</span>
+                <span>{position.strike == null ? "—" : `$${position.strike}`}</span>
+                <span>{formatDollars(position.current_mark)}</span><span>{formatDollars(position.market_value)}</span>
+                <span style={{ color: pnlColor(position.unrealized_pnl) }}>{formatSignedDollars(position.unrealized_pnl)}</span>
+              </div>)}
+            </div>
           </div>
         )}
       </Section>

@@ -14,6 +14,7 @@ import {
 } from "@/components/panels/HeatmapGrid";
 import { ApiError, fetchMatrix, type RealMatrixResponse } from "@/lib/api";
 import { SkeletonGrid } from "@/components/ui/skeleton";
+import { GuestShowcase } from "@/components/panels/GuestShowcase";
 import type {
   ExposureMetric,
   MatrixDensity,
@@ -181,10 +182,12 @@ function IconButton({
 export function StrikeMatrix({
   ticker = "AAPL",
   toolbarSlot = null,
+  guestMode = false,
 }: {
   ticker?: string;
   /** DOM node (from Header's toolbarSlotRef) to portal the toolbar into. Renders inline when omitted. */
   toolbarSlot?: HTMLDivElement | null;
+  guestMode?: boolean;
 }) {
   const [density, setDensity] = useState<MatrixDensity>("compact");
   const [range, setRange] = useState<RangeKey>("all");
@@ -399,6 +402,8 @@ export function StrikeMatrix({
     // height here the grid grows to its full 2961px and `main` scrolls it, which is what
     // silently disabled the sticky expiration headers -- see the grid-scroll comment.
     <section
+      data-guest-panel={guestMode ? "Strike Matrix" : undefined}
+      data-guest-source={guestMode ? (status === "ready" ? "live" : status) : undefined}
       className="strike-matrix flex flex-col gap-3 h-full min-h-0"
       style={{ fontFamily: "var(--font-mono)", color: "var(--text)" }}
     >
@@ -422,7 +427,9 @@ export function StrikeMatrix({
         />
       )}
 
-      {status === "error" && (
+      {status === "error" && guestMode && <GuestShowcase panel="Strike Matrix" ticker={ticker} />}
+
+      {status === "error" && !guestMode && (
         <div
           className="flex flex-col items-center gap-2 rounded-[10px] py-16 text-[13px] text-center px-4"
           style={{ border: "1px solid var(--line)", color: "var(--neg)" }}

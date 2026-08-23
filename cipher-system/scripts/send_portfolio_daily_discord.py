@@ -34,11 +34,16 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--db", type=Path, default=report.DEFAULT_DB)
     parser.add_argument("--prospective-db", type=Path, default=report.DEFAULT_PROSPECTIVE_DB)
+    parser.add_argument("--autopilot-db", type=Path, default=report.DEFAULT_AUTOPILOT_DB)
+    parser.add_argument("--earnings-db", type=Path, default=report.DEFAULT_EARNINGS_PAPER_DB)
     parser.add_argument("--preview", action="store_true")
     parser.add_argument("--force", action="store_true")
     args = parser.parse_args(argv)
     if args.preview:
-        print(json.dumps(report.preview(args.db, prospective_db_path=args.prospective_db), indent=2))
+        print(json.dumps(report.preview(
+            args.db, prospective_db_path=args.prospective_db,
+            autopilot_db_path=args.autopilot_db, earnings_db_path=args.earnings_db,
+        ), indent=2))
         return 0
     webhook_url = os.environ.get("DISCORD_PROGRESS_WEBHOOK") or os.environ.get("DISCORD_WEBHOOK_URL")
     if not webhook_url:
@@ -48,7 +53,9 @@ def main(argv: list[str] | None = None) -> int:
         send_webhook(message, webhook_url)
 
     result = report.deliver(
-        sender, db_path=args.db, prospective_db_path=args.prospective_db, force=args.force
+        sender, db_path=args.db, prospective_db_path=args.prospective_db,
+        autopilot_db_path=args.autopilot_db, earnings_db_path=args.earnings_db,
+        force=args.force,
     )
     print(json.dumps(result, sort_keys=True))
     return 0

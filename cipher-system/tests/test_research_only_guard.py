@@ -89,3 +89,12 @@ def test_allowed_files_exist_so_the_exemption_cannot_rot() -> None:
     """An exemption for a moved or deleted file silently widens the scan's blind spot."""
     for relative in ALLOWED_FILES:
         assert (REPO_ROOT / relative).is_file(), f"exempted file is missing: {relative}"
+
+
+def test_paper_adapter_cannot_drift_to_a_live_host_or_market_order() -> None:
+    source = (REPO_ROOT / "core/paper_executor/alpaca_paper_broker.py").read_text(encoding="utf-8")
+    assert 'PAPER_BASE_URL = "https://paper-api.alpaca.markets"' in source
+    assert "api.alpaca.markets" not in source.replace("paper-api.alpaca.markets", "")
+    submit = source.split("def submit(self, intent", 1)[1].split("def cancel(self", 1)[0]
+    assert '"type": "limit"' in submit
+    assert '"type": "market"' not in submit
