@@ -20,6 +20,9 @@ duckdb
 pyyaml
 requests
 huggingface_hub
+yfinance
+joblib
+scikit-learn
 
 # Testing
 pytest>=8.0.0
