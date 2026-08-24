@@ -4,7 +4,7 @@
  * We only cache the app shell and hashed static assets so an installed Android
  * app launches instantly and survives a flaky connection.
  */
-const CACHE = "cipher-shell-v2";
+const CACHE = "cipher-shell-v3";
 const SHELL = ["/", "/index.html", "/manifest.webmanifest"];
 
 self.addEventListener("install", (event) => {
