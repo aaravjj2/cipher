@@ -7,16 +7,37 @@ All positions are logged persistently in SQLite with exact strike legs, entry de
 max gain, max risk, and settlement tracking.
 """
 import os
+import re
 import json
 import sqlite3
+import urllib.error
+import urllib.parse
+import urllib.request
 from datetime import datetime, date, timedelta, timezone
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 import yfinance as yf
 
 from .config import DATA_DIR
 from .model import predict_for_symbol
 
 PAPER_DB_PATH = os.path.join(DATA_DIR, 'paper_portfolio.sqlite')
+
+# --- Entry-quote capture (read-only local market metadata) ---
+#
+# Paper entries must not price risk off a width heuristic when real quotes are
+# one read away. The core service on the loopback interface is the ONLY market
+# endpoint consulted here; it is strictly read-only and paper stays paper.
+CORE_MARKET_DATA_BASE_URL = os.environ.get(
+    'CIPHER_CORE_MARKET_DATA_URL', 'http://127.0.0.1:8282'
+).rstrip('/')
+CORE_REQUEST_TIMEOUT_SECONDS = 8.0
+LEG_QUOTE_FRESHNESS_SECONDS = 120   # both legs must be stamped within this window
+DEBIT_SOURCE_CAPTURED = 'CAPTURED_QUOTES'
+DEBIT_SOURCE_ESTIMATED = 'ESTIMATED_DEBIT'
+SKIP_QUOTES_UNAVAILABLE = 'QUOTES_UNAVAILABLE'
+
+# Pre-gating cohort marker: see freeze_legacy_paper_cohort().
+LEGACY_FROZEN_VALIDATION_STATUS = 'FROZEN_LEGACY'
 
 
 def init_paper_db(db_path: Optional[str] = None) -> sqlite3.Connection:
@@ -57,7 +78,7 @@ def init_paper_db(db_path: Optional[str] = None) -> sqlite3.Connection:
     c.execute("CREATE INDEX IF NOT EXISTS idx_paper_status ON paper_positions(status);")
     c.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_paper_event ON paper_positions(symbol, report_date);")
     columns = {row[1] for row in c.execute("PRAGMA table_info(paper_positions)")}
-    for name in ('model_version', 'validation_status'):
+    for name in ('model_version', 'validation_status', 'debit_source', 'entry_quotes_json'):
         if name not in columns:
             c.execute(f"ALTER TABLE paper_positions ADD COLUMN {name} TEXT")
     conn.commit()
@@ -103,14 +124,201 @@ def round_strike(val: float, base: float = 2.5) -> float:
     return round(round(val / base) * base, 2)
 
 
+def _parse_quote_stamp(value: Any) -> Optional[datetime]:
+    """Parse an exchange/API quote timestamp into aware UTC (None if unusable).
+
+    Handles Alpaca-style nanosecond ISO stamps; unknown formats stay unusable
+    rather than being silently treated as fresh.
+    """
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    text = text.replace('Z', '+00:00')
+    match = re.match(r"^(\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2})(?:\.(\d+))?(.*)$", text)
+    if not match:
+        return None
+    base, frac, tail = match.groups()
+    tz_part = tail.strip() or '+00:00'
+    if tz_part in ('+0000', '-0000'):
+        tz_part = '+00:00'
+    normalized = f"{base}.{(frac or '')[:6]:<06s}{tz_part}" if frac else f"{base}{tz_part}"
+    try:
+        stamp = datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+    if stamp.tzinfo is None:
+        stamp = stamp.replace(tzinfo=timezone.utc)
+    return stamp.astimezone(timezone.utc)
+
+
+def _quote_age_seconds(stamp_value: Any, now: Optional[datetime] = None) -> Optional[float]:
+    """Age of a quote stamp in seconds, or None when the stamp is unusable."""
+    stamp = _parse_quote_stamp(stamp_value)
+    if stamp is None:
+        return None
+    return (now or datetime.now(timezone.utc)).timestamp() - stamp.timestamp()
+
+
+def _fresh_leg_quote(quote: Any, now: Optional[datetime] = None) -> bool:
+    """True only for a two-sided quote stamped within the freshness window.
+
+    Quotes without a parseable timestamp are stale by definition: an entry
+    price with unknown provenance is exactly what this gate exists to prevent.
+    """
+    if not isinstance(quote, dict):
+        return False
+    try:
+        bid, ask = float(quote['bid']), float(quote['ask'])
+    except (KeyError, TypeError, ValueError):
+        return False
+    if bid <= 0.0 or ask <= 0.0 or ask < bid:
+        return False
+    age = _quote_age_seconds(quote.get('quote_time') or quote.get('timestamp'), now)
+    # Small negative tolerance absorbs minor clock skew between core and host.
+    return age is not None and -5.0 <= age <= LEG_QUOTE_FRESHNESS_SECONDS
+
+
+def fetch_core_chain_contract_rows(
+    symbol: str,
+    timeout: float = CORE_REQUEST_TIMEOUT_SECONDS,
+    base_url: str = CORE_MARKET_DATA_BASE_URL,
+) -> Optional[Dict[str, Any]]:
+    """GET the local read-only core options-chain view for one underlying.
+
+    Returns None (never raises) when the core is down, slow, or answers with an
+    error payload — quote capture must degrade to a refusal, not a crash.
+    """
+    url = (
+        f"{base_url}/api/options-chain?"
+        + urllib.parse.urlencode({
+            'ticker': str(symbol).upper(), 'feed': 'opra', 'expirations': '12',
+        })
+    )
+    request = urllib.request.Request(url, headers={'Accept': 'application/json'})
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            payload = json.loads(response.read().decode('utf-8'))
+    except (urllib.error.URLError, OSError, ValueError) as exc:
+        print(f"[paper-entry] core options-chain unavailable for {symbol}: {exc}")
+        return None
+    if not isinstance(payload, dict) or payload.get('error'):
+        print(f"[paper-entry] core options-chain rejected {symbol}: invalid payload")
+        return None
+    return payload
+
+
+def fetch_leg_quotes(
+    symbol: str,
+    legs: List[Dict[str, Any]],
+    chain_loader=None,
+    timeout: float = CORE_REQUEST_TIMEOUT_SECONDS,
+) -> Optional[List[Optional[Dict[str, Any]]]]:
+    """Fetch contemporaneous core quotes for each defined-risk leg.
+
+    Returns a list aligned with `legs`; legs that are missing from the chain or
+    lack usable two-sided quotes come back as None so the entry gate can refuse
+    instead of guessing. Read-only metadata only — failures never raise.
+    """
+    loader = chain_loader or (
+        lambda sym: fetch_core_chain_contract_rows(sym, timeout=timeout)
+    )
+    payload = loader(str(symbol).upper())
+    if payload is None:
+        return None
+
+    wanted = []
+    for leg in legs:
+        wanted.append((
+            str(leg.get('type', '')).lower(),
+            float(leg.get('strike')),
+            str(leg.get('expiry')),
+        ))
+
+    out: List[Optional[Dict[str, Any]]] = []
+    for side, strike, expiry in wanted:
+        found: Optional[Dict[str, Any]] = None
+        for group in payload.get('expirations') or []:
+            if str(group.get('expiration')) != expiry:
+                continue
+            for strike_row in group.get('rows') or []:
+                contract = strike_row.get(side) if isinstance(strike_row, dict) else None
+                if not isinstance(contract, dict):
+                    continue
+                try:
+                    row_strike = float(contract.get('strike'))
+                except (TypeError, ValueError):
+                    continue
+                if abs(row_strike - strike) < 1e-9:
+                    found = {
+                        'symbol': contract.get('symbol'),
+                        'bid': contract.get('bid'),
+                        'ask': contract.get('ask'),
+                        'quote_time': contract.get('quote_time') or contract.get('as_of'),
+                    }
+                    break
+            if found:
+                break
+        out.append(found)
+    return out
+
+
+def captured_spread_debit(
+    leg_quotes: Optional[List[Optional[Dict[str, Any]]]],
+    width: float,
+    now: Optional[datetime] = None,
+) -> Tuple[Optional[float], Optional[Dict[str, Any]]]:
+    """Actual debit = long ask − short bid, but ONLY on fresh two-sided quotes.
+
+    Returns (debit, snapshot) or (None, None). Callers must refuse the entry on
+    None rather than silently falling back to the width heuristic.
+    """
+    if not leg_quotes or len(leg_quotes) != 2:
+        return None, None
+    long_quote, short_quote = leg_quotes
+    if not (_fresh_leg_quote(long_quote, now) and _fresh_leg_quote(short_quote, now)):
+        return None, None
+    debit = round(float(long_quote['ask']) - float(short_quote['bid']), 2)
+    # Crossed or inverted captures cannot define a sane defined-risk entry.
+    if debit <= 0.0 or debit > width + 1e-9:
+        return None, None
+    snapshot = {
+        'debit_source': DEBIT_SOURCE_CAPTURED,
+        'captured_at': datetime.now(timezone.utc).isoformat(),
+        'computed_debit': debit,
+        'legs': [
+            {
+                'action': ('BUY' if index == 0 else 'SELL'),
+                'bid': quote.get('bid'), 'ask': quote.get('ask'),
+                'quote_time': quote.get('quote_time'), 'symbol': quote.get('symbol'),
+            }
+            for index, quote in enumerate((long_quote, short_quote))
+        ],
+    }
+    return debit, snapshot
+
+
 def generate_optimal_paper_setup(
     symbol: str,
     spot: float,
     report_date: str,
     target_risk: float = 2000.0,
     prediction: Optional[Dict[str, Any]] = None,
+    *,
+    allow_estimated_debit: bool = False,
+    quote_fetcher=None,
+    now: Optional[datetime] = None,
 ) -> Dict[str, Any]:
-    """Generate a defined-risk setup only after the model clears its holdout gate."""
+    """Generate a defined-risk setup only after the model clears its holdout gate.
+
+    Entry pricing is fail-closed: both legs are priced from contemporaneous
+    read-only core quotes when available (actual debit = long ask − short bid,
+    stored with the quote timestamps). Without fresh quotes the entry is refused
+    with QUOTES_UNAVAILABLE unless the caller explicitly passes
+    allow_estimated_debit=True, in which case the width heuristic is used and
+    clearly labeled ESTIMATED_DEBIT.
+    """
     prediction = prediction or predict_for_symbol(symbol)
     if prediction.get('error') or not prediction.get('strategy_eligible'):
         return {
@@ -150,13 +358,7 @@ def generate_optimal_paper_setup(
             strike_short = strike_long + wing_w
 
         width = strike_short - strike_long
-        est_unit_debit = round(width * 0.40, 2) # Typically ~40% of spread width
-        est_unit_gain = round(width - est_unit_debit, 2)
-
-        contracts = max(1, int(target_risk / (est_unit_debit * 100)))
-        total_risk = round(contracts * est_unit_debit * 100, 2)
-        total_max_gain = round(contracts * est_unit_gain * 100, 2)
-
+        est_unit_debit = round(width * 0.40, 2)  # width heuristic prior; only used with explicit opt-in below
         legs = [
             {'action': 'BUY', 'type': 'CALL', 'strike': strike_long, 'expiry': expiry_str},
             {'action': 'SELL', 'type': 'CALL', 'strike': strike_short, 'expiry': expiry_str}
@@ -171,13 +373,7 @@ def generate_optimal_paper_setup(
             strike_short = strike_long - wing_w
 
         width = strike_long - strike_short
-        est_unit_debit = round(width * 0.38, 2)
-        est_unit_gain = round(width - est_unit_debit, 2)
-
-        contracts = max(1, int(target_risk / (est_unit_debit * 100)))
-        total_risk = round(contracts * est_unit_debit * 100, 2)
-        total_max_gain = round(contracts * est_unit_gain * 100, 2)
-
+        est_unit_debit = round(width * 0.38, 2)  # width heuristic prior; only used with explicit opt-in below
         legs = [
             {'action': 'BUY', 'type': 'PUT', 'strike': strike_long, 'expiry': expiry_str},
             {'action': 'SELL', 'type': 'PUT', 'strike': strike_short, 'expiry': expiry_str}
@@ -192,7 +388,39 @@ def generate_optimal_paper_setup(
             'validation_status': prediction['validation_status'],
         }
 
-    return {
+    # Entry pricing: capture real quotes for BOTH legs, else refuse/opt-in.
+    if quote_fetcher is not None:
+        leg_quotes = quote_fetcher(symbol.upper(), legs)
+    else:
+        leg_quotes = fetch_leg_quotes(symbol, legs)
+    unit_debit, quote_snapshot = captured_spread_debit(leg_quotes, width=width, now=now)
+
+    if unit_debit is not None:
+        debit_source = DEBIT_SOURCE_CAPTURED
+        notes += f" Entry debit captured from core quotes (${unit_debit:.2f} = long ask − short bid)."
+    elif allow_estimated_debit:
+        unit_debit = est_unit_debit
+        debit_source = DEBIT_SOURCE_ESTIMATED
+        notes += (
+            f" ESTIMATED_DEBIT: quotes unavailable/stale; priced at width heuristic"
+            f" (${unit_debit:.2f}), NOT a market price."
+        )
+    else:
+        return {
+            'symbol': symbol.upper(),
+            'report_date': report_date,
+            'skip_reason': SKIP_QUOTES_UNAVAILABLE,
+            'strategy_type': strategy_type,
+            'model_version': prediction['model_version'],
+            'validation_status': prediction['validation_status'],
+        }
+
+    est_unit_gain = round(width - unit_debit, 2)
+    contracts = max(1, int(target_risk / (unit_debit * 100)))
+    total_risk = round(contracts * unit_debit * 100, 2)
+    total_max_gain = round(contracts * est_unit_gain * 100, 2)
+
+    setup = {
         'symbol': symbol.upper(),
         'strategy_type': strategy_type,
         'report_date': report_date,
@@ -201,7 +429,8 @@ def generate_optimal_paper_setup(
         'spot_at_entry': round(spot, 2),
         'legs': legs,
         'contracts': contracts,
-        'unit_debit': est_unit_debit,
+        'unit_debit': unit_debit,
+        'debit_source': debit_source,
         'total_cost': total_risk,
         'max_gain': total_max_gain,
         'max_loss': total_risk,
@@ -209,20 +438,23 @@ def generate_optimal_paper_setup(
         'model_version': prediction['model_version'],
         'validation_status': prediction['validation_status'],
     }
+    if quote_snapshot is not None:
+        setup['entry_quotes'] = quote_snapshot
+    return setup
 
 
 def execute_paper_order(conn: sqlite3.Connection, setup: Dict[str, Any]) -> int:
     """Record a paper options position into the persistent database."""
     c = conn.cursor()
     now_str = datetime.now(timezone.utc).isoformat()
-
+    entry_quotes = setup.get('entry_quotes')
     c.execute("""
         INSERT INTO paper_positions (
             symbol, strategy_type, report_date, entry_date, expiry_date,
             spot_at_entry, legs_json, contracts, unit_debit, total_cost,
             max_gain, max_loss, status, notes, created_at, model_version,
-            validation_status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'OPEN', ?, ?, ?, ?)
+            validation_status, debit_source, entry_quotes_json
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'OPEN', ?, ?, ?, ?, ?, ?)
     """, (
         setup['symbol'],
         setup['strategy_type'],
@@ -240,6 +472,8 @@ def execute_paper_order(conn: sqlite3.Connection, setup: Dict[str, Any]) -> int:
         now_str,
         setup.get('model_version'),
         setup.get('validation_status'),
+        setup.get('debit_source'),
+        json.dumps(entry_quotes) if entry_quotes is not None else None,
     ))
     conn.commit()
     return c.lastrowid
@@ -250,12 +484,18 @@ def enter_this_week_paper_book(
     days_ahead: int = 7,
     schedule: Optional[List[tuple]] = None,
     db_path: Optional[str] = None,
+    allow_estimated_debit: bool = False,
+    quote_fetcher=None,
 ) -> List[Dict[str, Any]]:
     """Enter paper trades for companies reporting within the window (default next 7 days).
 
     Idempotent by design: a symbol already entered for the same report date is
     skipped, so repeated scheduled runs never stack duplicate positions and open
     positions are never deleted by a re-run.
+
+    Fail-closed pricing: entries without fresh two-sided core quotes for both
+    legs are refused (QUOTES_UNAVAILABLE) unless allow_estimated_debit=True is
+    explicitly passed; estimated entries stay labeled ESTIMATED_DEBIT.
     """
     conn = init_paper_db(db_path)
     if schedule is None:
@@ -289,6 +529,8 @@ def enter_this_week_paper_book(
             setup = generate_optimal_paper_setup(
                 sym, spot, rep_date, target_risk=target_risk_per_trade,
                 prediction=prediction,
+                allow_estimated_debit=allow_estimated_debit,
+                quote_fetcher=quote_fetcher,
             )
             if setup.get('skip_reason'):
                 print(f"Skipping {sym} {rep_date}: {setup['skip_reason']}")
@@ -349,6 +591,50 @@ def get_paper_scorecard(conn: Optional[sqlite3.Connection] = None) -> Dict[str, 
         "SUM(CASE WHEN status='SETTLED' THEN realized_pnl ELSE 0 END) AS realized_pnl "
         "FROM paper_positions GROUP BY 1, 2 ORDER BY 1, 2"
     )]
+    # Frozen-legacy visibility: pre-gating positions marked FROZEN_LEGACY stay
+    # out of every gated-cohort comparison; surfaced here so digests can state
+    # how much of the open book is excluded history rather than live signal.
+    result['legacy_frozen_open'] = int(conn.execute(
+        "SELECT COUNT(*) FROM paper_positions "
+        "WHERE status='OPEN' AND validation_status=?",
+        (LEGACY_FROZEN_VALIDATION_STATUS,),
+    ).fetchone()[0])
+    if own_connection:
+        conn.close()
+    return result
+
+
+def freeze_legacy_paper_cohort(
+    conn: Optional[sqlite3.Connection] = None,
+    db_path: Optional[str] = None,
+    marker: str = LEGACY_FROZEN_VALIDATION_STATUS,
+) -> Dict[str, Any]:
+    """Mark remaining OPEN pre-gating positions as a frozen legacy cohort.
+
+    Positions recorded before holdout gating carry no model version and priced
+    their entries off a width heuristic (ESTIMATED_DEBIT), so their outcomes are
+    not comparable with gated cohorts and must never blend into new-cohort
+    statistics. Marking is one-way and conservative: only rows that are still
+    OPEN with BOTH model_version and validation_status NULL are touched;
+    settled history and any explicitly tagged row are left as-is.
+    """
+    own_connection = conn is None
+    if conn is None:
+        conn = init_paper_db(db_path)
+    before = conn.execute(
+        "SELECT symbol FROM paper_positions WHERE status='OPEN' AND model_version IS NULL"
+    ).fetchall()
+    cur = conn.execute(
+        "UPDATE paper_positions SET validation_status=? "
+        "WHERE status='OPEN' AND model_version IS NULL AND validation_status IS NULL",
+        (marker,),
+    )
+    conn.commit()
+    result = {
+        'marked': cur.rowcount,
+        'symbols': sorted({str(row[0]) for row in before}),
+        'marker': marker,
+    }
     if own_connection:
         conn.close()
     return result
