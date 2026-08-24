@@ -1,0 +1,11 @@
+[Unit]
+Description=Cipher storage growth metric snapshot
+
+[Service]
+Type=oneshot
+User=aarav
+Group=aarav
+WorkingDirectory=/home/aarav/Aarav/cipher/cipher-system
+ExecStart=/usr/bin/python3 /home/aarav/Aarav/cipher/cipher-system/scripts/capture_operational_metrics.py
+Nice=15
+

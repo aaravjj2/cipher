@@ -137,7 +137,15 @@ sudo systemctl enable \
   cipher-tradier.service \
   cipher-gex.service \
   cipher-backup.timer \
-  cipher-governance-catalog.timer
+  cipher-governance-catalog.timer \
+  cipher-paper-autopilot-executor.service \
+  cipher-paper-autopilot.timer \
+  cipher-autopilot-failure-alert.timer \
+  cipher-paper-autopilot-training.timer \
+  cipher-event-context.timer \
+  cipher-finbert-context.timer \
+  cipher-operational-metrics.timer \
+  cipher-option-history.timer
 
 sudo systemctl restart cipher-secrets.service
 sleep 2

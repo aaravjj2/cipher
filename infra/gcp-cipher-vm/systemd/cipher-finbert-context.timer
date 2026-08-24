@@ -1,0 +1,11 @@
+[Unit]
+Description=Refresh advisory headline sentiment before the premarket plan
+
+[Timer]
+OnCalendar=Mon..Fri *-*-* 07:45:00 America/New_York
+Persistent=true
+RandomizedDelaySec=120
+Unit=cipher-finbert-context.service
+
+[Install]
+WantedBy=timers.target

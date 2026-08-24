@@ -1,0 +1,30 @@
+[Unit]
+Description=Refresh Cipher's revision-pinned local FinBERT context
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=aarav
+Group=aarav
+WorkingDirectory=/home/aarav/Aarav/cipher/cipher-system
+Environment=PYTHONPATH=/home/aarav/Aarav/cipher/cipher-system
+Environment=HF_HOME=/home/aarav/Aarav/cipher/runtime/cache/huggingface
+EnvironmentFile=-/etc/cipher/cipher.env
+ExecStart=/home/aarav/.venvs/cipher/bin/python /home/aarav/Aarav/cipher/cipher-system/scripts/ingest_public_events.py --days 7 --max-per-symbol 3
+Nice=15
+IOSchedulingClass=idle
+
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/aarav/Aarav/cipher/runtime/data /home/aarav/Aarav/cipher/runtime/cache/huggingface
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=yes
+LockPersonality=yes
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=cipher-finbert-context

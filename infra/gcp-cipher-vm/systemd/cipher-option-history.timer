@@ -1,0 +1,11 @@
+[Unit]
+Description=Capture one close-adjacent options surface per weekday
+
+[Timer]
+OnCalendar=Mon..Fri *-*-* 15:50:00 America/New_York
+Persistent=true
+RandomizedDelaySec=180
+Unit=cipher-option-history.service
+
+[Install]
+WantedBy=timers.target

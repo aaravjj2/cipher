@@ -1,0 +1,16 @@
+[Unit]
+Description=Cipher read-only corporate action context capture
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=aarav
+Group=aarav
+WorkingDirectory=/home/aarav/Aarav/cipher/cipher-system
+EnvironmentFile=-/etc/cipher/cipher.env
+ExecStart=/usr/bin/python3 /home/aarav/Aarav/cipher/cipher-system/scripts/capture_event_context.py
+TimeoutStartSec=300
+StandardOutput=journal
+StandardError=journal
+

@@ -1,0 +1,11 @@
+[Unit]
+Description=Capture Cipher storage growth daily
+
+[Timer]
+OnCalendar=*-*-* 06:45:00 America/New_York
+Persistent=true
+RandomizedDelaySec=120
+Unit=cipher-operational-metrics.service
+
+[Install]
+WantedBy=timers.target

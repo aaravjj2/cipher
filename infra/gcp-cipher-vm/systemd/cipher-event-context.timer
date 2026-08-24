@@ -1,0 +1,11 @@
+[Unit]
+Description=Refresh event context each weekday morning
+
+[Timer]
+OnCalendar=Mon..Fri *-*-* 07:10:00 America/New_York
+Persistent=true
+RandomizedDelaySec=180
+Unit=cipher-event-context.service
+
+[Install]
+WantedBy=timers.target

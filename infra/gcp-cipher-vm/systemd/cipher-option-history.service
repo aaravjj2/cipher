@@ -1,0 +1,18 @@
+[Unit]
+Description=Cipher daily read-only OPRA option surface history
+Wants=network-online.target
+After=network-online.target cipher-core.service
+
+[Service]
+Type=oneshot
+User=aarav
+Group=aarav
+WorkingDirectory=/home/aarav/Aarav/cipher/cipher-system
+EnvironmentFile=-/etc/cipher/cipher.env
+ExecStart=/usr/bin/python3 /home/aarav/Aarav/cipher/cipher-system/scripts/capture_option_surface_history.py --all --max-pages 12
+Nice=10
+TimeoutStartSec=2400
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=cipher-option-history
+

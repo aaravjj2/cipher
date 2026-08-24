@@ -1,0 +1,20 @@
+[Unit]
+Description=Refresh Cipher point-in-time shadow-learning dataset
+After=cipher-paper-autopilot-executor.service
+
+[Service]
+Type=oneshot
+User=aarav
+Group=aarav
+WorkingDirectory=/home/aarav/Aarav/cipher/cipher-system
+Environment=PYTHONPATH=/home/aarav/Aarav/cipher/cipher-system
+ExecStart=/home/aarav/.venvs/cipher/bin/python -m core.paper_executor.training_dataset
+
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/aarav/Aarav/cipher/runtime/data/paper_runtime
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=cipher-paper-autopilot-training

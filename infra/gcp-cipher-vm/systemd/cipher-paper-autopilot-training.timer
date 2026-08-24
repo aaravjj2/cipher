@@ -1,0 +1,11 @@
+[Unit]
+Description=Build the Cipher shadow-learning corpus after market close
+
+[Timer]
+OnCalendar=Mon..Fri *-*-* 16:20:00 America/New_York
+Persistent=true
+RandomizedDelaySec=60
+Unit=cipher-paper-autopilot-training.service
+
+[Install]
+WantedBy=timers.target
