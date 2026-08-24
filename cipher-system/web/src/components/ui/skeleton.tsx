@@ -19,7 +19,7 @@
  *   of large-area animation that setting exists for, so the pulse is dropped rather than
  *   merely slowed when it is set.
  */
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 
 /** One shimmer block. `aria-hidden` because `SkeletonBlock` alone conveys nothing useful. */
 export function Skeleton({ className = "", style }: { className?: string; style?: React.CSSProperties }) {
@@ -160,5 +160,22 @@ export function SkeletonCards({
         </div>
       ))}
     </SkeletonRegion>
+  );
+}
+
+/** Text-only async status for panels that must not flash a skeleton (fast loads, locked copy). */
+export function LoadingStatus({
+  children,
+  className = "",
+  style,
+}: {
+  children: ReactNode;
+  className?: string;
+  style?: CSSProperties;
+}) {
+  return (
+    <div role="status" aria-live="polite" className={className} style={style}>
+      {children}
+    </div>
   );
 }

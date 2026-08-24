@@ -6,6 +6,7 @@ import { addToWatchlist } from "@/lib/watchlist";
 import { addWatchlistMember, createWatchlist, fetchProductStatus, fetchScanUniverse, fetchWatchlists, type ProductStatus } from "@/lib/api";
 import { isSupabaseConfigured } from "@/lib/supabase";
 import { GUEST_TICKERS } from "@/lib/guestCatalog";
+import { isYahooFeed } from "@/lib/feedLabel";
 
 type HeaderProps = {
   /** Current panel name, rendered uppercase in `.brand-sub` (e.g. "SETUP SCANNER"). */
@@ -24,6 +25,8 @@ type HeaderProps = {
   price?: string | null;
   /** Signed day-change percent. `null`/`undefined` renders a loading placeholder. */
   changePct?: number | null;
+  /** Quote feed token from `/api/quote` (e.g. sip, yahoo). */
+  feed?: string | null;
   /** Called with the trimmed, uppercased ticker when the user presses Enter in the search box. */
   onTickerSubmit?: (ticker: string) => void;
   /**
@@ -130,6 +133,7 @@ export function Header({
   ticker = "AAPL",
   price,
   changePct,
+  feed,
   onTickerSubmit,
   toolbarSlotRef,
   workspaceCount = 2,
@@ -277,7 +281,7 @@ export function Header({
           type="button"
           aria-label="Open navigation"
           onClick={onMenuClick}
-          className="nav-toggle lg:hidden grid place-items-center w-6 h-6 shrink-0 rounded-[6px] bg-transparent"
+          className="nav-toggle lg:hidden grid place-items-center w-8 h-8 shrink-0 rounded-[6px] bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]"
           style={{ color: "var(--text)" }}
         >
           <MenuIcon width={24} height={24} />
@@ -309,7 +313,7 @@ export function Header({
 
         {/* Ticker search */}
         <div
-          className="search relative flex flex-row items-center flex-1 min-w-[120px] lg:flex-none lg:w-[150px] h-[34.667px] px-[9px] rounded-[8px]"
+          className="search relative flex flex-row items-center flex-1 min-w-[120px] lg:flex-none lg:w-[150px] h-[34.667px] px-[9px] rounded-[8px] focus-within:ring-2 focus-within:ring-[var(--gold)]"
           style={{ background: "var(--panel-2)", border: "1px solid var(--line)" }}
         >
           <SearchIcon width={14} height={14} className="shrink-0" style={{ color: "var(--text-mute)" }} />
@@ -397,7 +401,7 @@ export function Header({
                     commit(symbol);
                   }}
                   onMouseEnter={() => setHighlight(i)}
-                  className="block w-full px-[10px] py-[6px] text-left uppercase"
+                  className="block w-full px-[10px] py-[6px] text-left uppercase focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--gold)]"
                   style={{
                     fontSize: "12px",
                     fontWeight: 600,
@@ -421,6 +425,13 @@ export function Header({
         <div
           className="quote flex flex-row items-baseline gap-[9px] lg:w-[173px] h-[28.667px] px-3 py-[5px] rounded-[8px] shrink-0"
           style={{ background: "var(--panel-2)", border: "1px solid var(--line)" }}
+          aria-label={
+            accessMode === "guest" && price
+              ? isYahooFeed(feed)
+                ? `${ticker} delayed quote ${price}`
+                : `${ticker} live quote ${price}`
+              : undefined
+          }
         >
           <span
             className="quote-ticker"
@@ -445,6 +456,7 @@ export function Header({
             }}
           >
             {changePct == null ? "···" : `${isPositive ? "+" : ""}${changePct.toFixed(2)}%`}
+            {accessMode === "guest" && changePct != null ? (isYahooFeed(feed) ? " delayed" : " live") : ""}
           </span>
         </div>
 
@@ -463,7 +475,7 @@ export function Header({
                   onClick={() => onWorkspaceChange(n)}
                   aria-pressed={active}
                   aria-label={`Workspace ${n}`}
-                  className="grid place-items-center w-[26px] h-[26px] rounded-[6px] text-[12px] font-bold"
+                  className="grid place-items-center w-8 h-8 rounded-[6px] text-[12px] font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]"
                   style={{
                     background: active ? "var(--nav-active)" : "transparent",
                     color: active ? "var(--text)" : "var(--text-dim)",
@@ -481,7 +493,7 @@ export function Header({
         <button
           type="button"
           onClick={() => void addCurrentTickerToWatchlist()}
-          className="shrink-0 rounded-[8px] px-[12px] py-2 text-[12px] font-semibold whitespace-nowrap"
+          className="shrink-0 rounded-[8px] px-[12px] py-2 text-[12px] font-semibold whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]"
           style={{
             border: `1px solid ${watchlistAdded ? "var(--accent)" : "var(--line)"}`,
             color: watchlistAdded ? "var(--accent)" : "var(--text-dim)",
@@ -547,7 +559,7 @@ export function Header({
           type="button"
           onClick={onSignOut}
           disabled={!onSignOut}
-          className="shrink-0 rounded-[8px] px-[10px] py-2 text-[10px] font-bold uppercase disabled:cursor-default"
+          className="shrink-0 rounded-[8px] px-[10px] py-2 text-[10px] font-bold uppercase disabled:cursor-default focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]"
           style={{
             border: `1px solid ${accessMode === "developer" ? "var(--accent)" : "var(--line)"}`,
             color: accessMode === "developer" ? "var(--accent)" : accessMode === "guest" ? "var(--gold)" : "var(--text-mute)",

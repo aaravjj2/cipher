@@ -116,13 +116,26 @@ function PillGroup<T extends string>({
   options,
   value,
   onChange,
+  ariaLabel,
 }: {
   options: { label: string; value: T }[];
   value: T;
   onChange: (v: T) => void;
+  ariaLabel: string;
 }) {
+  const index = Math.max(0, options.findIndex((opt) => opt.value === value));
   return (
     <div
+      role="radiogroup"
+      aria-label={ariaLabel}
+      onKeyDown={(event) => {
+        if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") return;
+        event.preventDefault();
+        const next = event.key === "ArrowRight"
+          ? (index + 1) % options.length
+          : (index - 1 + options.length) % options.length;
+        onChange(options[next].value);
+      }}
       className="flex flex-row items-center gap-[2px] rounded-[8px] p-[2px] shrink-0"
       style={{ background: "var(--panel-2)", border: "1px solid var(--line)" }}
     >
@@ -132,9 +145,11 @@ function PillGroup<T extends string>({
           <button
             key={opt.value}
             type="button"
+            role="radio"
+            aria-checked={active}
+            tabIndex={active ? 0 : -1}
             onClick={() => onChange(opt.value)}
-            aria-pressed={active}
-            className="rounded-[6px] px-[10px] py-[5px] text-[12px] font-semibold whitespace-nowrap transition-colors duration-150"
+            className="rounded-[6px] px-[10px] py-[5px] text-[12px] font-semibold whitespace-nowrap transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]"
             style={{
               background: active ? "var(--nav-active)" : "transparent",
               color: active ? "var(--text)" : "var(--text-dim)",
@@ -165,10 +180,10 @@ function IconButton({
       type="button"
       onClick={onClick}
       aria-label={ariaLabel}
-      className="grid place-items-center w-[30px] h-[30px] rounded-[8px] shrink-0"
+      className="grid place-items-center w-[30px] h-[30px] rounded-[8px] shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]"
       style={{ background: "var(--panel-2)", border: "1px solid var(--line)", color: "var(--text-mute)" }}
     >
-      <span className={spinning ? "animate-spin" : undefined} style={{ display: "flex" }}>
+      <span className={spinning ? "animate-spin" : undefined} style={{ display: "flex" }} aria-hidden="true">
         {children}
       </span>
     </button>
@@ -358,10 +373,10 @@ export function StrikeMatrix({
       <IconButton ariaLabel="Toggle chart style">
         <StrikeMatrixIcon width={15} height={15} />
       </IconButton>
-      <PillGroup options={DENSITY_OPTIONS} value={density} onChange={setDensity} />
-      <PillGroup options={RANGE_OPTIONS} value={range} onChange={setRange} />
-      <PillGroup options={METRIC_OPTIONS} value={metric} onChange={setMetric} />
-      <PillGroup options={MODE_OPTIONS} value={mode} onChange={setMode} />
+      <PillGroup ariaLabel="Matrix density" options={DENSITY_OPTIONS} value={density} onChange={setDensity} />
+      <PillGroup ariaLabel="Strike range" options={RANGE_OPTIONS} value={range} onChange={setRange} />
+      <PillGroup ariaLabel="Exposure metric" options={METRIC_OPTIONS} value={metric} onChange={setMetric} />
+      <PillGroup ariaLabel="Matrix mode" options={MODE_OPTIONS} value={mode} onChange={setMode} />
       <IconButton ariaLabel="Refresh matrix" onClick={() => load(undefined, true)} spinning={isRefreshing}>
         <RefreshIcon width={15} height={15} />
       </IconButton>
@@ -369,7 +384,7 @@ export function StrikeMatrix({
         type="button"
         onClick={() => setAutoRefresh((v) => !v)}
         aria-pressed={autoRefresh}
-        className="shrink-0 whitespace-nowrap rounded-[8px] px-[12px] py-[7px] text-[12px] font-semibold"
+        className="shrink-0 whitespace-nowrap rounded-[8px] px-[12px] py-[7px] text-[12px] font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]"
         style={{
           background: autoRefresh ? "var(--nav-active)" : "var(--panel-2)",
           border: "1px solid var(--line)",
@@ -384,7 +399,7 @@ export function StrikeMatrix({
         onClick={() => setAutoSnap((v) => !v)}
         aria-pressed={autoSnap}
         title="Snap to golden — keep the heaviest-exposure strike in view as the grid updates"
-        className="shrink-0 whitespace-nowrap rounded-[8px] px-[12px] py-[7px] text-[12px] font-semibold"
+        className="shrink-0 whitespace-nowrap rounded-[8px] px-[12px] py-[7px] text-[12px] font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]"
         style={{
           background: autoSnap ? "var(--nav-active)" : "var(--panel-2)",
           border: "1px solid var(--line)",
@@ -403,7 +418,7 @@ export function StrikeMatrix({
     // silently disabled the sticky expiration headers -- see the grid-scroll comment.
     <section
       data-guest-panel={guestMode ? "Strike Matrix" : undefined}
-      data-guest-source={guestMode ? (status === "ready" ? "live" : status) : undefined}
+      data-guest-source={guestMode ? (status === "ready" ? "live" : status === "error" ? "demo" : status) : undefined}
       className="strike-matrix flex flex-col gap-3 h-full min-h-0"
       style={{ fontFamily: "var(--font-mono)", color: "var(--text)" }}
     >
@@ -415,19 +430,31 @@ export function StrikeMatrix({
         <div className="flex flex-row items-center gap-2 overflow-x-auto pb-1">{toolbar}</div>
       )}
 
-      <ExposureLegend />
+      <ExposureLegend oiAsOf={data?.coverage.open_interest_as_of} />
 
       {status === "loading" && (
         // Shaped like the grid that follows, so the panel does not jump when the fetch lands.
         // Column count tracks the density toggle for the same reason.
         <SkeletonGrid
-          label={`Loading live strike matrix for ${ticker}…`}
+          label={`Loading strike matrix for ${ticker}…`}
           rows={16}
           columns={expirationCount > 6 ? 8 : 5}
         />
       )}
 
-      {status === "error" && guestMode && <GuestShowcase panel="Strike Matrix" ticker={ticker} />}
+      {status === "error" && guestMode && (
+        <>
+          <GuestShowcase panel="Strike Matrix" ticker={ticker} titleTag="h2" />
+          <button
+            type="button"
+            onClick={() => load()}
+            className="self-start rounded-[4px] px-3 py-1.5 text-[12px] font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]"
+            style={{ border: "1px solid var(--line)", color: "var(--text-dim)" }}
+          >
+            Retry
+          </button>
+        </>
+      )}
 
       {status === "error" && !guestMode && (
         <div
@@ -438,7 +465,7 @@ export function StrikeMatrix({
           <button
             type="button"
             onClick={() => load()}
-            className="rounded-[6px] px-3 py-1.5 text-[12px] font-semibold"
+            className="rounded-[6px] px-3 py-1.5 text-[12px] font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]"
             style={{ border: "1px solid var(--line)", color: "var(--text-dim)" }}
           >
             Retry
@@ -448,6 +475,7 @@ export function StrikeMatrix({
 
       {status === "ready" && data && (
         <>
+          {guestMode && <p className="text-[9px] font-bold uppercase" style={{ color: "var(--gold)", letterSpacing: "0.08em" }}>Live matrix · not demo fallback</p>}
           <div className="flex flex-row gap-3 items-stretch flex-1 min-h-0">
             {/* Grid — owns scrolling on BOTH axes.
                 It must own the vertical axis too, not just the horizontal. `overflow-x: auto`
@@ -462,6 +490,8 @@ export function StrikeMatrix({
             <div
               ref={gridRef}
               className="grid-scroll relative flex-1 min-w-0 min-h-0 overflow-auto rounded-[10px]"
+              role="region"
+              aria-label={`${data.ticker} ${metric.toUpperCase()} strike-matrix scrollport`}
               style={{ border: "1px solid var(--line)" }}
             >
               <div
@@ -605,7 +635,7 @@ export function StrikeMatrix({
             <span>
               {data.ticker} · {data.coverage.contracts.toLocaleString()} contracts ·{" "}
               {expirations.length}/{data.total_expirations_available} expirations ·{" "}
-              {displayStrikes.length} strikes shown
+              {displayStrikes.length} strikes shown · OI as of {data.coverage.open_interest_as_of ?? "unknown"}
             </span>
             <span>
               {/* Mirrors MATRIX_CACHE's TTL in core/app.py — keep the two in step. */}

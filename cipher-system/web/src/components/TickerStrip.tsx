@@ -109,8 +109,13 @@ export function TickerStrip({ activeTicker, onSelect, guestMode = false }: Ticke
         fontFamily: "var(--font-mono)",
         fontSize: "11px",
       }}
-      aria-label="Watchlist quotes"
+      aria-label={guestMode ? "Watchlist quotes · demo, not live" : "Watchlist quotes"}
     >
+      {guestMode && (
+        <span className="shrink-0 px-3 py-[6px] text-[10px] font-semibold" style={{ color: "var(--gold)" }}>
+          Demo tape · not live
+        </span>
+      )}
       {symbols.map((symbol) => {
         const row = rows[symbol];
         const active = symbol === activeTicker;

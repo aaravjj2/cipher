@@ -119,7 +119,7 @@ function RegistrationRow({ row }: { row: StandingStatus["prospective_registratio
 
 function ShadowPositionRow({ row }: { row: StandingStatus["shadow_positions"][number] }) {
   return (
-    <div className="flex flex-row items-center justify-between gap-3 rounded-[8px] px-3 py-2" style={{ background: "var(--panel-2)" }}>
+    <div className="flex flex-row items-center justify-between gap-3 rounded-[4px] px-3 py-2" style={{ background: "var(--panel-2)" }}>
       <div className="flex flex-col gap-0.5">
         <span className="text-[13px] font-semibold" style={{ color: "var(--text)" }}>
           {row.ticker} <span style={{ color: "var(--text-mute)", fontWeight: 400 }}>{row.direction}</span>
@@ -364,7 +364,7 @@ export function Standing() {
       {formOpen && (
         <form
           onSubmit={saveNote}
-          className="flex flex-row flex-wrap items-end gap-3 rounded-[10px] p-4"
+          className="flex flex-row flex-wrap items-end gap-3 p-4"
           style={{ background: "var(--panel)", border: "1px solid var(--line)" }}
         >
           <label className="flex flex-col gap-1">
@@ -373,7 +373,7 @@ export function Standing() {
               type="date"
               value={formDate}
               onChange={(e) => setFormDate(e.target.value)}
-              className="rounded-[8px] px-[10px] py-[6px] text-[12px] outline-none"
+              className="rounded-[4px] px-[10px] py-[6px] text-[12px] outline-none"
               style={{ background: "var(--panel-2)", border: "1px solid var(--line)", color: "var(--text)", fontFamily: "var(--font-mono)" }}
             />
           </label>
@@ -384,13 +384,13 @@ export function Standing() {
               value={formNote}
               onChange={(e) => setFormNote(e.target.value)}
               placeholder="What happened, or what to watch for?"
-              className="rounded-[8px] px-[10px] py-[6px] text-[12px] outline-none"
+              className="rounded-[4px] px-[10px] py-[6px] text-[12px] outline-none"
               style={{ background: "var(--panel-2)", border: "1px solid var(--line)", color: "var(--text)", fontFamily: "var(--font-mono)" }}
             />
           </label>
           <button
             type="submit"
-            className="rounded-[8px] px-[16px] py-[8px] text-[12.5px] font-bold shrink-0"
+            className="rounded-[4px] px-[16px] py-[8px] text-[12.5px] font-bold shrink-0"
             style={{ background: "var(--accent)", color: "#fff" }}
           >
             Save note

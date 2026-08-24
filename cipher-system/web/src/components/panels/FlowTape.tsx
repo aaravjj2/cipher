@@ -138,7 +138,7 @@ export default function FlowTape({ ticker }: { ticker: string }) {
 
   return (
     <div
-      className="mt-2 rounded-lg border text-[11px]"
+      className="mt-2 border text-[11px]"
       style={{ borderColor: "var(--border)", background: "var(--panel)" }}
     >
       <div
@@ -249,7 +249,7 @@ export default function FlowTape({ ticker }: { ticker: string }) {
           </thead>
           <tbody>
             {prints.length === 0 && loading && (
-              <tr aria-label={`Loading flow prints for ${ticker}`}>
+              <tr aria-label={`Loading flow prints for ${ticker}…`}>
                 <td colSpan={6} className="px-3 py-3">
                   <SkeletonRegion label={`Loading flow prints for ${ticker}…`}>
                     {["w-[72%]", "w-[54%]", "w-[64%]", "w-[44%]"].map((width) => (

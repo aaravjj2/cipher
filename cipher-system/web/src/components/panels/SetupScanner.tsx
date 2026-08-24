@@ -20,6 +20,7 @@ import {
   type ScanMode,
   type ScanStrategy,
 } from "@/lib/api";
+import { LoadingStatus } from "@/components/ui/skeleton";
 import type { ScannerResultCard } from "@/types/cipher";
 
 /**
@@ -76,6 +77,24 @@ function fmtList(values?: number[] | null): string {
   return values?.length ? values.map(fmt).join(", ") : "—";
 }
 
+function StructuralScore({ value }: { value: number }) {
+  const n = Math.round(value);
+  return (
+    <div
+      className="text-right shrink-0"
+      title="Structural rank 0–100. Not probability of profit."
+      aria-label={`Structural score ${n} of 100, not probability of profit`}
+    >
+      <span className="text-[22px] font-bold" style={{ color: "var(--text)" }}>
+        {n}
+      </span>
+      <span className="block text-[9px] font-semibold uppercase tracking-[0.08em]" style={{ color: "var(--text-mute)" }}>
+        structural /100
+      </span>
+    </div>
+  );
+}
+
 function toCard(c: RealScanCard, rank: number): ScannerResultCard {
   return {
     rank,
@@ -91,7 +110,7 @@ function toCard(c: RealScanCard, rank: number): ScannerResultCard {
 }
 
 function downloadCsv(cards: ScannerResultCard[]) {
-  const header = ["Rank", "Ticker", "Direction", "Score", "Supports", "Resistances", "Pull Target", "Vacuum Targets"];
+  const header = ["Rank", "Ticker", "Direction", "Structural score", "Supports", "Resistances", "Pull Target", "Vacuum Targets"];
   const lines = cards.map((c) =>
     [
       c.rank,
@@ -155,7 +174,7 @@ function PillGroup<T extends string>({
 }) {
   return (
     <div
-      className="flex flex-row items-center gap-[2px] rounded-[8px] p-[2px] shrink-0"
+      className="flex flex-row items-center gap-[2px] border border-[var(--line)] p-[2px] shrink-0"
       style={{ background: "var(--panel-2)", border: "1px solid var(--line)" }}
     >
       {options.map((opt) => {
@@ -167,7 +186,7 @@ function PillGroup<T extends string>({
             disabled={disabled}
             onClick={() => onChange(opt.value)}
             aria-pressed={active}
-            className="rounded-[6px] px-[12px] py-[7px] text-[12.5px] font-semibold whitespace-nowrap transition-colors duration-150 disabled:opacity-60 disabled:cursor-not-allowed"
+            className="rounded-[4px] px-[12px] py-[7px] text-[12.5px] font-semibold whitespace-nowrap transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]"
             style={{
               background: active ? "var(--nav-active)" : "transparent",
               color: active ? "var(--text)" : "var(--text-dim)",
@@ -194,12 +213,12 @@ function BetaBadge() {
 
 function OutlineButton({
   children,
-  tone = "purple",
+  tone = "accent",
   onClick,
   disabled,
 }: {
   children: React.ReactNode;
-  tone?: "purple" | "gold";
+  tone?: "accent" | "gold";
   onClick?: () => void;
   disabled?: boolean;
 }) {
@@ -209,7 +228,7 @@ function OutlineButton({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="flex flex-row items-center gap-2 rounded-[8px] px-[14px] py-[9px] text-[12.5px] font-semibold whitespace-nowrap disabled:opacity-60 disabled:cursor-not-allowed"
+      className="flex flex-row items-center gap-2 rounded-[4px] px-[14px] py-[9px] text-[12.5px] font-semibold whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]"
       style={{
         border: `1px solid color-mix(in srgb, ${color} 55%, transparent)`,
         color,
@@ -254,7 +273,7 @@ function ResultCard({ card }: { card: ScannerResultCard }) {
 
   return (
     <div
-      className="flex flex-col rounded-[12px] overflow-hidden"
+      className="flex flex-col overflow-hidden"
       style={{
         border: "1px solid color-mix(in srgb, var(--accent) 40%, var(--line))",
         background:
@@ -285,14 +304,7 @@ function ResultCard({ card }: { card: ScannerResultCard }) {
             {isBullish ? "Bullish" : "Bearish"}
           </span>
         </div>
-        <div className="text-right shrink-0">
-          <span className="text-[22px] font-bold" style={{ color: "var(--text)" }}>
-            {card.score}
-          </span>
-          <span className="text-[12px] font-semibold" style={{ color: "var(--text-mute)" }}>
-            /100
-          </span>
-        </div>
+        <StructuralScore value={card.score} />
       </div>
 
       {/* Data rows */}
@@ -349,7 +361,7 @@ function ResultComparison({ cards, onNavigate }: { cards: RealScanCard[]; onNavi
   }
 
   return <div className="flex flex-col gap-3">
-    <section className="rounded-xl border p-3" style={{ borderColor: "var(--line)", background: "var(--panel)" }} aria-label="Setup comparison tray">
+    <section className="border p-3" style={{ borderColor: "var(--line)", background: "var(--panel)" }} aria-label="Setup comparison tray">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h3 className="text-[11px] font-bold uppercase tracking-[0.12em]">Compare setups</h3>
@@ -358,7 +370,7 @@ function ResultComparison({ cards, onNavigate }: { cards: RealScanCard[]; onNavi
         <span className="text-[10px] font-semibold" style={{ color: selectedCards.length === 3 ? "var(--gold)" : "var(--text-mute)" }}>{selectedCards.length}/3 selected</span>
       </div>
       {selectedCards.length === 0 ? (
-        <div className="mt-3 rounded-lg border border-dashed px-3 py-4 text-center text-[11px]" style={{ borderColor: "var(--line)", color: "var(--text-mute)" }}>
+        <div className="mt-3 border border-dashed px-3 py-4 text-center text-[11px]" style={{ borderColor: "var(--line)", color: "var(--text-mute)" }}>
           Use the Compare controls in the ranked results below.
         </div>
       ) : (
@@ -366,9 +378,9 @@ function ResultComparison({ cards, onNavigate }: { cards: RealScanCard[]; onNavi
           {selectedCards.map((raw) => {
             const evidence = raw.evidence_snapshot;
             const eventTime = evidence?.event_at ? new Date(evidence.event_at).toLocaleString("en-US", { timeZone: "America/New_York", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "Unknown";
-            return <article key={raw.ticker} className="rounded-lg border p-3" style={{ borderColor: "var(--line-soft)", background: "var(--bg)" }}>
+            return <article key={raw.ticker} className="border p-3" style={{ borderColor: "var(--line-soft)", background: "var(--bg)" }}>
               <div className="flex items-start justify-between gap-2">
-                <div><strong className="text-[15px]">{raw.ticker}</strong><div className="text-[10px] font-bold" style={{ color: raw.direction === "BULLISH" ? "var(--positive)" : "var(--negative)" }}>{raw.direction} · {raw.score.toFixed(1)}</div></div>
+                <div><strong className="text-[15px]">{raw.ticker}</strong><div className="text-[10px] font-bold" style={{ color: raw.direction === "BULLISH" ? "var(--positive)" : "var(--negative)" }}>{raw.direction} · structural {raw.score.toFixed(1)}</div></div>
                 <button type="button" onClick={() => toggleComparison(raw.ticker)} className="rounded border px-2 py-1 text-[9px]" style={{ borderColor: "var(--line)", color: "var(--text-mute)" }} aria-label={`Remove ${raw.ticker} from comparison`}>Remove</button>
               </div>
               <dl className="mt-3 grid grid-cols-[105px_1fr] gap-x-2 gap-y-1 text-[10px]">
@@ -390,9 +402,9 @@ function ResultComparison({ cards, onNavigate }: { cards: RealScanCard[]; onNavi
         </div>
       )}
     </section>
-    <div className="overflow-hidden rounded-xl border" style={{ borderColor: "var(--line)", background: "var(--panel)" }}>
+    <div className="overflow-x-auto overflow-y-auto border" role="region" aria-label="Ranked scan results" style={{ borderColor: "var(--line)", background: "var(--panel)" }}>
     <div className="hidden grid-cols-[42px_86px_86px_70px_90px_90px_1fr] gap-3 border-b px-4 py-2 text-[9px] font-bold uppercase tracking-[0.12em] sm:grid" style={{ borderColor: "var(--line)", color: "var(--text-mute)" }}>
-      <span>Rank</span><span>Ticker</span><span>Bias</span><span>Score</span><span>Confidence</span><span>Coverage</span><span>Setup / path</span>
+      <span>Rank</span><span>Ticker</span><span>Bias</span><span>Structural</span><span>Confidence</span><span>Coverage</span><span>Setup / path</span>
     </div>
     {cards.map((raw, index) => {
       const card = toCard(raw, index + 1);
@@ -402,7 +414,7 @@ function ResultComparison({ cards, onNavigate }: { cards: RealScanCard[]; onNavi
           <span className="text-[10px]" style={{ color: "var(--text-mute)" }}>#{index + 1}</span>
           <strong className="text-[12px]">{raw.ticker}</strong>
           <span className="text-[10px] sm:order-none" style={{ color: tone }}>{raw.direction}</span>
-          <span className="hidden text-[12px] sm:block">{raw.score.toFixed(1)}</span>
+          <span className="hidden text-[12px] sm:block" aria-label={`Structural score ${raw.score.toFixed(1)} of 100, not probability of profit`}>{raw.score.toFixed(1)}</span>
           <span className="hidden text-[9px] font-bold uppercase sm:block" style={{ color: raw.confidence === "higher" ? "var(--positive)" : "var(--gold)" }}>{raw.confidence ?? "legacy"}</span>
           <span className="hidden text-[10px] sm:block" style={{ color: "var(--text-dim)" }}>{raw.coverage_status ?? "unknown"}</span>
           <span className="hidden truncate text-[10px] sm:block" style={{ color: "var(--text-dim)" }}>{raw.setup_type} · target {fmt(raw.target)}</span>
@@ -421,12 +433,12 @@ function ResultComparison({ cards, onNavigate }: { cards: RealScanCard[]; onNavi
               onClick={() => toggleComparison(raw.ticker)}
               aria-pressed={activeSelectedTickers.includes(raw.ticker)}
               disabled={!activeSelectedTickers.includes(raw.ticker) && activeSelectedTickers.length >= 3}
-              className="rounded-md border px-2.5 py-1 text-[10px] disabled:cursor-not-allowed disabled:opacity-40"
+              className="rounded-[4px] border px-2.5 py-1 text-[10px] disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]"
               style={{ borderColor: activeSelectedTickers.includes(raw.ticker) ? "var(--gold)" : "var(--line)", color: activeSelectedTickers.includes(raw.ticker) ? "var(--gold)" : "var(--text-dim)" }}
             >
               {activeSelectedTickers.includes(raw.ticker) ? "Compared" : "Compare"}
             </button>
-            {[['Night Vision', raw.evidence_snapshot?.replay_available ? 'Replay chart' : 'Validate chart'], ['Options Terminal', 'Structure'], ['Backtest', 'Test'], ['Trader Journal', 'Record']].map(([panel, label]) => <button key={panel} type="button" onClick={() => navigateFromEvidence(panel, raw)} className="rounded-md border px-2.5 py-1 text-[10px]" style={{ borderColor: "var(--line)", color: "var(--text-dim)" }}>{label}</button>)}
+            {[['Night Vision', raw.evidence_snapshot?.replay_available ? 'Replay chart' : 'Validate chart'], ['Options Terminal', 'Structure'], ['Backtest', 'Test'], ['Trader Journal', 'Record']].map(([panel, label]) => <button key={panel} type="button" onClick={() => navigateFromEvidence(panel, raw)} className="rounded-[4px] border px-2.5 py-1 text-[10px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]" style={{ borderColor: "var(--line)", color: "var(--text-dim)" }}>{label}</button>)}
           </div>
         </div>
       </details>;
@@ -504,7 +516,7 @@ function ClusterResultCard({ card, rank }: { card: RealScanCard; rank: number })
 
   return (
     <div
-      className="flex flex-col rounded-[12px] overflow-hidden"
+      className="flex flex-col overflow-hidden"
       style={{
         border: `1px solid color-mix(in srgb, ${tone} 45%, var(--line))`,
         background: `radial-gradient(130% 100% at 0% 0%, color-mix(in srgb, ${tone} 14%, transparent), var(--panel) 55%)`,
@@ -602,7 +614,7 @@ function FlashResultCard({ card, rank }: { card: RealScanCard; rank: number }) {
 
   return (
     <div
-      className="flex flex-col rounded-[12px] overflow-hidden"
+      className="flex flex-col overflow-hidden"
       style={{
         border: `1px solid color-mix(in srgb, ${tone} 45%, var(--line))`,
         background: `radial-gradient(130% 100% at 0% 0%, color-mix(in srgb, ${tone} 14%, transparent), var(--panel) 55%)`,
@@ -624,14 +636,7 @@ function FlashResultCard({ card, rank }: { card: RealScanCard; rank: number }) {
             {isBullish ? "Bullish" : "Bearish"}
           </span>
         </div>
-        <div className="text-right shrink-0">
-          <span className="text-[22px] font-bold" style={{ color: "var(--text)" }}>
-            {Math.round(card.score)}
-          </span>
-          <span className="text-[12px] font-semibold" style={{ color: "var(--text-mute)" }}>
-            /100
-          </span>
-        </div>
+        <StructuralScore value={card.score} />
       </div>
 
       <div className="flex flex-row flex-wrap items-center gap-1.5 mt-2">
@@ -804,7 +809,7 @@ function FlashAgenticCard({ row }: { row: FlashAgenticRow }) {
 
   return (
     <div
-      className="flex flex-col rounded-[12px] overflow-hidden"
+      className="flex flex-col overflow-hidden"
       style={{
         border: `1px solid color-mix(in srgb, ${tone} 45%, var(--line))`,
         background: `radial-gradient(130% 100% at 0% 0%, color-mix(in srgb, ${tone} 14%, transparent), var(--panel) 55%)`,
@@ -829,16 +834,7 @@ function FlashAgenticCard({ row }: { row: FlashAgenticRow }) {
             {isBullish ? "Bullish" : "Bearish"}
           </span>
         </div>
-        {row.score != null && (
-          <div className="text-right shrink-0">
-            <span className="text-[22px] font-bold" style={{ color: "var(--text)" }}>
-              {Math.round(row.score)}
-            </span>
-            <span className="text-[12px] font-semibold" style={{ color: "var(--text-mute)" }}>
-              /100
-            </span>
-          </div>
-        )}
+        {row.score != null && <StructuralScore value={row.score} />}
       </div>
 
       <div className="flex flex-row flex-wrap items-center gap-1.5 mt-2">
@@ -1143,23 +1139,23 @@ export function SetupScanner({ onNavigate }: { onNavigate?: (panel: string, tick
           Setup Scanner
         </h1>
         <p className="text-[13px] mt-1 max-w-[640px]" style={{ color: "var(--text-dim)" }}>
-          Choose the job first. Data-quality and liquidity gates run before structural score;
-          confidence describes evidence coverage, not a predicted win rate.
+          Choose the job first. Data-quality and liquidity gates run before structural score.
+          Structural score ranks geometry on a 0–100 scale; it is not P(profit); confidence describes evidence coverage, not a predicted win rate.
         </p>
       </div>
 
       <div role="region" className="grid grid-cols-2 gap-2 lg:grid-cols-3 2xl:grid-cols-6" aria-label="Scanner presets">
-        {SCAN_PRESETS.map((preset) => <button key={preset.label} type="button" disabled={scanning} onClick={() => { setMode(preset.mode); startScan(preset.strategy, preset.mode); }} className="rounded-xl border p-3 text-left disabled:opacity-60" style={{ borderColor: "var(--line)", background: "var(--panel)" }}>
+        {SCAN_PRESETS.map((preset) => <button key={preset.label} type="button" disabled={scanning} onClick={() => { setMode(preset.mode); startScan(preset.strategy, preset.mode); }} className="border p-3 text-left disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]" style={{ borderColor: "var(--line)", background: "var(--panel)" }}>
           <span className="block text-[11px] font-bold">{preset.label}</span><span className="mt-1 block text-[9px]" style={{ color: "var(--text-mute)" }}>{preset.detail}</span>
         </button>)}
       </div>
 
-      <div className="flex flex-wrap items-center gap-3 rounded-xl border px-3 py-2" style={{ borderColor: "var(--line)", background: "var(--panel-2)" }}>
-        <button type="button" disabled={scanning} onClick={startDiscoveryScan} className="rounded-lg border px-3 py-1.5 text-[10px] font-bold disabled:opacity-50" style={{ borderColor: "var(--accent)", color: "var(--accent)" }}>Discover liquid movers</button>
+      <div className="flex flex-wrap items-center gap-3 border px-3 py-2" style={{ borderColor: "var(--line)", background: "var(--panel-2)" }}>
+        <button type="button" disabled={scanning} onClick={startDiscoveryScan} className="rounded-[4px] border px-3 py-1.5 text-[10px] font-bold disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]" style={{ borderColor: "var(--accent)", color: "var(--accent)" }}>Discover liquid movers</button>
         <span className="text-[10px]" style={{ color: "var(--text-mute)" }}>{discoveryMessage || "Finviz supplies a delayed shortlist; Alpaca remains the live validation source."}</span>
       </div>
 
-      <details className="rounded-xl border px-3 py-2" style={{ borderColor: "var(--line)", background: "var(--panel)" }}>
+      <details className="border px-3 py-2" style={{ borderColor: "var(--line)", background: "var(--panel)" }}>
         <summary className="cursor-pointer text-[10px] font-bold uppercase tracking-[0.12em]" style={{ color: "var(--text-mute)" }}>Advanced engines and expiration controls</summary>
         <div className="mt-3 flex flex-col gap-3">
 
@@ -1170,8 +1166,8 @@ export function SetupScanner({ onNavigate }: { onNavigate?: (panel: string, tick
           type="button"
           onClick={() => startScan("cipher")}
           disabled={scanning}
-          className="rounded-[8px] px-[18px] py-[9px] text-[13px] font-bold whitespace-nowrap transition-opacity duration-150 disabled:opacity-80 disabled:cursor-not-allowed"
-          style={{ background: "var(--accent)", color: "#f8f2ff" }}
+          className="rounded-[4px] px-[18px] py-[9px] text-[13px] font-bold whitespace-nowrap transition-opacity duration-150 disabled:opacity-80 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]"
+          style={{ background: "var(--accent)", color: "var(--accent-foreground)" }}
         >
           {scanning ? "Scanning…" : "Cipher Model Scan"}
         </button>
@@ -1196,7 +1192,7 @@ export function SetupScanner({ onNavigate }: { onNavigate?: (panel: string, tick
             value={clusterExp}
             onChange={(e) => setClusterExp(e.target.value)}
             disabled={scanning}
-            className="appearance-none rounded-[8px] pl-[12px] pr-[30px] py-[9px] text-[12.5px] font-semibold cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+            className="appearance-none rounded-[4px] pl-[12px] pr-[30px] py-[9px] text-[12.5px] font-semibold cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]"
             style={{ background: "var(--panel-2)", border: "1px solid var(--line)", color: "var(--text)" }}
           >
             {CLUSTER_EXP_OPTIONS.map((opt) => (
@@ -1223,7 +1219,7 @@ export function SetupScanner({ onNavigate }: { onNavigate?: (panel: string, tick
           type="button"
           onClick={() => startScan("flash")}
           disabled={scanning}
-          className="flex flex-row items-center gap-2 rounded-[8px] px-[14px] py-[9px] text-[12.5px] font-semibold whitespace-nowrap disabled:opacity-60 disabled:cursor-not-allowed"
+          className="flex flex-row items-center gap-2 rounded-[4px] px-[14px] py-[9px] text-[12.5px] font-semibold whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]"
           style={{
             border: "1px solid color-mix(in srgb, var(--gold) 55%, transparent)",
             color: "var(--gold)",
@@ -1237,7 +1233,7 @@ export function SetupScanner({ onNavigate }: { onNavigate?: (panel: string, tick
           type="button"
           onClick={() => startScan("flash_index")}
           disabled={scanning}
-          className="flex flex-row items-center gap-2 rounded-[8px] px-[14px] py-[9px] text-[12.5px] font-semibold whitespace-nowrap disabled:opacity-60 disabled:cursor-not-allowed"
+          className="flex flex-row items-center gap-2 rounded-[4px] px-[14px] py-[9px] text-[12.5px] font-semibold whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]"
           style={{
             border: "1px solid color-mix(in srgb, var(--gold) 55%, transparent)",
             color: "var(--gold)",
@@ -1252,7 +1248,7 @@ export function SetupScanner({ onNavigate }: { onNavigate?: (panel: string, tick
           onClick={() => setAgenticView((v) => !v)}
           aria-pressed={agenticView}
           disabled={scanning}
-          className="flex flex-row items-center gap-2 rounded-[8px] px-[14px] py-[9px] text-[12.5px] font-semibold whitespace-nowrap disabled:opacity-60 disabled:cursor-not-allowed"
+          className="flex flex-row items-center gap-2 rounded-[4px] px-[14px] py-[9px] text-[12.5px] font-semibold whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]"
           style={{
             border: "1px solid color-mix(in srgb, var(--accent) 55%, transparent)",
             color: "var(--accent)",
@@ -1280,10 +1276,11 @@ export function SetupScanner({ onNavigate }: { onNavigate?: (panel: string, tick
           <button
             type="button"
             onClick={() => (isRawView ? downloadClusterCsv(rawResults) : downloadCsv(results))}
-            className="flex flex-row items-center gap-2 rounded-[8px] px-[14px] py-[9px] text-[12.5px] font-semibold whitespace-nowrap"
+            aria-label="Download scan results as CSV"
+            className="flex flex-row items-center gap-2 rounded-[4px] px-[14px] py-[9px] text-[12.5px] font-semibold whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]"
             style={{ background: "var(--panel-2)", border: "1px solid var(--line)", color: "var(--text)" }}
           >
-            <DownloadIcon width={13} height={13} />
+            <DownloadIcon width={13} height={13} aria-hidden="true" />
             Download .CSV
           </button>
         )}
@@ -1292,7 +1289,7 @@ export function SetupScanner({ onNavigate }: { onNavigate?: (panel: string, tick
             type="button"
             onClick={toggleHistory}
             aria-pressed={historyOpen}
-            className="flex flex-row items-center gap-2 rounded-[8px] px-[14px] py-[9px] text-[12.5px] font-semibold whitespace-nowrap"
+            className="flex flex-row items-center gap-2 rounded-[4px] px-[14px] py-[9px] text-[12.5px] font-semibold whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]"
             style={{
               background: historyOpen ? "var(--nav-active)" : "var(--panel-2)",
               border: "1px solid var(--line)",
@@ -1303,13 +1300,15 @@ export function SetupScanner({ onNavigate }: { onNavigate?: (panel: string, tick
           </button>
           {historyOpen && (
             <div
-              className="absolute left-0 mt-2 w-[420px] max-h-[360px] overflow-y-auto rounded-[10px] z-20"
+              className="absolute left-0 mt-2 w-[420px] max-h-[360px] overflow-y-auto z-20"
+              role="listbox"
+              aria-label="Saved scan history"
               style={{ background: "var(--panel)", border: "1px solid var(--line)", boxShadow: "0 14px 38px rgba(0,0,0,0.6)" }}
             >
               {historyLoading && (
-                <div className="px-4 py-3 text-[12.5px]" style={{ color: "var(--text-mute)" }}>
+                <LoadingStatus className="px-4 py-3 text-[12.5px]" style={{ color: "var(--text-mute)" }}>
                   Loading saved scans…
-                </div>
+                </LoadingStatus>
               )}
               {!historyLoading && historyEntries.length === 0 && (
                 <div className="px-4 py-3 text-[12.5px]" style={{ color: "var(--text-mute)" }}>
@@ -1321,8 +1320,10 @@ export function SetupScanner({ onNavigate }: { onNavigate?: (panel: string, tick
                   <button
                     key={entry.id}
                     type="button"
+                    role="option"
+                    aria-label={`Load saved ${entry.strategy} ${entry.mode} scan`}
                     onClick={() => loadFromHistory(entry)}
-                    className="flex flex-col w-full text-left px-4 py-2.5"
+                    className="flex flex-col w-full text-left px-4 py-2.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--gold)]"
                     style={{ borderBottom: "1px solid var(--line-soft)" }}
                   >
                     <div className="flex flex-row items-center justify-between gap-2">
@@ -1377,14 +1378,14 @@ export function SetupScanner({ onNavigate }: { onNavigate?: (panel: string, tick
         {[
           ["Scanned", scanMeta.scanned], ["Qualified", scanMeta.qualified], ["Rejected", scanMeta.rejected ?? 0],
           ["Provider errors", scanMeta.failed ?? 0], ["Actionable", scanMeta.actionable ?? 0],
-        ].map(([label, value]) => <div key={String(label)} className="rounded-lg border px-3 py-2" style={{ borderColor: "var(--line)", background: "var(--panel)" }}><span className="block text-[9px] uppercase" style={{ color: "var(--text-mute)" }}>{label}</span><strong className="text-sm">{value}</strong></div>)}
-        {!!Object.keys(scanMeta.rejection_counts ?? {}).length && <div className="col-span-full rounded-lg border px-3 py-2 text-[10px]" style={{ borderColor: "var(--line)", color: "var(--gold)" }}>Rejection funnel: {Object.entries(scanMeta.rejection_counts ?? {}).map(([reason, count]) => `${reason.replaceAll("_", " ")} ${count}`).join(" · ")}</div>}
+        ].map(([label, value]) => <div key={String(label)} className="border px-3 py-2" style={{ borderColor: "var(--line)", background: "var(--panel)" }}><span className="block text-[9px] uppercase" style={{ color: "var(--text-mute)" }}>{label}</span><strong className="text-sm">{value}</strong></div>)}
+        {!!Object.keys(scanMeta.rejection_counts ?? {}).length && <div className="col-span-full border px-3 py-2 text-[10px]" style={{ borderColor: "var(--line)", color: "var(--gold)" }}>Rejection funnel: {Object.entries(scanMeta.rejection_counts ?? {}).map(([reason, count]) => `${reason.replaceAll("_", " ")} ${count}`).join(" · ")}</div>}
       </div>}
 
       {/* Warning banner — visible while scanning and after results land */}
       {(scanning || hasResults) && (
         <div
-          className="flex flex-row items-start gap-3 rounded-[10px] px-4 py-3"
+          className="flex flex-row items-start gap-3 px-4 py-3"
           style={{
             background: "color-mix(in srgb, var(--gold) 10%, transparent)",
             border: "1px solid color-mix(in srgb, var(--gold) 40%, transparent)",
@@ -1476,7 +1477,7 @@ export function SetupScanner({ onNavigate }: { onNavigate?: (panel: string, tick
 
           {!agentic?.loop_running && (
             <div
-              className="flex flex-row items-start gap-3 rounded-[10px] px-4 py-3"
+              className="flex flex-row items-start gap-3 px-4 py-3"
               style={{
                 background: "color-mix(in srgb, var(--gold) 10%, transparent)",
                 border: "1px solid color-mix(in srgb, var(--gold) 40%, transparent)",
@@ -1519,7 +1520,14 @@ export function SetupScanner({ onNavigate }: { onNavigate?: (panel: string, tick
       )}
 
       {/* Results grid */}
-      {!agenticView && hasResults && isClusterView && filteredRawResults.length === 0 && (
+      {!agenticView && hasResults && !scanning && rawResults.length === 0 && (
+        <div className="flex items-center justify-center py-16">
+          <p className="text-[13px]" style={{ color: "var(--text-mute)" }}>
+            Scan finished with no qualifying setups. An empty job is a valid result, not a failed scan.
+          </p>
+        </div>
+      )}
+      {!agenticView && hasResults && isClusterView && rawResults.length > 0 && filteredRawResults.length === 0 && (
         <div className="flex items-center justify-center py-16">
           <p className="text-[13px]" style={{ color: "var(--text-mute)" }}>
             No clusters match the current filters.
@@ -1537,7 +1545,7 @@ export function SetupScanner({ onNavigate }: { onNavigate?: (panel: string, tick
           )}
         </div>
       )}
-      {!agenticView && hasResults && !isRawView && (
+      {!agenticView && hasResults && !isRawView && rawResults.length > 0 && (
         <ResultComparison cards={rawResults} onNavigate={onNavigate} />
       )}
 

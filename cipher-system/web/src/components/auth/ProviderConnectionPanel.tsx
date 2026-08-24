@@ -82,24 +82,24 @@ export function ProviderConnectionPanel() {
       </p>
 
       <div className="grid gap-3 sm:grid-cols-2">
-        <label className="flex flex-col gap-1.5 text-[12px]">
+        <label htmlFor="cipher-provider-key" className="flex flex-col gap-1.5 text-[12px]">
           <span style={{ color: "var(--text-dim)" }}>Alpaca key</span>
-          <input type="password" autoComplete="off" value={key} onChange={(event) => setKey(event.target.value)} className="rounded-md px-3 py-2" style={{ background: "var(--panel-2)", border: "1px solid var(--line)", color: "var(--text)" }} />
+          <input id="cipher-provider-key" name="alpaca-key" type="password" autoComplete="off" value={key} onChange={(event) => setKey(event.target.value)} className="rounded-[4px] px-3 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]" style={{ background: "var(--panel-2)", border: "1px solid var(--line)", color: "var(--text)" }} />
         </label>
-        <label className="flex flex-col gap-1.5 text-[12px]">
+        <label htmlFor="cipher-provider-secret" className="flex flex-col gap-1.5 text-[12px]">
           <span style={{ color: "var(--text-dim)" }}>Alpaca secret</span>
-          <input type="password" autoComplete="off" value={secret} onChange={(event) => setSecret(event.target.value)} className="rounded-md px-3 py-2" style={{ background: "var(--panel-2)", border: "1px solid var(--line)", color: "var(--text)" }} />
+          <input id="cipher-provider-secret" name="alpaca-secret" type="password" autoComplete="off" value={secret} onChange={(event) => setSecret(event.target.value)} className="rounded-[4px] px-3 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]" style={{ background: "var(--panel-2)", border: "1px solid var(--line)", color: "var(--text)" }} />
         </label>
-        <label className="flex flex-col gap-1.5 text-[12px]">
+        <label htmlFor="cipher-provider-options-feed" className="flex flex-col gap-1.5 text-[12px]">
           <span style={{ color: "var(--text-dim)" }}>Options feed</span>
-          <select value={optionsFeed} onChange={(event) => setOptionsFeed(event.target.value as "opra" | "indicative")} className="rounded-md px-3 py-2" style={{ background: "var(--panel-2)", border: "1px solid var(--line)", color: "var(--text)" }}>
+          <select id="cipher-provider-options-feed" name="options-feed" value={optionsFeed} onChange={(event) => setOptionsFeed(event.target.value as "opra" | "indicative")} className="rounded-[4px] px-3 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]" style={{ background: "var(--panel-2)", border: "1px solid var(--line)", color: "var(--text)" }}>
             <option value="opra">OPRA</option>
             <option value="indicative">Indicative · degraded</option>
           </select>
         </label>
-        <label className="flex flex-col gap-1.5 text-[12px]">
+        <label htmlFor="cipher-provider-stock-feed" className="flex flex-col gap-1.5 text-[12px]">
           <span style={{ color: "var(--text-dim)" }}>Stock feed</span>
-          <select value={stockFeed} onChange={(event) => setStockFeed(event.target.value as "sip" | "iex")} className="rounded-md px-3 py-2" style={{ background: "var(--panel-2)", border: "1px solid var(--line)", color: "var(--text)" }}>
+          <select id="cipher-provider-stock-feed" name="stock-feed" value={stockFeed} onChange={(event) => setStockFeed(event.target.value as "sip" | "iex")} className="rounded-[4px] px-3 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]" style={{ background: "var(--panel-2)", border: "1px solid var(--line)", color: "var(--text)" }}>
             <option value="sip">SIP</option>
             <option value="iex">IEX · degraded</option>
           </select>

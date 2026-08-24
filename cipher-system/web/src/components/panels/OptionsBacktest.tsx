@@ -106,7 +106,7 @@ function CapabilityGrid({ dataset }: { dataset: OptionsBacktestDataset }) {
         return (
           <div
             key={name}
-            className="flex items-center justify-between gap-3 rounded-[8px] px-3 py-2 text-[10.5px]"
+            className="flex items-center justify-between gap-3 rounded-[4px] px-3 py-2 text-[10.5px]"
             style={{ background: "var(--panel-2)", border: "1px solid var(--line)" }}
           >
             <span className="capitalize" style={{ color: "var(--text-dim)" }}>{labelOf(name)}</span>
@@ -269,7 +269,7 @@ export function OptionsBacktest() {
               if (!density) return null;
               return (
                 <p
-                  className="mb-3 rounded-[8px] px-3 py-2 text-[11px] leading-relaxed"
+                  className="mb-3 rounded-[4px] px-3 py-2 text-[11px] leading-relaxed"
                   style={{
                     background: "color-mix(in srgb, var(--neg) 9%, var(--panel-2))",
                     border: "1px solid var(--line)",
@@ -305,7 +305,7 @@ export function OptionsBacktest() {
             <h4 className="mb-2 mt-5 text-[10px] font-semibold uppercase" style={{ letterSpacing: "0.12em", color: "var(--text-mute)" }}>Manifest caveats — verbatim</h4>
             <ul className="flex flex-col gap-2">
               {dataset.caveats.map((caveat, index) => (
-                <li key={`${caveat}-${index}`} className="rounded-[8px] px-3 py-2 text-[11px] leading-relaxed" style={{ background: "color-mix(in srgb, var(--neg) 9%, var(--panel-2))", color: "var(--text-dim)", border: "1px solid var(--line)" }}>
+                <li key={`${caveat}-${index}`} className="rounded-[4px] px-3 py-2 text-[11px] leading-relaxed" style={{ background: "color-mix(in srgb, var(--neg) 9%, var(--panel-2))", color: "var(--text-dim)", border: "1px solid var(--line)" }}>
                   {caveat}
                 </li>
               ))}

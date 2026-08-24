@@ -31,7 +31,7 @@ function MessageBubble({ role, content }: ChatMessage) {
     <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
       <div
         data-testid={isUser ? "ask-user-message" : "ask-assistant-message"}
-        className="max-w-[75%] rounded-[10px] px-4 py-2.5 text-[13.5px] leading-relaxed"
+        className="max-w-[75%] px-4 py-2.5 text-[13.5px] leading-relaxed"
         style={{
           background: isUser ? "var(--accent)" : "var(--panel-2)",
           color: isUser ? "#fff" : "var(--text)",
@@ -154,7 +154,7 @@ export function AskCipher({ ticker }: { ticker: string }) {
       <h1 className="text-[22px] sm:text-[24px] font-bold leading-tight">Ask Cipher</h1>
 
       <p
-        className="text-[11.5px] leading-relaxed rounded-[8px] px-3 py-2"
+        className="text-[11.5px] leading-relaxed rounded-[4px] px-3 py-2"
         style={{ background: "var(--panel-2)", border: "1px solid var(--line)", color: "var(--text-mute)" }}
       >
         Answers are grounded only in tool calls Cipher makes this turn against its own timestamped evidence, including the active {ticker} workspace, truthful flow, matrix, option term structure, portfolio risk, journal, company context, and strategy catalog. No fresh backtests, no
@@ -177,7 +177,7 @@ export function AskCipher({ ticker }: { ticker: string }) {
         {toolCall && (
           <div className="flex justify-start">
             <div
-              className="rounded-[10px] px-4 py-2.5 text-[12.5px] italic"
+              className="px-4 py-2.5 text-[12.5px] italic"
               style={{ background: "var(--panel-2)", border: "1px solid var(--line)", color: "var(--text-mute)" }}
             >
               {toolCall}
@@ -208,14 +208,14 @@ export function AskCipher({ ticker }: { ticker: string }) {
           placeholder="Ask Cipher about your holdings, strategies, or evidence status…"
           rows={2}
           disabled={sending}
-          className="flex-1 resize-none rounded-[10px] px-3 py-2.5 text-[13px] outline-none disabled:opacity-60"
+          className="flex-1 resize-none px-3 py-2.5 text-[13px] outline-none disabled:opacity-60"
           style={{ background: "var(--panel-2)", border: "1px solid var(--line)", color: "var(--text)" }}
         />
         <button
           type="button"
           onClick={send}
           disabled={sending || !input.trim()}
-          className="rounded-[10px] px-5 py-[10px] text-[13px] font-bold shrink-0 disabled:opacity-50"
+          className="px-5 py-[10px] text-[13px] font-bold shrink-0 disabled:opacity-50"
           style={{ background: "var(--accent)", color: "#fff" }}
         >
           {sending ? "Asking…" : "Ask"}

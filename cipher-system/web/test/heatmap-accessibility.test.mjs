@@ -24,10 +24,11 @@ const GLOBALS = read("app/globals.css");
 test("shared heatmap primitives retain the signed-exposure legend contract", () => {
   assert.match(HEATMAP, /export function ExposureLegend/);
   assert.match(HEATMAP, /aria-label="Exposure color scale"/);
-  assert.match(HEATMAP, /Positive exposure · purple/);
+  assert.match(HEATMAP, /Positive exposure · amber/);
   assert.match(HEATMAP, /Negative exposure · red/);
   assert.match(HEATMAP, /Largest \|exposure\|/);
   assert.match(HEATMAP, /Intensity is relative within each heatmap/);
+  assert.match(HEATMAP, /GEX is a public-OI heuristic, not verified dealer positioning/);
 });
 
 test("Strike Matrix exposes a read-only table with row and cell labels", () => {
@@ -96,6 +97,9 @@ test("every sticky scrollport declares both overflow axes", () => {
   // requiring the axes to stay explicit: `overflow-auto` sets both, and Trident names each.
   assert.match(MATRIX, /grid-scroll[^"]*\boverflow-auto\b/);
   assert.doesNotMatch(MATRIX, /grid-scroll[^"]*overflow-x-auto(?![-\w])/);
+  assert.match(MATRIX, /role="region"/);
+  assert.match(MATRIX, /aria-label=\{`\$\{data\.ticker\} \$\{metric\.toUpperCase\(\)\} strike-matrix scrollport`\}/);
+  assert.match(HEATMAP, /height: "26px"/);
   assert.match(TRIDENT, /overflow-y-auto overflow-x-hidden/);
 });
 
@@ -118,7 +122,7 @@ test("the placeholder is suppressed for fast loads rather than flashing", () => 
 test("Night Vision uses a chart-shaped placeholder, and fast panels use none", () => {
   // The night-vision payload measured 742 KB / 4.2s warm, which earns a placeholder.
   assert.match(NIGHT_VISION, /import \{ SkeletonChart \} from "@\/components\/ui\/skeleton"/);
-  assert.match(NIGHT_VISION, /<SkeletonChart label=\{`Loading live \$\{ticker\} chart and gamma levels…`\}/);
+  assert.match(NIGHT_VISION, /<SkeletonChart label=\{`Loading \$\{ticker\} chart and gamma levels…`\}/);
   assert.match(SKELETON, /export function SkeletonChart/);
   // A grid-shaped placeholder in front of a candlestick chart moves the layout instead of
   // holding it, which is most of the reason to prefer a skeleton over a line of text.
@@ -141,6 +145,7 @@ test("Plan 2 panels use shaped loading states instead of bare loading labels", (
   assert.match(GEX_REPLAY, /overflow-x-auto[\s\S]*min-w-\[620px\][\s\S]*max-h-\[620px\] overflow-y-auto/);
   assert.match(SPYGLASS, /Contract Search has six dense, fixed-content columns[\s\S]*overflow-x-auto rounded-\[10px\][\s\S]*min-w-\[560px\][\s\S]*<table/);
   assert.match(STRATEGY_CATALOG, /seven-column verdict register readable on narrow screens[\s\S]*overflow-x-auto rounded-\[8px\][\s\S]*min-w-\[760px\]/);
+  assert.match(STRATEGY_CATALOG, /role="region"[\s\S]*Strategy catalog verdicts scrollport/);
   assert.match(OPTIONS_BACKTEST, /<SkeletonCards label="Loading historical options research catalog…"/);
   assert.match(OPTIONS_BACKTEST, /no research datasets are registered yet/);
   assert.match(STANDING, /<SkeletonCards label="Loading standing and accrual status…"/);

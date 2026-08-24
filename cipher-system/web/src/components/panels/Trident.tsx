@@ -81,7 +81,7 @@ function PillGroup<T extends string>({
 }) {
   return (
     <div
-      className="flex flex-row items-center gap-[2px] rounded-[8px] p-[2px] shrink-0"
+      className="flex flex-row items-center gap-[2px] rounded-[4px] p-[2px] shrink-0"
       style={{ background: "var(--panel-2)", border: "1px solid var(--line)" }}
     >
       {options.map((opt) => {
@@ -141,7 +141,7 @@ function ToggleButton({
       type="button"
       onClick={onClick}
       aria-pressed={active}
-      className="rounded-[8px] px-[10px] py-[6px] text-[12px] font-semibold whitespace-nowrap shrink-0 transition-colors duration-150"
+      className="rounded-[4px] px-[10px] py-[6px] text-[12px] font-semibold whitespace-nowrap shrink-0 transition-colors duration-150"
       style={{
         background: active ? "var(--nav-active)" : "var(--panel-2)",
         border: "1px solid var(--line)",
@@ -170,7 +170,7 @@ function IconButton({
       type="button"
       onClick={onClick}
       aria-label={ariaLabel}
-      className="grid place-items-center w-[30px] h-[30px] rounded-[8px] shrink-0"
+      className="grid place-items-center w-[30px] h-[30px] rounded-[4px] shrink-0"
       style={{ background: "var(--panel-2)", border: "1px solid var(--line)", color: "var(--text-mute)" }}
     >
       <span className={spinning ? "animate-spin" : undefined} style={{ display: "flex" }}>
@@ -196,7 +196,7 @@ function ExpirationSelector({
         onClick={() => setOpen((o) => !o)}
         aria-haspopup="listbox"
         aria-expanded={open}
-        className="flex flex-row items-center gap-1.5 rounded-[8px] px-[10px] py-[6px] text-[12px] font-semibold whitespace-nowrap"
+        className="flex flex-row items-center gap-1.5 rounded-[4px] px-[10px] py-[6px] text-[12px] font-semibold whitespace-nowrap"
         style={{
           background: "var(--panel-2)",
           border: "1px solid var(--line)",
@@ -210,7 +210,7 @@ function ExpirationSelector({
       {open && (
         <div
           role="listbox"
-          className="absolute left-0 top-[calc(100%+6px)] z-40 flex flex-col rounded-[8px] p-[2px] min-w-full"
+          className="absolute left-0 top-[calc(100%+6px)] z-40 flex flex-col rounded-[4px] p-[2px] min-w-full"
           style={{ background: "var(--panel-2)", border: "1px solid var(--line)", boxShadow: "0 14px 38px rgba(0,0,0,0.6)" }}
         >
           {EXPIRATION_INDEX_OPTIONS.map((opt) => (
@@ -256,6 +256,14 @@ export function Trident({ toolbarSlot = null }: { toolbarSlot?: HTMLDivElement |
 
   const toggleFlag = (key: keyof typeof flags) =>
     setFlags((prev) => ({ ...prev, [key]: !prev[key] }));
+
+  const oiAsOf = useMemo(() => {
+    if (!data) return null;
+    const dates = [...new Set(TICKERS.map((t) => data[t]?.coverage.open_interest_as_of).filter((d): d is string => Boolean(d)))];
+    if (dates.length === 1) return dates[0];
+    if (dates.length > 1) return "mixed";
+    return null;
+  }, [data]);
 
   const load = useCallback(async (signal?: AbortSignal, background = false) => {
     if (background) setIsRefreshing(true);
@@ -365,7 +373,7 @@ export function Trident({ toolbarSlot = null }: { toolbarSlot?: HTMLDivElement |
         <div className="flex flex-row flex-wrap items-center gap-2 pb-1">{toolbar}</div>
       )}
 
-      <ExposureLegend />
+      <ExposureLegend oiAsOf={oiAsOf} />
 
       {status === "loading" && (
         // Trident fetches a matrix per reference ticker, each around 1.4 MB, so this state is
@@ -377,7 +385,7 @@ export function Trident({ toolbarSlot = null }: { toolbarSlot?: HTMLDivElement |
 
       {status === "error" && (
         <div
-          className="flex flex-col items-center gap-2 rounded-[10px] py-16 text-[13px] text-center px-4"
+          className="flex flex-col items-center gap-2 py-16 text-[13px] text-center px-4"
           style={{ border: "1px solid var(--line)", color: "var(--neg)" }}
         >
           <span>{errorMessage}</span>
@@ -427,7 +435,7 @@ function TridentColumn({ column }: { column: TridentColumnData }) {
 
   return (
     <div
-      className="trident-column flex flex-col min-w-0 rounded-[10px] overflow-hidden"
+      className="trident-column flex flex-col min-w-0 overflow-hidden"
       style={{ border: "1px solid var(--line)" }}
     >
       {/* Column header: ticker / price / change% / expiration label */}

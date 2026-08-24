@@ -34,7 +34,7 @@ const when = (value?: string | null) =>
 
 function Card({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="rounded-xl border p-4" style={{ borderColor: "var(--line)", background: "var(--panel)" }}>
+    <section className="border p-4" style={{ borderColor: "var(--line)", background: "var(--panel)" }}>
       <h2 className="mb-3 text-[10px] font-bold uppercase tracking-[0.14em]" style={{ color: "var(--text-mute)" }}>
         {title}
       </h2>
@@ -110,7 +110,7 @@ export function MorningBrief({ ticker, onNavigate }: {
         </div>
         <div className="flex flex-wrap gap-2">
           {["Setup Scanner", "Night Vision", "Options Terminal", "Paper Portfolios"].map((panel) => (
-            <button key={panel} type="button" onClick={() => onNavigate?.(panel, ticker)} className="rounded-lg border px-3 py-1.5 text-[10px] hover:bg-white/[0.04]" style={{ borderColor: "var(--line)", color: "var(--accent)" }}>
+            <button key={panel} type="button" onClick={() => onNavigate?.(panel, ticker)} className="rounded-[4px] border px-3 py-1.5 text-[10px] hover:bg-white/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]" style={{ borderColor: "var(--line)", color: "var(--accent)" }}>
               {panel.replace(" Terminal", "")}
             </button>
           ))}
@@ -118,7 +118,7 @@ export function MorningBrief({ ticker, onNavigate }: {
       </header>
 
       {data.attention.length > 0 ? (
-        <section className="rounded-xl border p-3" style={{ borderColor: "var(--gold)", background: "var(--panel)" }}>
+        <section className="border p-3" style={{ borderColor: "var(--gold)", background: "var(--panel)" }}>
           <h2 className="text-[10px] font-bold uppercase" style={{ color: "var(--gold)" }}>
             Check first · {data.attention.length} issue{data.attention.length === 1 ? "" : "s"}
           </h2>
@@ -152,6 +152,7 @@ export function MorningBrief({ ticker, onNavigate }: {
             <div><span style={{ color: "var(--text-mute)" }}>Large flow</span><b className="mt-1 block">{flow.length} print{flow.length === 1 ? "" : "s"}</b></div>
             <div><span style={{ color: "var(--text-mute)" }}>Public-OI GEX change</span><b className="mt-1 block">{money(data.gex_change?.change)}</b></div>
           </div>
+          <p className="mt-2 text-[9px]" style={{ color: "var(--text-mute)" }}>GEX is a public-OI heuristic, not verified dealer positioning.</p>
           {!flow.length && (
             <p className="mt-3 text-[10px]" style={{ color: "var(--text-mute)" }}>
               {flowState === "refreshing"
@@ -167,12 +168,12 @@ export function MorningBrief({ ticker, onNavigate }: {
         <Card title="Paper status">
           <div className="grid grid-cols-2 gap-3 text-xs">
             <div><span style={{ color: "var(--text-mute)" }}>Open</span><b className="mt-1 block">{openPaper}</b></div>
-            <div><span style={{ color: "var(--text-mute)" }}>Realized P&amp;L</span><b className="mt-1 block">{money(data.paper_portfolios.combined_realized_pnl)}</b></div>
+            <div><span style={{ color: "var(--text-mute)" }}>Captured paper P&amp;L</span><b className="mt-1 block">{money(data.paper_portfolios.combined_realized_pnl)}</b></div>
             <div><span style={{ color: "var(--text-mute)" }}>Autopilot</span><b className="mt-1 block">{autopilotSummary}</b></div>
             <div><span style={{ color: "var(--text-mute)" }}>Open research</span><b className="mt-1 block">{prospective.open_signals.length}</b></div>
           </div>
           {executorState === "DATA_FAILURE" && <p className="mt-3 text-[10px]" style={{ color: "var(--negative)" }}>{autopilot?.executor.entry_blocked_reason?.replaceAll("_", " ") ?? "Provider unavailable"}. No simulated fill was created.</p>}
-          <p className="mt-3 text-[9px]" style={{ color: "var(--text-mute)" }}>Paper simulation only · no broker-order capability.</p>
+          <p className="mt-3 text-[9px]" style={{ color: "var(--text-mute)" }}>Paper simulation only · no broker-order capability. Captured fills/mids, not estimated premiums.</p>
         </Card>
       </div>
 

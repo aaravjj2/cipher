@@ -225,6 +225,10 @@
   font-weight: 700;
 }
 .cipher-skip-link:focus { transform: translateY(0); }
+
+[role="dialog"] {
+  overscroll-behavior: contain;
+}
 /* Horizontal toolbar strips scroll but must not show a scrollbar track: the header row is
    ~44px tall and a visible track eats a meaningful share of it, while ToolbarSlot's edge-fade
    already signals that there is more to reach. Scrolling itself is untouched -- wheel,
@@ -265,7 +269,18 @@
   animation: cipher-skeleton-pulse 1.6s ease-in-out infinite;
 }
 @media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    transition-delay: 0s !important;
+    scroll-behavior: auto !important;
+  }
   .cipher-skeleton {
     animation: none;
+  }
+  .animate-spin,
+  .animate-pulse {
+    animation: none !important;
   }
 }

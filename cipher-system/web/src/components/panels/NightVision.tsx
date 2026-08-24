@@ -15,12 +15,15 @@ import {
   type RealNightVisionResponse,
   type RealXrayRung,
   createChartSave,
+  type RealMatrixRow,
 } from "@/lib/api";
 import { addChartSave } from "@/lib/chartSaves";
 import { isSupabaseConfigured } from "@/lib/supabase";
+import { knownStrikeNet } from "@/lib/nightVisionKnownNet";
 import { buildNightVisionGeometry, isRegularSessionBar, nearestBarIndex, visibleTail } from "@/lib/nightVisionGeometry";
 import type { ExposureMetric } from "@/types/cipher";
 import { GuestShowcase } from "@/components/panels/GuestShowcase";
+import { feedLabel } from "@/lib/feedLabel";
 
 /**
  * Night Vision panel — candlestick chart with 5 overlay toggles, backed by the real
@@ -135,7 +138,7 @@ function PillGroup<T extends string>({
 }) {
   return (
     <div
-      className="flex flex-row items-center gap-[2px] rounded-[8px] p-[2px] shrink-0"
+      className="flex flex-row items-center gap-[2px] border border-[var(--line)] p-[2px] shrink-0"
       style={{ background: "var(--panel-2)", border: "1px solid var(--line)" }}
     >
       {options.map((opt) => {
@@ -146,7 +149,7 @@ function PillGroup<T extends string>({
             type="button"
             onClick={() => onChange(opt.value)}
             aria-pressed={active}
-            className="rounded-[6px] px-[10px] py-[5px] text-[12px] font-semibold whitespace-nowrap transition-colors duration-150"
+            className="rounded-[4px] px-[10px] py-[5px] text-[12px] font-semibold whitespace-nowrap transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]"
             style={{
               background: active ? "var(--nav-active)" : "transparent",
               color: active ? "var(--text)" : "var(--text-dim)",
@@ -167,7 +170,7 @@ function ToggleButton({ active, onClick, children }: { active: boolean; onClick:
       type="button"
       onClick={onClick}
       aria-pressed={active}
-      className="rounded-[8px] px-3 py-[7px] text-[12px] font-semibold whitespace-nowrap transition-colors duration-150 shrink-0"
+      className="rounded-[4px] px-3 py-[7px] text-[12px] font-semibold whitespace-nowrap transition-colors duration-150 shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]"
       style={{
         background: active ? "var(--nav-active)" : "var(--panel-2)",
         border: `1px solid ${active ? "var(--nav-active)" : "var(--line)"}`,
@@ -185,7 +188,7 @@ function TextButton({ onClick, children }: { onClick?: () => void; children: Rea
     <button
       type="button"
       onClick={onClick}
-      className="rounded-[8px] px-3 py-[7px] text-[12px] font-semibold whitespace-nowrap shrink-0"
+      className="rounded-[4px] px-3 py-[7px] text-[12px] font-semibold whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]"
       style={{
         background: "var(--panel-2)",
         border: "1px solid var(--line)",
@@ -233,7 +236,7 @@ function EvidenceDrawer({
     <aside
       role="dialog"
       aria-label="Night Vision evidence details"
-      className="rounded-[10px] p-3"
+      className="overscroll-contain border border-[var(--line)] bg-[var(--panel-2)] p-3"
       style={{ border: "1px solid var(--line)", background: "var(--panel-2)" }}
     >
       <div className="flex items-center justify-between gap-3">
@@ -243,37 +246,37 @@ function EvidenceDrawer({
             {snapshot.ticker} · {snapshot.snapshot_id.slice(0, 16)}
           </p>
         </div>
-        <button type="button" onClick={onClose} className="rounded-md border px-2 py-1 text-[10px]" style={{ borderColor: "var(--line)", color: "var(--text-dim)" }}>
+        <button type="button" onClick={onClose} className="border px-2 py-1 text-[10px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]" style={{ borderColor: "var(--line)", color: "var(--text-dim)" }}>
           Close
         </button>
       </div>
       <div className="mt-3 grid gap-2 sm:grid-cols-3">
         {timeline.map((item) => (
-          <div key={item.label} className="rounded-md border px-2 py-2" style={{ borderColor: "var(--line)", background: "var(--panel)" }}>
+          <div key={item.label} className="border px-2 py-2" style={{ borderColor: "var(--line)", background: "var(--panel)" }}>
             <span className="block text-[9px] uppercase" style={{ color: "var(--text-mute)" }}>{item.label}</span>
             <span className="mt-1 block break-words text-[10px] font-mono" style={{ color: "var(--text-dim)" }}>{item.value}</span>
           </div>
         ))}
       </div>
       <div className="mt-2 grid gap-2 sm:grid-cols-3">
-        <div className="rounded-md border px-2 py-2" style={{ borderColor: "var(--line)", background: "var(--panel)" }}>
+        <div className="border px-2 py-2" style={{ borderColor: "var(--line)", background: "var(--panel)" }}>
           <span className="block text-[9px] uppercase" style={{ color: "var(--text-mute)" }}>Freshness</span>
           <strong className="text-[11px]" style={{ color: freshnessColor }}>{snapshot.freshness.status}</strong>
           <span className="ml-1 text-[10px]" style={{ color: "var(--text-mute)" }}>{snapshot.freshness.age_seconds == null ? "age unknown" : `${Math.round(snapshot.freshness.age_seconds)}s old`}</span>
         </div>
-        <div className="rounded-md border px-2 py-2" style={{ borderColor: "var(--line)", background: "var(--panel)" }}>
+        <div className="border px-2 py-2" style={{ borderColor: "var(--line)", background: "var(--panel)" }}>
           <span className="block text-[9px] uppercase" style={{ color: "var(--text-mute)" }}>Coverage</span>
           <strong className="text-[11px]">{snapshot.coverage.status}</strong>
           <span className="ml-1 text-[10px]" style={{ color: "var(--text-mute)" }}>{snapshot.coverage.calculated_cells ?? "?"}/{snapshot.coverage.listed_cells ?? "?"} cells</span>
         </div>
-        <div className="rounded-md border px-2 py-2" style={{ borderColor: "var(--line)", background: "var(--panel)" }}>
+        <div className="border px-2 py-2" style={{ borderColor: "var(--line)", background: "var(--panel)" }}>
           <span className="block text-[9px] uppercase" style={{ color: "var(--text-mute)" }}>Source</span>
-          <strong className="text-[11px]">{snapshot.provider} · {snapshot.feed}</strong>
+          <strong className="text-[11px]">{snapshot.provider} · {feedLabel(snapshot.feed)}</strong>
           <span className="block text-[10px]" style={{ color: "var(--text-mute)" }}>{dataStatus === "stale_cache" ? "cached replay" : "provider response"}</span>
         </div>
       </div>
       {(providerError || cacheNote) && (
-        <div className="mt-2 rounded-md border px-2 py-2 text-[10px]" style={{ borderColor: "color-mix(in srgb, var(--gold) 40%, var(--line))", color: "var(--gold)" }}>
+        <div className="mt-2 border px-2 py-2 text-[10px]" style={{ borderColor: "color-mix(in srgb, var(--gold) 40%, var(--line))", color: "var(--gold)" }}>
           {providerError && <p>Provider note: {providerError}</p>}
           {cacheNote && <p className={providerError ? "mt-1" : undefined}>{cacheNote}</p>}
         </div>
@@ -304,6 +307,7 @@ function EvidenceDrawer({
  */
 function XRayLadder({
   rungs,
+  rows,
   spot,
   metric,
   onMetricChange,
@@ -313,6 +317,7 @@ function XRayLadder({
   onSelectStrike,
 }: {
   rungs: RealXrayRung[];
+  rows: RealMatrixRow[] | undefined;
   spot: number;
   metric: ExposureMetric;
   onMetricChange: (m: ExposureMetric) => void;
@@ -321,15 +326,15 @@ function XRayLadder({
   selectedStrike: number | null;
   onSelectStrike: (strike: number | null) => void;
 }) {
-  const valueOf = (r: RealXrayRung) => (metric === "gex" ? r.net_gex : r.net_vex);
-  const peak = Math.max(...rungs.map((r) => Math.abs(valueOf(r))), 1);
+  const valueOf = (r: RealXrayRung) => knownStrikeNet(rows, r.strike, metric);
+  const peak = Math.max(...rungs.map((r) => Math.abs(valueOf(r) ?? 0)), 1);
   // Descending strikes so the ladder reads like a price axis (high at top).
   const ordered = [...rungs].sort((a, b) => b.strike - a.strike);
   const spotIndex = ordered.findIndex((r) => r.strike <= spot);
 
   return (
     <aside
-      className="flex flex-col w-full lg:w-[250px] shrink-0 rounded-[10px] overflow-hidden"
+      className="flex flex-col w-full lg:w-[250px] shrink-0 overflow-hidden border border-[var(--line)]"
       style={{ border: "1px solid var(--line)", background: "var(--panel)" }}
     >
       <div className="flex flex-row items-center justify-between gap-2 px-3 py-2" style={{ borderBottom: "1px solid var(--line)" }}>
@@ -356,11 +361,14 @@ function XRayLadder({
       <div className="flex flex-col overflow-y-auto" style={{ maxHeight: "560px" }}>
         {ordered.map((r, i) => {
           const v = valueOf(r);
-          const intensity = Math.min(Math.abs(v) / peak, 1);
-          const positive = v >= 0;
-          const bg = `color-mix(in srgb, ${positive ? "var(--accent)" : "var(--neg)"} ${Math.round(
-            8 + intensity * 62
-          )}%, transparent)`;
+          const missing = v == null;
+          const intensity = missing ? 0 : Math.min(Math.abs(v) / peak, 1);
+          const positive = !missing && v >= 0;
+          const bg = missing
+            ? "transparent"
+            : `color-mix(in srgb, ${positive ? "var(--accent)" : "var(--neg)"} ${Math.round(
+                8 + intensity * 62
+              )}%, transparent)`;
           return (
             <div key={r.strike}>
               {i === spotIndex && spotIndex > 0 && (
@@ -375,6 +383,7 @@ function XRayLadder({
                 type="button"
                 onClick={() => onSelectStrike(selectedStrike === r.strike ? null : r.strike)}
                 aria-pressed={selectedStrike === r.strike}
+                aria-label={missing ? `Strike ${r.strike} unknown` : `Strike ${r.strike}`}
                 className="flex flex-row items-center justify-between gap-2 px-3 py-[5px] text-[11.5px] w-full text-left"
                 style={{
                   background: bg,
@@ -384,8 +393,8 @@ function XRayLadder({
                 }}
               >
                 <span style={{ color: "var(--text)", fontWeight: 700 }}>{r.strike}</span>
-                <span style={{ color: positive ? "var(--text)" : "var(--neg)", fontWeight: 700 }}>
-                  {formatDollar(v)}
+                <span style={{ color: missing ? "var(--text-mute)" : positive ? "var(--text)" : "var(--neg)", fontWeight: 700 }}>
+                  {v == null ? "unknown" : formatDollar(v)}
                 </span>
               </button>
             </div>
@@ -696,8 +705,10 @@ export function NightVision({
 
   const regime = useMemo(() => {
     const levels = nightVision?.levels ?? [];
-    const known = levels.filter((level) => Number.isFinite(level.net_gex));
-    const net = known.length ? known.reduce((sum, level) => sum + level.net_gex, 0) : null;
+    const known = levels
+      .map((level) => knownStrikeNet(nightVision?.rows, level.price, "gex"))
+      .filter((net): net is number => net != null);
+    const net = known.length ? known.reduce((sum, value) => sum + value, 0) : null;
     return {
       label: net == null ? "Exposure unavailable" : net >= 0 ? "Positive gamma / pin risk" : "Negative gamma / expansion risk",
       net,
@@ -744,12 +755,18 @@ export function NightVision({
 
   const LABEL_H = 18;
   const bandLevels = useMemo(() => {
-    const all = nightVision?.levels ?? [];
+    const all = (nightVision?.levels ?? []).filter(
+      (lvl) => knownStrikeNet(nightVision?.rows, lvl.price, "gex") != null,
+    );
     if (!all.length) return [];
-    const peakAbs = Math.max(...all.map((l) => Math.abs(l.abs_gex)), 1);
+    const peakAbs = Math.max(
+      ...all.map((l) => Math.abs(knownStrikeNet(nightVision?.rows, l.price, "gex") ?? 0)),
+      1,
+    );
     const scored = all
       .map((lvl) => {
-        const intensity = Math.min(Math.abs(lvl.abs_gex) / peakAbs, 1);
+        const knownAbs = Math.abs(knownStrikeNet(nightVision?.rows, lvl.price, "gex") ?? 0);
+        const intensity = Math.min(knownAbs / peakAbs, 1);
         const isPeak = nightVision?.peak?.price === lvl.price;
         return {
           lvl,
@@ -782,7 +799,8 @@ export function NightVision({
     band: { lvl: RealLevel; y: number; intensity: number; isPeak: boolean; color: string; height: number; showLabel: boolean };
   }) {
     const { lvl, y, intensity, color, height, showLabel } = band;
-    const label = `${formatDollar(lvl.abs_gex)} · ${lvl.price}`;
+    const known = knownStrikeNet(nightVision?.rows, lvl.price, "gex");
+    const label = known == null ? `unknown · ${lvl.price}` : `${formatDollar(known)} · ${lvl.price}`;
     return (
       <g>
         <rect
@@ -840,14 +858,18 @@ export function NightVision({
       <TextButton
         onClick={() => {
           if (!nightVision) return;
-          const ranked = [...nightVision.levels].sort((a, b) => b.abs_gex - a.abs_gex).slice(0, 4);
-          const maxAbs = ranked[0]?.abs_gex || 1;
+          const ranked = [...nightVision.levels]
+            .map((l) => ({ l, abs: Math.abs(knownStrikeNet(nightVision.rows, l.price, "gex") ?? 0), known: knownStrikeNet(nightVision.rows, l.price, "gex") != null }))
+            .filter((item) => item.known)
+            .sort((a, b) => b.abs - a.abs)
+            .slice(0, 4);
+          const maxAbs = ranked[0]?.abs || 1;
           const save = {
             ticker,
             price: spot,
             view: expirationMode === "1exp" ? "1 Exp" : EXPIRATION_OPTIONS.find((o) => o.value === expirationMode)?.label || "1 Exp",
             imageUrl: "",
-            topLevels: ranked.map((l) => ({ level: l.price, score: Math.round((l.abs_gex / maxAbs) * 100) })),
+            topLevels: ranked.map((item) => ({ level: item.l.price, score: Math.round((item.abs / maxAbs) * 100) })),
             dateAdded: new Date().toLocaleDateString("en-US", { month: "numeric", day: "numeric", year: "2-digit" }),
           };
           if (isSupabaseConfigured()) {
@@ -871,7 +893,7 @@ export function NightVision({
   return (
     <section
       data-guest-panel={guestMode ? "Night Vision" : undefined}
-      data-guest-source={guestMode ? (status === "ready" ? "live" : status) : undefined}
+      data-guest-source={guestMode ? (status === "ready" ? "live" : status === "error" ? "demo" : status) : undefined}
       className="night-vision flex flex-col gap-3"
       style={{ fontFamily: "var(--font-mono)", color: "var(--text)" }}
     >
@@ -888,7 +910,9 @@ export function NightVision({
         <PillGroup options={EXPIRATION_OPTIONS} value={expirationMode} onChange={setExpirationMode} />
 
         <div
-          className="flex flex-row items-center gap-[2px] rounded-[8px] p-[2px] shrink-0"
+          role="group"
+          aria-label="Chart timeframe"
+          className="flex flex-row items-center gap-[2px] border border-[var(--line)] p-[2px] shrink-0"
           style={{ background: "var(--panel-2)", border: "1px solid var(--line)" }}
         >
           {PRIMARY_TIMEFRAMES.map((tf) => (
@@ -897,7 +921,8 @@ export function NightVision({
               type="button"
               onClick={() => setTimeframe(tf)}
               aria-pressed={timeframe === tf}
-              className="rounded-[6px] px-[10px] py-[5px] text-[12px] font-semibold whitespace-nowrap transition-colors duration-150"
+              aria-label={`Chart timeframe ${tf}`}
+              className="rounded-[4px] px-[10px] py-[5px] text-[12px] font-semibold whitespace-nowrap transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]"
               style={{
                 background: timeframe === tf ? "var(--nav-active)" : "transparent",
                 color: timeframe === tf ? "var(--text)" : "var(--text-dim)",
@@ -911,7 +936,9 @@ export function NightVision({
               type="button"
               onClick={() => setMoreOpen((v) => !v)}
               aria-expanded={moreOpen}
-              className="rounded-[6px] px-[10px] py-[5px] text-[12px] font-semibold whitespace-nowrap transition-colors duration-150"
+              aria-haspopup="listbox"
+              aria-label="More timeframes"
+              className="rounded-[4px] px-[10px] py-[5px] text-[12px] font-semibold whitespace-nowrap transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]"
               style={{
                 background: MORE_TIMEFRAMES.includes(timeframe) ? "var(--nav-active)" : "transparent",
                 color: MORE_TIMEFRAMES.includes(timeframe) ? "var(--text)" : "var(--text-dim)",
@@ -921,18 +948,23 @@ export function NightVision({
             </button>
             {moreOpen && (
               <div
-                className="absolute left-0 top-[calc(100%+4px)] z-20 flex flex-col gap-[2px] rounded-[8px] p-1"
+                className="absolute left-0 top-[calc(100%+4px)] z-20 flex flex-col gap-[2px] border border-[var(--line)] p-1"
+                role="listbox"
+                aria-label="Additional timeframes"
                 style={{ background: "var(--panel-2)", border: "1px solid var(--line)" }}
               >
                 {MORE_TIMEFRAMES.map((tf) => (
                   <button
                     key={tf}
                     type="button"
+                    role="option"
+                    aria-selected={timeframe === tf}
+                    aria-label={`Chart timeframe ${tf}`}
                     onClick={() => {
                       setTimeframe(tf);
                       setMoreOpen(false);
                     }}
-                    className="rounded-[5px] px-2.5 py-1 text-[12px] font-semibold text-left whitespace-nowrap"
+                    className="rounded-[4px] px-2.5 py-1 text-left text-[12px] font-semibold whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]"
                     style={{
                       color: timeframe === tf ? "var(--text)" : "var(--text-dim)",
                       background: timeframe === tf ? "var(--nav-active)" : "transparent",
@@ -946,12 +978,12 @@ export function NightVision({
           </div>
         </div>
 
-        <div role="group" className="flex items-center gap-1 rounded-lg border p-1" style={{ borderColor: "var(--line)", background: "var(--panel-2)" }} aria-label="Visible chart range">
-          {RANGE_OPTIONS.map((count) => <button key={count} type="button" aria-pressed={visibleBarCount === count} onClick={() => setVisibleBarCount(count)} className="rounded-md px-2 py-1 text-[10px] font-bold" style={{ background: visibleBarCount === count ? "var(--nav-active)" : "transparent", color: visibleBarCount === count ? "var(--text)" : "var(--text-mute)" }}>{count} bars</button>)}
+        <div role="group" className="flex items-center gap-1 border p-1" style={{ borderColor: "var(--line)", background: "var(--panel-2)" }} aria-label="Visible chart range">
+          {RANGE_OPTIONS.map((count) => <button key={count} type="button" aria-pressed={visibleBarCount === count} onClick={() => setVisibleBarCount(count)} className="px-2 py-1 text-[10px] font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]" style={{ background: visibleBarCount === count ? "var(--nav-active)" : "transparent", color: visibleBarCount === count ? "var(--text)" : "var(--text-mute)" }}>{count} bars</button>)}
         </div>
 
-        {intraday && <div role="group" className="flex items-center gap-1 rounded-lg border p-1" style={{ borderColor: "var(--line)", background: "var(--panel-2)" }} aria-label="Chart session">
-          {(["rth", "extended"] as const).map((value) => <button key={value} type="button" aria-pressed={sessionView === value} onClick={() => setSessionView(value)} className="rounded-md px-2 py-1 text-[10px] font-bold uppercase" style={{ background: sessionView === value ? "var(--nav-active)" : "transparent", color: sessionView === value ? "var(--text)" : "var(--text-mute)" }}>{value === "rth" ? "RTH" : "All sessions"}</button>)}
+        {intraday && <div role="group" className="flex items-center gap-1 border p-1" style={{ borderColor: "var(--line)", background: "var(--panel-2)" }} aria-label="Chart session">
+          {(["rth", "extended"] as const).map((value) => <button key={value} type="button" aria-pressed={sessionView === value} onClick={() => setSessionView(value)} className="px-2 py-1 text-[10px] font-bold uppercase focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]" style={{ background: sessionView === value ? "var(--nav-active)" : "transparent", color: sessionView === value ? "var(--text)" : "var(--text-mute)" }}>{value === "rth" ? "RTH" : "All sessions"}</button>)}
         </div>}
 
         <span className="text-[11px]" style={{ color: "var(--text-mute)" }}>
@@ -977,7 +1009,7 @@ export function NightVision({
           </span>
         )}
         {nightVision?.evidence_snapshot && (
-          <button type="button" onClick={() => setEvidenceOpen((open) => !open)} className="rounded-md border px-2 py-1 text-[10px] font-mono" style={{ borderColor: nightVision.evidence_snapshot.freshness.status === "current" ? "var(--line)" : "var(--gold)", color: nightVision.evidence_snapshot.freshness.status === "current" ? "var(--text-mute)" : "var(--gold)" }} aria-expanded={evidenceOpen}>
+          <button type="button" onClick={() => setEvidenceOpen((open) => !open)} className="border px-2 py-1 text-[10px] font-mono focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]" style={{ borderColor: nightVision.evidence_snapshot.freshness.status === "current" ? "var(--line)" : "var(--gold)", color: nightVision.evidence_snapshot.freshness.status === "current" ? "var(--text-mute)" : "var(--gold)" }} aria-expanded={evidenceOpen}>
             Evidence {nightVision.evidence_snapshot.snapshot_id.slice(0, 12)} · {nightVision.evidence_snapshot.freshness.status}
           </button>
         )}
@@ -990,11 +1022,11 @@ export function NightVision({
             type="button"
             aria-label="Refresh chart"
             onClick={() => load(undefined, true)}
-            className="grid place-items-center w-[26px] h-[26px] rounded-[7px] shrink-0"
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-[4px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]"
             style={{ background: "var(--panel-2)", border: "1px solid var(--line)", color: "var(--text-mute)" }}
           >
             <span className={isRefreshing ? "animate-spin" : undefined} style={{ display: "flex" }}>
-              <RefreshIcon width={13} height={13} />
+              <RefreshIcon width={13} height={13} aria-hidden="true" />
             </span>
           </button>
           <button
@@ -1002,7 +1034,7 @@ export function NightVision({
             onClick={() => setAutoRefresh((v) => !v)}
             aria-pressed={autoRefresh}
             disabled={Boolean(replayId)}
-            className="rounded-[7px] px-2.5 py-1 text-[11px] font-semibold whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-40"
+            className="rounded-[4px] px-2.5 py-1 text-[11px] font-semibold whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]"
             style={{
               background: autoRefresh ? "var(--nav-active)" : "var(--panel-2)",
               border: "1px solid var(--line)",
@@ -1034,7 +1066,7 @@ export function NightVision({
       )}
 
       {nightVision?.replay && (
-        <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border px-3 py-2" style={{ borderColor: "var(--gold)", background: "color-mix(in srgb, var(--gold) 8%, var(--panel))" }}>
+        <div role="status" className="flex flex-wrap items-center justify-between gap-3 border px-3 py-2" style={{ borderColor: "var(--gold)", background: "color-mix(in srgb, var(--gold) 8%, var(--panel))" }}>
           <div>
             <strong className="text-[11px]" style={{ color: "var(--gold)" }}>Frozen scanner replay</strong>
             <p className="mt-0.5 text-[9px]" style={{ color: "var(--text-dim)" }}>
@@ -1044,38 +1076,51 @@ export function NightVision({
               Snapshot identity verified · {nightVision.replay.integrity?.matrix_checksum === "verified" ? "full matrix checksum verified" : "legacy artifact without a stored full-matrix checksum"}
             </p>
           </div>
-          <button type="button" onClick={() => { sessionStorage.removeItem("cipher:night-vision-replay"); setReplayId(null); setAutoRefresh(false); }} className="rounded-md border px-2.5 py-1 text-[10px]" style={{ borderColor: "var(--line)", color: "var(--text)" }}>Return to live</button>
+          <button type="button" onClick={() => { sessionStorage.removeItem("cipher:night-vision-replay"); setReplayId(null); setAutoRefresh(false); }} className="border px-2.5 py-1 text-[10px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]" style={{ borderColor: "var(--line)", color: "var(--text)" }}>Return to live</button>
         </div>
       )}
 
       {status === "ready" && <div role="region" className="grid grid-cols-2 gap-2 lg:grid-cols-4" aria-label="Night Vision regime summary">
-        <div className="rounded-lg border px-3 py-2" style={{ borderColor: "var(--line)", background: "var(--panel)" }}><span className="block text-[9px] uppercase" style={{ color: "var(--text-mute)" }}>Regime</span><strong className="text-[11px]">{regime.label}</strong></div>
-        <div className="rounded-lg border px-3 py-2" style={{ borderColor: "var(--line)", background: "var(--panel)" }}><span className="block text-[9px] uppercase" style={{ color: "var(--text-mute)" }}>Gamma flip</span><strong className="text-[11px]">{regime.flip?.toFixed(2) ?? "unavailable"}</strong></div>
-        <div className="rounded-lg border px-3 py-2" style={{ borderColor: "var(--line)", background: "var(--panel)" }}><span className="block text-[9px] uppercase" style={{ color: "var(--text-mute)" }}>Top pull</span><strong className="text-[11px]">{regime.pull?.toFixed(2) ?? "unavailable"}</strong></div>
-        <div className="rounded-lg border px-3 py-2" style={{ borderColor: "var(--line)", background: "var(--panel)" }}><span className="block text-[9px] uppercase" style={{ color: "var(--text-mute)" }}>PM range / coverage</span><strong className="text-[11px]">{regime.pmRange == null ? "PM unknown" : `${regime.pmRange.toFixed(2)}%`} · {provenance?.coveragePct == null ? "coverage unknown" : `${provenance.coveragePct}% cells`}</strong></div>
+        <div className="border px-3 py-2" style={{ borderColor: "var(--line)", background: "var(--panel)" }}><span className="block text-[9px] uppercase" style={{ color: "var(--text-mute)" }}>Regime</span><strong className="text-[11px]">{regime.label}</strong></div>
+        <div className="border px-3 py-2" style={{ borderColor: "var(--line)", background: "var(--panel)" }}><span className="block text-[9px] uppercase" style={{ color: "var(--text-mute)" }}>Gamma flip</span><strong className="text-[11px]">{regime.flip?.toFixed(2) ?? "unavailable"}</strong></div>
+        <div className="border px-3 py-2" style={{ borderColor: "var(--line)", background: "var(--panel)" }}><span className="block text-[9px] uppercase" style={{ color: "var(--text-mute)" }}>Top pull</span><strong className="text-[11px]">{regime.pull?.toFixed(2) ?? "unavailable"}</strong></div>
+        <div className="border px-3 py-2" style={{ borderColor: "var(--line)", background: "var(--panel)" }}><span className="block text-[9px] uppercase" style={{ color: "var(--text-mute)" }}>PM range / coverage</span><strong className="text-[11px]">{regime.pmRange == null ? "PM unknown" : `${regime.pmRange.toFixed(2)}%`} · {provenance?.coveragePct == null ? "coverage unknown" : `${provenance.coveragePct}% cells`}</strong></div>
       </div>}
       {status === "ready" && <p className="text-[9px] leading-relaxed" style={{ color: "var(--text-mute)" }}>Filled bands = public-OI GEX heuristic, not verified dealer positioning · gray dashes = traded session levels · gold dotted path = short-horizon hedge-surface heuristic, not a forecast · missing gamma/OI stays unavailable.</p>}
+      {status === "ready" && guestMode && <p className="text-[9px] font-bold uppercase" style={{ color: "var(--gold)", letterSpacing: "0.08em" }}>Live chart · not demo fallback</p>}
 
       {status === "loading" && (
         // The night-vision payload measured 742 KB and 4.2 seconds warm, so this state is
         // held long enough that a centred line of text reads as a stall. Holdings and
         // Standing deliberately keep their text instead: at 3 ms and 144 ms a placeholder
         // would only flash, which is worse than the sentence it replaced.
-        <SkeletonChart label={`Loading live ${ticker} chart and gamma levels…`} />
+        <SkeletonChart label={`Loading ${ticker} chart and gamma levels…`} />
       )}
 
-      {status === "error" && guestMode && <GuestShowcase panel="Night Vision" ticker={ticker} />}
+      {status === "error" && guestMode && (
+        <>
+          <GuestShowcase panel="Night Vision" ticker={ticker} titleTag="h2" />
+          <button
+            type="button"
+            onClick={() => load()}
+            className="self-start rounded-[4px] px-3 py-1.5 text-[12px] font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]"
+            style={{ border: "1px solid var(--line)", color: "var(--text-dim)" }}
+          >
+            Retry
+          </button>
+        </>
+      )}
 
       {status === "error" && !guestMode && (
         <div
-          className="flex flex-col items-center gap-2 rounded-[10px] py-16 text-[13px] text-center px-4"
+          className="flex flex-col items-center gap-2 border py-16 text-center text-[13px] px-4"
           style={{ border: "1px solid var(--line)", color: "var(--neg)" }}
         >
           <span>{errorMessage}</span>
           <button
             type="button"
             onClick={() => load()}
-            className="rounded-[6px] px-3 py-1.5 text-[12px] font-semibold"
+            className="rounded-[4px] px-3 py-1.5 text-[12px] font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]"
             style={{ border: "1px solid var(--line)", color: "var(--text-dim)" }}
           >
             Retry
@@ -1086,7 +1131,7 @@ export function NightVision({
       {status === "ready" && (
         <div className="flex flex-col lg:flex-row gap-3 items-stretch">
           <div
-            className="relative flex-1 min-w-0 rounded-[10px] overflow-hidden"
+            className="relative min-w-0 flex-1 overflow-hidden"
             style={{ border: "1px solid var(--line)", background: "var(--panel)" }}
           >
             <svg
@@ -1173,7 +1218,7 @@ export function NightVision({
                 })}
               </g>
 
-              {/* Candlesticks — purple up / red down, NOT green, per this app's convention */}
+              {/* Candlesticks — amber up / red down via --accent / --neg */}
               {bars.map((bar, i) => {
                 const up = bar.close >= bar.open;
                 const color = up ? "var(--accent)" : "var(--neg)";
@@ -1385,7 +1430,7 @@ export function NightVision({
               )}
             </svg>
 
-            {hover && <div className="pointer-events-none absolute left-3 top-3 rounded-lg border px-3 py-2 text-[10px] shadow-lg" style={{ borderColor: "var(--line)", background: "color-mix(in srgb, var(--panel) 94%, transparent)", color: "var(--text-dim)" }}>
+            {hover && <div className="pointer-events-none absolute left-3 top-3 border px-3 py-2 text-[10px]" style={{ borderColor: "var(--line)", background: "color-mix(in srgb, var(--panel) 94%, transparent)", color: "var(--text-dim)" }}>
               <div className="mb-1 font-bold" style={{ color: "var(--text)" }}>{barDateLabel(hover.bar.time, intraday)}</div>
               <div className="grid grid-cols-5 gap-2"><span>O {hover.bar.open.toFixed(2)}</span><span>H {hover.bar.high.toFixed(2)}</span><span>L {hover.bar.low.toFixed(2)}</span><span>C {hover.bar.close.toFixed(2)}</span><span>V {Math.round(hover.bar.volume).toLocaleString()}</span></div>
             </div>}
@@ -1425,6 +1470,7 @@ export function NightVision({
           {xrayOn && (nightVision?.xray?.length ?? 0) > 0 && (
             <XRayLadder
               rungs={nightVision!.xray!}
+              rows={nightVision!.rows}
               spot={spot}
               metric={gexMetric}
               onMetricChange={setGexMetric}
@@ -1434,12 +1480,12 @@ export function NightVision({
               onSelectStrike={setSelectedStrike}
             />
           )}
-          {xrayOn && !(nightVision?.xray?.length ?? 0) && <aside className="flex w-full items-center justify-center rounded-[10px] border p-6 text-[11px] lg:w-[250px]" style={{ borderColor: "var(--line)", color: "var(--text-mute)" }}>Strike X-Ray unavailable: no calculable exposure rungs.</aside>}
+          {xrayOn && !(nightVision?.xray?.length ?? 0) && <aside className="flex w-full items-center justify-center border p-6 text-[11px] lg:w-[250px]" style={{ borderColor: "var(--line)", color: "var(--text-mute)" }}>Strike X-Ray unavailable: no calculable exposure rungs.</aside>}
 
           {/* SP overlay: docked right-side single-column heatmap panel (Strike-Matrix style), real GEX/VEX */}
           {spOn && (
             <aside
-              className="flex flex-col w-full lg:w-[240px] shrink-0 rounded-[10px] overflow-hidden"
+              className="flex w-full shrink-0 flex-col overflow-hidden lg:w-[240px]"
               style={{ border: "1px solid var(--line)", background: "var(--panel)" }}
             >
               <div className="flex flex-row items-center justify-between gap-2 px-3 py-2" style={{ borderBottom: "1px solid var(--line)" }}>

@@ -19,7 +19,7 @@ export function formatDollar(value: number): string {
 
 /**
  * Heatmap color scale (the single most important visual detail per spec).
- * Positive values interpolate toward `--accent` (purple), negative toward `--neg` (red),
+ * Positive values interpolate toward `--accent` (amber), negative toward `--neg` (red),
  * both mixed against `--panel` so near-zero cells stay a barely-tinted dark background.
  * The mix percentage uses a sub-linear (sqrt-ish) easing curve on the magnitude ratio so
  * mid-size values are already clearly visible instead of the whole scale being dominated
@@ -41,7 +41,7 @@ export function getCellColor(value: number, maxAbs: number): string {
  * cross-ticker or cross-session absolute scale. That distinction prevents viewers
  * from comparing color saturation across separate panels as if it were normalized.
  */
-export function ExposureLegend({ className = "" }: { className?: string }) {
+export function ExposureLegend({ className = "", oiAsOf }: { className?: string; oiAsOf?: string | null }) {
   return (
     <div
       role="group"
@@ -52,7 +52,7 @@ export function ExposureLegend({ className = "" }: { className?: string }) {
       <span className="font-semibold" style={{ color: "var(--text-dim)" }}>Exposure scale</span>
       <span className="inline-flex items-center gap-1">
         <span aria-hidden="true" className="h-[8px] w-[8px] rounded-full" style={{ background: "var(--accent)" }} />
-        Positive exposure · purple
+        Positive exposure · amber
       </span>
       <span className="inline-flex items-center gap-1">
         <span aria-hidden="true" className="h-[8px] w-[8px] rounded-full" style={{ background: "var(--neg)" }} />
@@ -63,6 +63,7 @@ export function ExposureLegend({ className = "" }: { className?: string }) {
         Largest |exposure|
       </span>
       <span>Intensity is relative within each heatmap</span>
+      <span className="basis-full">GEX is a public-OI heuristic, not verified dealer positioning. OI as of {oiAsOf ?? "unknown"}.</span>
     </div>
   );
 }

@@ -104,7 +104,10 @@ function PaletteBody({
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-start justify-center px-4 pt-[12vh]"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Command palette"
+      className="fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto overscroll-contain px-4 pt-[12vh]"
       style={{ background: "rgba(0,0,0,0.6)" }}
       onMouseDown={(e) => {
         // Backdrop only — a mousedown that started inside the panel must not close it.
@@ -138,10 +141,10 @@ function PaletteBody({
           value={query}
           onValueChange={setQuery}
           placeholder="Jump to a panel or ticker…"
-          className="w-full bg-transparent px-4 py-3 text-[13px] outline-none"
+          className="w-full bg-transparent px-4 py-3 text-[13px] outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--gold)]"
           style={{ borderBottom: "1px solid var(--line)", color: "var(--text)" }}
         />
-        <Command.List className="max-h-[52vh] overflow-y-auto p-2">
+        <Command.List className="max-h-[52vh] overflow-x-hidden overflow-y-auto overscroll-contain p-2">
           {panelMatches.length === 0 && tickerMatches.length === 0 && (
             <div className="px-3 py-6 text-center text-[12px]" style={{ color: "var(--text-mute)" }}>
               Nothing matches “{query}”.
@@ -158,7 +161,7 @@ function PaletteBody({
                     onPanelSelect(row.label);
                     onOpenChange(false);
                   }}
-                  className="flex cursor-pointer flex-row items-center justify-between rounded-[7px] px-3 py-[7px] text-[12.5px]"
+                  className="flex cursor-pointer flex-row items-center justify-between rounded-[7px] px-3 py-[7px] text-[12.5px] data-[selected=true]:bg-[var(--nav-active)] data-[selected=true]:text-[var(--text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]"
                   style={{ color: "var(--text-dim)" }}
                 >
                   <span>{row.label}</span>
@@ -180,7 +183,7 @@ function PaletteBody({
                     onTickerSelect(symbol);
                     onOpenChange(false);
                   }}
-                  className="flex cursor-pointer flex-row items-center justify-between rounded-[7px] px-3 py-[7px] text-[12.5px]"
+                  className="flex cursor-pointer flex-row items-center justify-between rounded-[7px] px-3 py-[7px] text-[12.5px] data-[selected=true]:bg-[var(--nav-active)] data-[selected=true]:text-[var(--text)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]"
                   style={{ color: "var(--text-dim)" }}
                 >
                   <span style={{ letterSpacing: "0.06em" }}>{symbol}</span>

@@ -103,12 +103,12 @@ function PartitionRow({ name, part }: { name: string; part: BacktestPartition })
 function EvaluationCard({ label, value }: { label: string; value?: BacktestEvaluation }) {
   const stats = value?.stats || value?.base;
   if (!value || !stats) {
-    return <div className="rounded-[10px] p-3 text-[11px]" style={{ border: "1px solid var(--line)", color: "var(--text-mute)" }}>{label}: no eligible result</div>;
+    return <div className="p-3 text-[11px]" style={{ border: "1px solid var(--line)", color: "var(--text-mute)" }}>{label}: no eligible result</div>;
   }
   const interval = value.uncertainty?.interval;
   const serialInterval = value.serial_uncertainty?.interval;
   return (
-    <div className="flex min-w-0 flex-col gap-1 rounded-[10px] p-3" style={{ background: "var(--panel-2)", border: "1px solid var(--line)" }}>
+    <div className="flex min-w-0 flex-col gap-1 p-3" style={{ background: "var(--panel-2)", border: "1px solid var(--line)" }}>
       <span className="text-[10px] font-bold uppercase" style={{ color: "var(--text-mute)", letterSpacing: "0.1em" }}>{label}</span>
       <div className="flex flex-wrap gap-x-4 gap-y-1 text-[12px]" style={{ color: "var(--text-dim)" }}>
         <span><strong style={{ color: "var(--text)" }}>{stats.trades}</strong> trades</span>
@@ -187,7 +187,7 @@ export function Backtest({ ticker }: { ticker?: string }) {
       <div className="flex flex-row flex-wrap items-end gap-3">
         <div className="flex flex-col gap-1">
           <span className="text-[10px] font-bold uppercase" style={{ letterSpacing: "0.12em", color: "var(--text-mute)" }}>Mode</span>
-          <div className="flex flex-row items-center gap-[2px] rounded-[8px] p-[2px]"
+          <div className="flex flex-row items-center gap-[2px] rounded-[4px] p-[2px]"
                style={{ background: "var(--panel-2)", border: "1px solid var(--line)" }}>
             {(["filter", "standalone"] as const).map((m) => (
               <button
@@ -216,7 +216,7 @@ export function Backtest({ ticker }: { ticker?: string }) {
           <input
             value={symbols}
             onChange={(e) => setSymbols(e.target.value)}
-            className="rounded-[8px] px-[10px] py-[7px] text-[12px] outline-none w-full"
+            className="rounded-[4px] px-[10px] py-[7px] text-[12px] outline-none w-full"
             style={{ background: "var(--panel-2)", border: "1px solid var(--line)", color: "var(--text)", fontFamily: "var(--font-mono)" }}
           />
         </div>
@@ -226,14 +226,14 @@ export function Backtest({ ticker }: { ticker?: string }) {
           <div className="flex flex-row gap-1">
             {PRESETS.map((p) => (
               <button key={p.label} type="button" onClick={() => setSymbols(p.value)}
-                className="rounded-[8px] px-[10px] py-[7px] text-[11px] font-semibold"
+                className="rounded-[4px] px-[10px] py-[7px] text-[11px] font-semibold"
                 style={{ background: "var(--panel-2)", border: "1px solid var(--line)", color: "var(--text-dim)" }}>
                 {p.label}
               </button>
             ))}
             {ticker && (
               <button type="button" onClick={() => setSymbols(ticker)}
-                className="rounded-[8px] px-[10px] py-[7px] text-[11px] font-semibold"
+                className="rounded-[4px] px-[10px] py-[7px] text-[11px] font-semibold"
                 style={{ background: "var(--panel-2)", border: "1px solid var(--line)", color: "var(--text-dim)" }}>
                 {ticker} only
               </button>
@@ -244,7 +244,7 @@ export function Backtest({ ticker }: { ticker?: string }) {
         <div className="flex flex-col gap-1">
           <span className="text-[10px] font-bold uppercase" style={{ letterSpacing: "0.12em", color: "var(--text-mute)" }}>Detector</span>
           <select value={detector} onChange={(e) => setDetector(e.target.value)}
-            className="rounded-[8px] px-[10px] py-[7px] text-[12px] outline-none"
+            className="rounded-[4px] px-[10px] py-[7px] text-[12px] outline-none"
             style={{ background: "var(--panel-2)", border: "1px solid var(--line)", color: "var(--text)", fontFamily: "var(--font-mono)" }}>
             <option>EOD Focus</option>
             <option>Full Session</option>
@@ -254,7 +254,7 @@ export function Backtest({ ticker }: { ticker?: string }) {
         <div className="flex flex-col gap-1">
           <span className="text-[10px] font-bold uppercase" style={{ letterSpacing: "0.12em", color: "var(--text-mute)" }}>TF</span>
           <select value={timeframe} onChange={(e) => setTimeframe(e.target.value)}
-            className="rounded-[8px] px-[10px] py-[7px] text-[12px] outline-none"
+            className="rounded-[4px] px-[10px] py-[7px] text-[12px] outline-none"
             style={{ background: "var(--panel-2)", border: "1px solid var(--line)", color: "var(--text)", fontFamily: "var(--font-mono)" }}>
             <option>15Min</option>
             <option>5Min</option>
@@ -267,7 +267,7 @@ export function Backtest({ ticker }: { ticker?: string }) {
             <span className="text-[10px] font-bold uppercase" style={{ letterSpacing: "0.12em", color: "var(--text-mute)" }}>Lookback</span>
             <input type="number" min={1} max={40} value={lookback}
               onChange={(e) => setLookback(Number(e.target.value) || 6)}
-              className="w-[80px] rounded-[8px] px-[10px] py-[7px] text-[12px] outline-none"
+              className="w-[80px] rounded-[4px] px-[10px] py-[7px] text-[12px] outline-none"
               style={{ background: "var(--panel-2)", border: "1px solid var(--line)", color: "var(--text)", fontFamily: "var(--font-mono)" }} />
           </div>
         )}
@@ -296,7 +296,7 @@ export function Backtest({ ticker }: { ticker?: string }) {
         </details>
 
         <button type="button" onClick={run} disabled={busy}
-          className="rounded-[8px] px-[18px] py-[8px] text-[13px] font-semibold"
+          className="rounded-[4px] px-[18px] py-[8px] text-[13px] font-semibold"
           style={{
             background: busy ? "var(--panel-2)" : "transparent",
             border: `1px solid ${busy ? "var(--line)" : "var(--accent)"}`,
@@ -330,7 +330,7 @@ export function Backtest({ ticker }: { ticker?: string }) {
           </span>
 
           {result.manifest && (
-            <div className="flex flex-col gap-2 rounded-[10px] p-3" style={{ border: "1px solid var(--line)", background: "var(--panel-1)" }}>
+            <div className="flex flex-col gap-2 p-3" style={{ border: "1px solid var(--line)", background: "var(--panel-1)" }}>
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <span className="text-[11px] font-bold uppercase" style={{ color: "var(--text)" }}>Locked experiment</span>
                 <code className="text-[10.5px]" title={result.experiment_id} style={{ color: "var(--accent)" }}>{result.experiment_id?.slice(0, 16)}</code>
@@ -356,7 +356,7 @@ export function Backtest({ ticker }: { ticker?: string }) {
           )}
 
           {result.portfolio && (
-            <div className="flex flex-wrap items-baseline gap-x-5 gap-y-1 rounded-[10px] p-3 text-[11px]" style={{ background: "var(--panel-2)", border: "1px solid var(--line)", color: "var(--text-dim)" }}>
+            <div className="flex flex-wrap items-baseline gap-x-5 gap-y-1 p-3 text-[11px]" style={{ background: "var(--panel-2)", border: "1px solid var(--line)", color: "var(--text-dim)" }}>
               <strong style={{ color: "var(--text)" }}>Portfolio constraint</strong>
               <span>${result.portfolio.starting_equity.toLocaleString()} → ${result.portfolio.ending_equity.toLocaleString()}</span>
               <span style={{ color: result.portfolio.profit_loss >= 0 ? "var(--success)" : "var(--neg)" }}>{result.portfolio.profit_loss >= 0 ? "+" : ""}${result.portfolio.profit_loss.toLocaleString()} · {pct(result.portfolio.return_pct, 3)}</span>
@@ -372,8 +372,8 @@ export function Backtest({ ticker }: { ticker?: string }) {
           {result.mode === "filter" && result.base && result.partitions && (
             <>
               <StatGrid stats={result.base} label="Base strategy — fixed-cadence entries, no view on price" />
-              <div className="overflow-x-auto">
-                <table className="w-full border-collapse text-left text-[12px]">
+              <div className="overflow-x-auto overflow-y-auto" role="region" aria-label="Backtest partition results scrollport">
+                <table aria-label="Backtest partition results" className="w-full border-collapse text-left text-[12px]">
                   <thead>
                     <tr style={{ color: "var(--text-mute)" }}>
                       {["Partition", "Trades", "Share", "Win", "Avg", "Lift", "Verdict"].map((h, i) => (

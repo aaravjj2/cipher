@@ -26,8 +26,7 @@ import { SkeletonCards } from "@/components/ui/skeleton";
  *   - It never labels the metric column as the result. A walkforward's verdict is governed
  *     by its harshest execution model, so a rejected study can still show a profit factor
  *     above 1; the column says "best case" for exactly that reason.
- *   - It never colours a tier green. Purple is up here and red is down, as everywhere else
- *     in Cipher.
+ *   - It never colours a tier green. Amber (`--accent`) is up here and red is down.
  */
 
 const TIER_META: Record<
@@ -61,7 +60,7 @@ function formatAge(seconds: number | null | undefined): string {
 function Card({ children }: { children: React.ReactNode }) {
   return (
     <div
-      className="rounded-[10px] p-3"
+      className="p-3"
       style={{ background: "var(--panel-2)", border: "1px solid var(--line)" }}
     >
       {children}

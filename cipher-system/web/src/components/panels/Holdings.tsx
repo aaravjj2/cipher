@@ -13,6 +13,7 @@ import {
   type ClosedHoldingPosition,
   type PortfolioRiskStatus,
 } from "@/lib/api";
+import { LoadingStatus } from "@/components/ui/skeleton";
 
 /**
  * Holdings panel — manually-entered positions (core/holdings.py), never connected to
@@ -41,8 +42,7 @@ function formatPct(value: number | null): string {
   return `${sign}${value.toFixed(2)}%`;
 }
 
-// Cipher convention: purple = profit, red = loss (not the conventional green/red;
-// see DayPnlBadge precedent in the Standing/Journal panels).
+// Signed P/L uses --accent (amber) vs --neg; conventional green is a later honesty loop.
 function pnlColor(value: number | null): string {
   if (value == null) return "var(--text-mute)";
   return value >= 0 ? "var(--accent)" : "var(--neg)";
@@ -76,7 +76,7 @@ function EmptyRow({ children }: { children: React.ReactNode }) {
 
 function StatTile({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
-    <div className="flex flex-col gap-1 rounded-[10px] px-4 py-3" style={{ background: "var(--panel-2)", border: "1px solid var(--line)" }}>
+    <div className="flex flex-col gap-1 px-4 py-3" style={{ background: "var(--panel-2)", border: "1px solid var(--line)" }}>
       <span className="text-[10px] font-bold uppercase" style={{ letterSpacing: "0.08em", color: "var(--text-mute)" }}>
         {label}
       </span>
@@ -129,34 +129,34 @@ function AddPositionForm({ onAdded }: { onAdded: () => void }) {
   }
 
   return (
-    <form onSubmit={submit} className="flex flex-row flex-wrap items-end gap-3 rounded-[10px] p-4" style={{ background: "var(--panel-2)", border: "1px solid var(--line)" }}>
+    <form onSubmit={submit} className="flex flex-row flex-wrap items-end gap-3 p-4" style={{ background: "var(--panel-2)", border: "1px solid var(--line)" }}>
       <label className="flex flex-col gap-1">
         <span className="text-[10.5px] font-bold uppercase" style={{ letterSpacing: "0.08em", color: "var(--text-mute)" }}>Ticker</span>
         <input value={ticker} onChange={(e) => setTicker(e.target.value)} placeholder="NVDA" required
-          className="w-[90px] rounded-[8px] px-[10px] py-[6px] text-[12px] outline-none" style={textInputStyle()} />
+          className="w-[90px] rounded-[4px] px-[10px] py-[6px] text-[12px] outline-none" style={textInputStyle()} />
       </label>
       <label className="flex flex-col gap-1">
         <span className="text-[10.5px] font-bold uppercase" style={{ letterSpacing: "0.08em", color: "var(--text-mute)" }}>Shares</span>
         <input value={shares} onChange={(e) => setShares(e.target.value)} type="number" step="any" min="0" placeholder="10" required
-          className="w-[90px] rounded-[8px] px-[10px] py-[6px] text-[12px] outline-none" style={textInputStyle()} />
+          className="w-[90px] rounded-[4px] px-[10px] py-[6px] text-[12px] outline-none" style={textInputStyle()} />
       </label>
       <label className="flex flex-col gap-1">
         <span className="text-[10.5px] font-bold uppercase" style={{ letterSpacing: "0.08em", color: "var(--text-mute)" }}>Entry price</span>
         <input value={entryPrice} onChange={(e) => setEntryPrice(e.target.value)} type="number" step="any" min="0" placeholder="120.50" required
-          className="w-[110px] rounded-[8px] px-[10px] py-[6px] text-[12px] outline-none" style={textInputStyle()} />
+          className="w-[110px] rounded-[4px] px-[10px] py-[6px] text-[12px] outline-none" style={textInputStyle()} />
       </label>
       <label className="flex flex-col gap-1">
         <span className="text-[10.5px] font-bold uppercase" style={{ letterSpacing: "0.08em", color: "var(--text-mute)" }}>Entry date</span>
         <input value={entryDate} onChange={(e) => setEntryDate(e.target.value)} type="date" required
-          className="rounded-[8px] px-[10px] py-[6px] text-[12px] outline-none" style={textInputStyle()} />
+          className="rounded-[4px] px-[10px] py-[6px] text-[12px] outline-none" style={textInputStyle()} />
       </label>
       <label className="flex flex-col gap-1 flex-1 min-w-[160px]">
         <span className="text-[10.5px] font-bold uppercase" style={{ letterSpacing: "0.08em", color: "var(--text-mute)" }}>Notes (optional)</span>
         <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Why this position?"
-          className="rounded-[8px] px-[10px] py-[6px] text-[12px] outline-none" style={textInputStyle()} />
+          className="rounded-[4px] px-[10px] py-[6px] text-[12px] outline-none" style={textInputStyle()} />
       </label>
       <button type="submit" disabled={saving}
-        className="rounded-[8px] px-[16px] py-[8px] text-[12.5px] font-bold shrink-0 disabled:opacity-60"
+        className="rounded-[4px] px-[16px] py-[8px] text-[12.5px] font-bold shrink-0 disabled:opacity-60"
         style={{ background: "var(--accent)", color: "#fff" }}>
         {saving ? "Adding…" : "Add position"}
       </button>
@@ -197,26 +197,26 @@ function ClosePositionForm({ position, onDone, onCancel }: { position: HoldingPo
   }
 
   return (
-    <form onSubmit={submit} className="flex flex-row flex-wrap items-end gap-3 rounded-[8px] p-3 mt-2" style={{ background: "var(--panel-2)", border: "1px solid var(--line)" }}>
+    <form onSubmit={submit} className="flex flex-row flex-wrap items-end gap-3 rounded-[4px] p-3 mt-2" style={{ background: "var(--panel-2)", border: "1px solid var(--line)" }}>
       <label className="flex flex-col gap-1">
         <span className="text-[10px] font-bold uppercase" style={{ letterSpacing: "0.08em", color: "var(--text-mute)" }}>Shares to sell</span>
         <input value={shares} onChange={(e) => setShares(e.target.value)} type="number" step="any" min="0" max={position.shares}
-          className="w-[90px] rounded-[8px] px-[8px] py-[5px] text-[12px] outline-none" style={textInputStyle()} />
+          className="w-[90px] rounded-[4px] px-[8px] py-[5px] text-[12px] outline-none" style={textInputStyle()} />
       </label>
       <label className="flex flex-col gap-1">
         <span className="text-[10px] font-bold uppercase" style={{ letterSpacing: "0.08em", color: "var(--text-mute)" }}>Exit price</span>
         <input value={exitPrice} onChange={(e) => setExitPrice(e.target.value)} type="number" step="any" min="0" required
-          className="w-[100px] rounded-[8px] px-[8px] py-[5px] text-[12px] outline-none" style={textInputStyle()} />
+          className="w-[100px] rounded-[4px] px-[8px] py-[5px] text-[12px] outline-none" style={textInputStyle()} />
       </label>
       <label className="flex flex-col gap-1">
         <span className="text-[10px] font-bold uppercase" style={{ letterSpacing: "0.08em", color: "var(--text-mute)" }}>Exit date</span>
         <input value={exitDate} onChange={(e) => setExitDate(e.target.value)} type="date" required
-          className="rounded-[8px] px-[8px] py-[5px] text-[12px] outline-none" style={textInputStyle()} />
+          className="rounded-[4px] px-[8px] py-[5px] text-[12px] outline-none" style={textInputStyle()} />
       </label>
-      <button type="submit" disabled={saving} className="rounded-[8px] px-[12px] py-[6px] text-[11.5px] font-bold disabled:opacity-60" style={{ background: "var(--accent)", color: "#fff" }}>
+      <button type="submit" disabled={saving} className="rounded-[4px] px-[12px] py-[6px] text-[11.5px] font-bold disabled:opacity-60" style={{ background: "var(--accent)", color: "#fff" }}>
         {saving ? "Saving…" : "Confirm sale"}
       </button>
-      <button type="button" onClick={onCancel} className="rounded-[8px] px-[12px] py-[6px] text-[11.5px] font-bold" style={{ background: "transparent", border: "1px solid var(--line)", color: "var(--text-dim)" }}>
+      <button type="button" onClick={onCancel} className="rounded-[4px] px-[12px] py-[6px] text-[11.5px] font-bold" style={{ background: "transparent", border: "1px solid var(--line)", color: "var(--text-dim)" }}>
         Cancel
       </button>
       {error && <span className="text-[11px] w-full" style={{ color: "var(--neg)" }}>{error}</span>}
@@ -246,7 +246,7 @@ function OpenPositionRow({ position, onChanged }: { position: HoldingPosition; o
 
   return (
     <div className="flex flex-col">
-      <div className="grid items-center gap-2 px-2 py-2 rounded-[8px]" style={{ gridTemplateColumns: OPEN_GRID, background: "var(--panel-2)" }}>
+      <div className="grid items-center gap-2 px-2 py-2 rounded-[4px]" style={{ gridTemplateColumns: OPEN_GRID, background: "var(--panel-2)" }}>
         <span className="text-[13px] font-semibold" style={{ color: "var(--text)" }}>{position.ticker}</span>
         <span className="text-[12px]" style={{ fontFamily: "var(--font-mono)", color: "var(--text-dim)" }}>{position.shares}</span>
         <span className="text-[12px]" style={{ fontFamily: "var(--font-mono)", color: "var(--text-dim)" }}>{formatDollars(position.entry_price)}</span>
@@ -312,7 +312,7 @@ function AllocationBars({ allocation }: { allocation: HoldingsStatus["allocation
 
 function ClosedPositionRow({ position }: { position: ClosedHoldingPosition }) {
   return (
-    <div className="grid items-center gap-2 px-2 py-2 rounded-[8px]" style={{ gridTemplateColumns: "1fr 70px 90px 90px 90px 90px 110px 90px", background: "var(--panel-2)" }}>
+    <div className="grid items-center gap-2 px-2 py-2 rounded-[4px]" style={{ gridTemplateColumns: "1fr 70px 90px 90px 90px 90px 110px 90px", background: "var(--panel-2)" }}>
       <span className="text-[12.5px] font-semibold" style={{ color: "var(--text)" }}>{position.ticker}</span>
       <span className="text-[11.5px]" style={{ fontFamily: "var(--font-mono)", color: "var(--text-dim)" }}>{position.shares}</span>
       <span className="text-[11.5px]" style={{ fontFamily: "var(--font-mono)", color: "var(--text-mute)" }}>{position.entry_date}</span>
@@ -440,9 +440,9 @@ export function Holdings() {
 
   if (!status && !error) {
     return (
-      <section className="flex items-center justify-center py-20" style={{ color: "var(--text-mute)" }}>
+      <LoadingStatus className="flex items-center justify-center py-20" style={{ color: "var(--text-mute)" }}>
         Loading holdings…
-      </section>
+      </LoadingStatus>
     );
   }
 
@@ -460,7 +460,7 @@ export function Holdings() {
       </div>
 
       {status?.caveat && (
-        <p className="text-[11.5px] leading-relaxed rounded-[8px] px-3 py-2" style={{ background: "var(--panel-2)", border: "1px solid var(--line)", color: "var(--text-mute)" }}>
+        <p className="text-[11.5px] leading-relaxed rounded-[4px] px-3 py-2" style={{ background: "var(--panel-2)", border: "1px solid var(--line)", color: "var(--text-mute)" }}>
           {status.caveat}
         </p>
       )}
@@ -487,11 +487,13 @@ export function Holdings() {
         {openPositions.length === 0 ? (
           <EmptyRow>No open positions. Add one above.</EmptyRow>
         ) : (
+          <div className="overflow-x-auto overflow-y-auto" role="region" aria-label="Open positions scrollport">
           <div className="flex flex-col gap-2">
             <div className="grid gap-2 px-2 text-[10px] font-bold uppercase" style={{ gridTemplateColumns: OPEN_GRID, letterSpacing: "0.06em", color: "var(--text-mute)" }}>
               <span>Ticker</span><span>Shares</span><span>Entry</span><span>Date</span><span>Current</span><span>Value</span><span>P&L $</span><span>P&L %</span><span></span>
             </div>
             {openPositions.map((p) => <OpenPositionRow key={p.id} position={p} onChanged={refresh} />)}
+          </div>
           </div>
         )}
       </Section>
@@ -501,12 +503,12 @@ export function Holdings() {
           Option positions already tracked in Portfolio Risk appear here automatically, with its latest bid/ask-derived mark. Cipher does not read a brokerage account or place orders.
         </p>
         {optionPositions.length === 0 ? <EmptyRow>No tracked option positions yet. Add one in Portfolio Risk and it will appear here automatically.</EmptyRow> : (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto overflow-y-auto" role="region" aria-label="Option positions scrollport">
             <div className="min-w-[760px] space-y-2">
               <div className="grid grid-cols-[1.5fr_70px_90px_90px_100px_110px_110px] gap-2 px-2 text-[10px] font-bold uppercase" style={{ color: "var(--text-mute)" }}>
                 <span>Contract</span><span>Qty</span><span>Expiry</span><span>Strike</span><span>Mark</span><span>Value</span><span>P&amp;L</span>
               </div>
-              {optionPositions.map((position) => <div key={position.id} className="grid grid-cols-[1.5fr_70px_90px_90px_100px_110px_110px] gap-2 rounded-lg px-2 py-2 text-[11.5px]" style={{ background: "var(--panel-2)" }}>
+              {optionPositions.map((position) => <div key={position.id} className="grid grid-cols-[1.5fr_70px_90px_90px_100px_110px_110px] gap-2 px-2 py-2 text-[11.5px]" style={{ background: "var(--panel-2)" }}>
                 <span className="font-semibold">{position.contract_symbol || `${position.ticker} ${position.option_type || "option"}`}</span>
                 <span>{position.quantity}</span><span>{position.expiration || "—"}</span>
                 <span>{position.strike == null ? "—" : `$${position.strike}`}</span>
@@ -526,11 +528,13 @@ export function Holdings() {
 
       {closedPositions.length > 0 && (
         <Section title="Closed positions">
+          <div className="overflow-x-auto overflow-y-auto" role="region" aria-label="Closed positions scrollport">
           <div className="flex flex-col gap-2">
             <div className="grid gap-2 px-2 text-[10px] font-bold uppercase" style={{ gridTemplateColumns: "1fr 70px 90px 90px 90px 90px 110px 90px", letterSpacing: "0.06em", color: "var(--text-mute)" }}>
               <span>Ticker</span><span>Shares</span><span>Entry date</span><span>Exit date</span><span>Entry</span><span>Exit</span><span>P&L $</span><span>P&L %</span>
             </div>
             {closedPositions.map((p) => <ClosedPositionRow key={p.id} position={p} />)}
+          </div>
           </div>
         </Section>
       )}
@@ -540,7 +544,7 @@ export function Holdings() {
           title="Performance since purchase"
           right={
             <button type="button" onClick={loadBenchmark} disabled={benchLoading}
-              className="text-[11.5px] font-bold rounded-[8px] px-3 py-[6px] disabled:opacity-60"
+              className="text-[11.5px] font-bold rounded-[4px] px-3 py-[6px] disabled:opacity-60"
               style={{ background: "var(--panel-2)", border: "1px solid var(--line)", color: "var(--text-dim)" }}>
               {benchLoading ? "Comparing…" : "Compare to SPY / QQQ"}
             </button>

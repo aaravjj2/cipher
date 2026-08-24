@@ -12,6 +12,7 @@ import {
   type FlowFilters,
   type RealFlowPrint,
 } from "@/lib/api";
+import { LoadingStatus } from "@/components/ui/skeleton";
 import type { SpyglassRow } from "@/types/cipher";
 
 const FLOW_REFRESH_MS = 20_000;
@@ -94,17 +95,33 @@ export function SpyglassHeaderTabs({
   onChange: (tab: SpyglassTab) => void;
 }) {
   const tabs: SpyglassTab[] = ["bio", "contractSearch"];
+  const index = Math.max(0, tabs.indexOf(activeTab));
+  const onExplicitTab = tabs.includes(activeTab);
   return (
-    <>
+    <div
+      role="tablist"
+      aria-label="Spyglass views"
+      onKeyDown={(event) => {
+        if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") return;
+        event.preventDefault();
+        const next = event.key === "ArrowRight"
+          ? (index + 1) % tabs.length
+          : (index - 1 + tabs.length) % tabs.length;
+        onChange(tabs[next]);
+      }}
+      className="flex flex-row items-center gap-2"
+    >
       {tabs.map((tab) => {
         const active = activeTab === tab;
         return (
           <button
             key={tab}
             type="button"
+            role="tab"
+            aria-selected={active}
+            tabIndex={active || (!onExplicitTab && tab === "bio") ? 0 : -1}
             onClick={() => onChange(tab)}
-            aria-pressed={active}
-            className="rounded-[8px] px-[14px] py-2 text-[12px] font-semibold whitespace-nowrap shrink-0"
+            className="rounded-[4px] px-[14px] py-2 text-[12px] font-semibold whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]"
             style={{
               border: `1px solid ${active ? "var(--accent)" : "var(--line)"}`,
               color: active ? "var(--accent)" : "var(--text-dim)",
@@ -114,7 +131,7 @@ export function SpyglassHeaderTabs({
           </button>
         );
       })}
-    </>
+    </div>
   );
 }
 
@@ -134,7 +151,7 @@ function PillGroup<T extends string>({
 }) {
   return (
     <div
-      className="flex flex-row items-center gap-[2px] rounded-[8px] p-[2px] shrink-0"
+      className="flex flex-row items-center gap-[2px] rounded-[4px] p-[2px] shrink-0"
       style={{ background: "var(--panel-2)", border: "1px solid var(--line)" }}
     >
       {options.map((opt) => {
@@ -171,7 +188,7 @@ function ToolbarButton({
     <button
       type="button"
       onClick={onClick}
-      className="rounded-[8px] px-[12px] py-[7px] text-[12px] font-semibold whitespace-nowrap shrink-0"
+      className="rounded-[4px] px-[12px] py-[7px] text-[12px] font-semibold whitespace-nowrap shrink-0"
       style={{
         background: "var(--panel-2)",
         border: "1px solid var(--line)",
@@ -225,7 +242,7 @@ function AsOfField({
         {source === "tradier_stream" ? "Captured stream" : source ? "Snapshot fallback" : "Newest event"}
       </span>
       <span
-        className="rounded-[8px] px-[10px] py-[6px] text-[12px]"
+        className="rounded-[4px] px-[10px] py-[6px] text-[12px]"
         style={{
           background: "var(--panel-2)",
           border: "1px solid var(--line)",
@@ -258,7 +275,7 @@ function DateField({
         type="date"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="rounded-[8px] px-[10px] py-[6px] text-[12px] outline-none"
+        className="rounded-[4px] px-[10px] py-[6px] text-[12px] outline-none"
         style={{
           background: "var(--panel-2)",
           border: "1px solid var(--line)",
@@ -350,7 +367,7 @@ function SpyglassTable({
   isError?: boolean;
 }) {
   return (
-    <div className="rounded-[10px] overflow-x-auto" style={{ border: "1px solid var(--line)" }}>
+    <div className="rounded-[10px] overflow-x-auto" role="region" aria-label="Options flow prints scrollport" style={{ border: "1px solid var(--line)" }}>
       <table aria-label="Options flow prints" className="w-full min-w-[860px] border-collapse" style={{ fontFamily: "var(--font-mono)" }}>
         <thead>
           <tr>
@@ -540,7 +557,7 @@ function SpyglassView({ ticker }: { ticker: string }) {
       </div>
 
       {caveat && (
-        <div className="rounded-[8px] px-3 py-2 text-[11px]" style={{ background: "var(--panel-2)", color: "var(--text-mute)", border: "1px solid var(--line)" }}>
+        <div className="rounded-[4px] px-3 py-2 text-[11px]" style={{ background: "var(--panel-2)", color: "var(--text-mute)", border: "1px solid var(--line)" }}>
           {caveat}
         </div>
       )}
@@ -564,7 +581,7 @@ function SpyglassView({ ticker }: { ticker: string }) {
           status === "error"
             ? errorMessage
             : status === "loading"
-              ? `Scanning ${ticker}...`
+              ? `Scanning ${ticker}…`
               : `No prints matched the current filters for ${ticker}.`
         }
       />
@@ -720,7 +737,7 @@ function ContractSearchView({ defaultTicker }: { defaultTicker: string }) {
             value={ticker}
             onChange={(e) => setTicker(e.target.value.toUpperCase())}
             placeholder="AAPL"
-            className="w-[140px] rounded-[8px] px-[10px] py-[7px] text-[13px] font-semibold uppercase outline-none"
+            className="w-[140px] rounded-[4px] px-[10px] py-[7px] text-[13px] font-semibold uppercase outline-none"
             style={{
               background: "var(--panel-2)",
               border: "1px solid var(--line)",
@@ -739,7 +756,7 @@ function ContractSearchView({ defaultTicker }: { defaultTicker: string }) {
             value={strike}
             onChange={(e) => setStrike(e.target.value)}
             placeholder="200"
-            className="w-[110px] rounded-[8px] px-[10px] py-[7px] text-[13px] outline-none"
+            className="w-[110px] rounded-[4px] px-[10px] py-[7px] text-[13px] outline-none"
             style={{
               background: "var(--panel-2)",
               border: "1px solid var(--line)",
@@ -763,7 +780,7 @@ function ContractSearchView({ defaultTicker }: { defaultTicker: string }) {
         <button
           type="button"
           onClick={handleSearch}
-          className="rounded-[8px] px-[18px] py-[7px] text-[13px] font-semibold shrink-0"
+          className="rounded-[4px] px-[18px] py-[7px] text-[13px] font-semibold shrink-0"
           style={{ background: "transparent", border: "1px solid var(--accent)", color: "var(--accent)" }}
         >
           Search
@@ -777,9 +794,9 @@ function ContractSearchView({ defaultTicker }: { defaultTicker: string }) {
       )}
 
       {status === "loading" && (
-        <div className="text-center py-16 text-[13px]" style={{ color: "var(--text-mute)" }}>
+        <LoadingStatus className="text-center py-16 text-[13px]" style={{ color: "var(--text-mute)" }}>
           Reading the trade tape…
-        </div>
+        </LoadingStatus>
       )}
 
       {status === "error" && (
@@ -854,7 +871,7 @@ function ContractSearchResultView({ result }: { result: ContractSearchResult }) 
       {/* Contract Search has six dense, fixed-content columns. Keep its horizontal
           scroll local to the result table so a narrow phone does not widen the whole
           panel or clip the trade tape. */}
-      <div className="overflow-x-auto rounded-[10px]" style={{ border: "1px solid var(--line)" }}>
+      <div className="overflow-x-auto rounded-[10px]" role="region" aria-label="Contract search trade tape scrollport" style={{ border: "1px solid var(--line)" }}>
         <div className="min-w-[560px]">
           <table aria-label="Contract search trade tape" className="w-full border-collapse text-left text-[12px] tabular-nums">
           <thead>
@@ -899,7 +916,7 @@ function ContractSearchResultView({ result }: { result: ContractSearchResult }) 
 // ---------------------------------------------------------------------------
 
 type SpyglassProps = {
-  /** Mock ticker used for the "Scanning {TICKER}..." loading copy on the Spyglass sub-view. */
+  /** Mock ticker used for the "Scanning {TICKER}…" loading copy on the Spyglass sub-view. */
   ticker?: string;
   /**
    * Controlled sub-view tab, for lifting state up to a future page.tsx that also drives

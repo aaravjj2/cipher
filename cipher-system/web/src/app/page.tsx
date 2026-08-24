@@ -138,6 +138,7 @@ function TerminalHome({ session = null }: { session?: AuthIdentity | null }) {
           onTickerSubmit={setTicker}
           price={price}
           changePct={changePct}
+          feed={quote?.feed}
           toolbarSlotRef={setToolbarSlot}
           workspaceCount={WORKSPACE_COUNT}
           activeWorkspace={activeWorkspace}

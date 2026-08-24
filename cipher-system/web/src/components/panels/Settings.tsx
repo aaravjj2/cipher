@@ -79,11 +79,15 @@ function StatusBadge({ ok, okLabel, badLabel }: { ok: boolean; okLabel: string; 
   );
 }
 
-function FieldLabel({ children }: { children: ReactNode }) {
+function FieldLabel({ id, children }: { id?: string; children: ReactNode }) {
   return (
-    <div className="text-[10.5px] font-bold uppercase" style={{ letterSpacing: "0.08em", color: "var(--text-mute)", fontFamily: "var(--font-mono)" }}>
+    <label
+      id={id}
+      className="text-[10.5px] font-bold uppercase"
+      style={{ letterSpacing: "0.08em", color: "var(--text-mute)", fontFamily: "var(--font-mono)" }}
+    >
       {children}
-    </div>
+    </label>
   );
 }
 
@@ -105,17 +109,33 @@ const INTERVAL_OPTIONS: { value: IntervalOption; label: string }[] = [
 ];
 
 function IntervalPills({ value, onChange }: { value: IntervalOption; onChange: (v: IntervalOption) => void }) {
+  const index = Math.max(0, INTERVAL_OPTIONS.findIndex((opt) => opt.value === value));
   return (
-    <div className="flex flex-row items-center gap-[2px] rounded-[8px] p-[2px] w-fit" style={{ background: "var(--panel-2)", border: "1px solid var(--line)" }}>
+    <div
+      role="radiogroup"
+      aria-labelledby="cipher-refresh-interval-label"
+      onKeyDown={(event) => {
+        if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") return;
+        event.preventDefault();
+        const next = event.key === "ArrowRight"
+          ? (index + 1) % INTERVAL_OPTIONS.length
+          : (index - 1 + INTERVAL_OPTIONS.length) % INTERVAL_OPTIONS.length;
+        onChange(INTERVAL_OPTIONS[next].value);
+      }}
+      className="flex flex-row items-center gap-[2px] rounded-[4px] p-[2px] w-fit"
+      style={{ background: "var(--panel-2)", border: "1px solid var(--line)" }}
+    >
       {INTERVAL_OPTIONS.map((opt) => {
         const active = opt.value === value;
         return (
           <button
             key={opt.value}
             type="button"
+            role="radio"
+            aria-checked={active}
+            tabIndex={active ? 0 : -1}
             onClick={() => onChange(opt.value)}
-            aria-pressed={active}
-            className="rounded-[6px] px-3 py-[6px] text-[12px] font-semibold transition-colors duration-150"
+            className="rounded-[6px] px-3 py-[6px] text-[12px] font-semibold transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]"
             style={{ background: active ? "var(--nav-active)" : "transparent", color: active ? "var(--text)" : "var(--text-dim)", fontFamily: "var(--font-mono)" }}
           >
             {opt.label}
@@ -179,7 +199,7 @@ function PreferencesCard() {
       </p>
 
       <div className="flex flex-col gap-2">
-        <FieldLabel>Auto-refresh interval</FieldLabel>
+        <FieldLabel id="cipher-refresh-interval-label">Auto-refresh interval</FieldLabel>
         <IntervalPills value={refreshInterval} onChange={handleChange} />
       </div>
     </Card>
@@ -287,7 +307,7 @@ function ProviderCompatibilityCard() {
         <div className="flex flex-col gap-1.5">
           <StatRow label="Alpaca options" value={`${data.alpaca.options_feed.toUpperCase()} · ${data.alpaca.options_chain ?? "unknown"}`} />
           <StatRow label="Alpaca stocks" value={`${data.alpaca.stock_feed.toUpperCase()} · ${data.alpaca.stock_quotes_bars ?? "unknown"}`} />
-          <StatRow label="Anonymous fallback" value={`${data.yfinance.status} · quotes/bars ${data.yfinance.quotes === "available_degraded" ? "available" : "unavailable"}`} />
+          <StatRow label="Anonymous fallback" value={`${data.yfinance.status} · quotes/bars ${data.yfinance.quotes === "available_degraded" ? "delayed available" : "unavailable"}`} />
           <StatRow label="Fallback options" value={`${data.yfinance.options_chain}; matrix ${data.yfinance.matrix}`} />
           <StatRow label="Tradier" value="Capture only" />
           <StatRow label="Webull" value="Unsupported" />
@@ -487,7 +507,7 @@ function AccountCard() {
           <p className="text-[13px]" style={{ color: "var(--text)" }}>{auth.session.user?.email ?? "Authenticated user"}</p>
           <p className="mt-1 text-[11px]" style={{ color: "var(--text-mute)" }}>Signing out also clears the session-only Alpaca connection.</p>
         </div>
-        <button type="button" onClick={() => void signOut()} className="rounded-md border px-3 py-2 text-[12px] font-semibold" style={{ borderColor: "var(--line)", color: "var(--text)" }}>
+        <button type="button" onClick={() => void signOut()} className="rounded-[4px] border px-3 py-2 text-[12px] font-semibold" style={{ borderColor: "var(--line)", color: "var(--text)" }}>
           Sign out
         </button>
       </div>

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { fetchEarningsRadar, type EarningsRadarResponse } from "@/lib/api";
+import { LoadingStatus } from "@/components/ui/skeleton";
 
 const percent = (value: number | null | undefined) => value == null ? "—" : `${(value * 100).toFixed(0)}%`;
 const number = (value: number | null | undefined, digits = 2) => value == null ? "—" : Number(value).toFixed(digits);
@@ -19,7 +20,7 @@ export function EarningsRadar() {
     return () => { window.clearInterval(timer); ctrl.abort(); };
   }, []);
   if (error) return <div style={{ color: "var(--negative)" }}>{error}</div>;
-  if (!data) return <div style={{ color: "var(--text-mute)" }}>Loading earnings radar…</div>;
+  if (!data) return <LoadingStatus style={{ color: "var(--text-mute)" }}>Loading earnings radar…</LoadingStatus>;
   return (
     <div className="space-y-4" style={{ fontFamily: "var(--font-mono)" }}>
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -33,11 +34,11 @@ export function EarningsRadar() {
           {data.as_of && <div className="mt-1 text-[10px]" style={{ color: "var(--text-mute)" }}>radar as of {data.as_of}</div>}
         </div>
       </div>
-      {data.status === "unavailable" && <p className="rounded-lg border px-3 py-2 text-[11px]" style={{ borderColor: "var(--gold)", color: "var(--gold)" }}>No radar artifact yet — it is written after the first 08:15 ET digest run. Missing data is shown as unavailable, never zero.</p>}
-      {data.validation && <p className="rounded-lg border px-3 py-2 text-[10px]" style={{ borderColor: "var(--gold)", color: "var(--gold)" }}>
-        {data.validation.strategy_gate?.replaceAll("_", " ") ?? data.validation.status.replaceAll("_", " ")} · day-5 {number(data.validation.day5_direction_accuracy_pct)}% vs baseline {number(data.validation.day5_baseline_accuracy_pct)}% · gated {number(data.validation.day5_gated_accuracy_pct)}% (N={data.validation.day5_gated_samples ?? "—"}) · gap MAE {number(data.validation.expected_gap_mae_pct)}% vs {number(data.validation.expected_gap_baseline_mae_pct)}% baseline · holdout N={data.validation.test_samples ?? "—"}
+      {data.status === "unavailable" && <p className="border px-3 py-2 text-[11px]" style={{ borderColor: "var(--gold)", color: "var(--gold)" }}>No radar artifact yet — it is written after the first 08:15 ET digest run. Missing data is shown as unavailable, never zero.</p>}
+      {data.validation && <p className="border px-3 py-2 text-[10px]" style={{ borderColor: "var(--gold)", color: "var(--gold)" }}>
+        {data.validation.strategy_gate ?? "UNVALIDATED_FOR_LIVE_OPTIONS_PNL"} · day-5 {number(data.validation.day5_direction_accuracy_pct)}% vs baseline {number(data.validation.day5_baseline_accuracy_pct)}% · gated {number(data.validation.day5_gated_accuracy_pct)}% (N={data.validation.day5_gated_samples ?? "—"}) · gap MAE {number(data.validation.expected_gap_mae_pct)}% vs {number(data.validation.expected_gap_baseline_mae_pct)}% baseline · holdout N={data.validation.test_samples ?? "—"}
       </p>}
-      {data.paper_scorecard && <section className="rounded-xl border p-3" style={{ borderColor: "var(--line)", background: "var(--panel)" }}>
+      {data.paper_scorecard && <section className="border p-3" style={{ borderColor: "var(--line)", background: "var(--panel)" }}>
         <div className="grid grid-cols-2 gap-3 text-[10px] sm:grid-cols-5">
           <span><small className="block" style={{ color: "var(--text-mute)" }}>Open</small>{data.paper_scorecard.open}</span>
           <span><small className="block" style={{ color: "var(--text-mute)" }}>Settled</small>{data.paper_scorecard.settled}</span>
@@ -46,11 +47,11 @@ export function EarningsRadar() {
           <span><small className="block" style={{ color: "var(--text-mute)" }}>Estimated P&amp;L</small>${number(data.paper_scorecard.realized_pnl)}</span>
         </div>
         <p className="mt-2 text-[9px]" style={{ color: "var(--text-mute)" }}>
-          {data.paper_scorecard.cohorts.map((row) => `${row.model_version}: ${row.settled} settled`).join(" · ") || "No model cohorts yet"}. Legacy entries use heuristic premiums; new entries require the independent holdout gate.
+          {data.paper_scorecard.cohorts.map((row) => `${row.model_version}: ${row.settled} settled`).join(" · ") || "No model cohorts yet"}. Legacy entries use heuristic premiums; new entries require the independent holdout gate. UNVALIDATED_FOR_LIVE_OPTIONS_PNL.
         </p>
       </section>}
       {data.cards.length === 0 && data.status !== "unavailable" && <p className="text-[11px]" style={{ color: "var(--text-mute)" }}>No earnings scheduled inside the scan window.</p>}
-      {data.cards.length > 0 && <div className="overflow-x-auto rounded-xl border" style={{ borderColor: "var(--line)" }}>
+      {data.cards.length > 0 && <div className="overflow-x-auto overflow-y-auto border" role="region" aria-label="Upcoming earnings radar scrollport" style={{ borderColor: "var(--line)" }}>
         <table aria-label="Upcoming earnings radar" className="w-full text-left text-[10px]">
           <thead><tr className="border-b" style={{ borderColor: "var(--line)" }}>
             {["symbol", "reports / in", "est eps", "hist beat", "bias", "confidence", "exp gap", "reversal risk", "recommended", "rationale"].map((h) => <th key={h} className="px-3 py-2">{h}</th>)}
@@ -71,7 +72,7 @@ export function EarningsRadar() {
           ))}</tbody>
         </table>
       </div>}
-      <p className="rounded-lg border px-3 py-2 text-[10px]" style={{ borderColor: "var(--line)", color: "var(--text-mute)" }}>{data.caveat} Paper-only recommendations — no order authority.</p>
+      <p className="border px-3 py-2 text-[10px]" style={{ borderColor: "var(--line)", color: "var(--text-mute)" }}>{data.caveat} UNVALIDATED_FOR_LIVE_OPTIONS_PNL. Paper-only recommendations — no order authority.</p>
     </div>
   );
 }

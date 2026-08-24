@@ -37,3 +37,11 @@ test("every demo or locked panel has substantive content and every hybrid panel 
   assert.match(host, /guestModeType !== "hybrid"/);
   assert.match(host, /guestMode=\{guestMode\}/);
 });
+
+test("guest Options Terminal nav stays a demo showcase, not the live chain", () => {
+  assert.equal(panels.some((panel) => panel.label === "Options Terminal" && panel.mode === "demo"), true);
+  assert.match(host, /guestMode && guestModeType !== "hybrid" && guestModeType !== "live"/);
+  assert.match(showcase, /Ticker Workbench → Options for the live chain/);
+  assert.match(showcase, /This Options Terminal nav item stays a demo showcase/);
+  assert.match(showcase, /"Options Terminal": \{ title:[\s\S]*\["Source", "Demo showcase"\]/);
+});

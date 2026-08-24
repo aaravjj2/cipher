@@ -109,6 +109,8 @@ export const GUEST_NAV_SECTIONS: NavSection[] = NAV_SECTIONS
   .map((section) => ({ ...section, items: section.items.filter((item) => GUEST_PANEL_LABELS.has(item.label)) }))
   .filter((section) => section.items.length > 0);
 
+const FOCUS = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]";
+
 type SidebarNavProps = {
   collapsed: boolean;
   activePanel: string;
@@ -128,7 +130,7 @@ function SidebarNav({ collapsed, activePanel, onSelect, sections = NAV_SECTIONS 
             type="button"
             aria-expanded={expanded}
             onClick={() => setOpenSections((current) => { const next = new Set(current); if (next.has(section.label)) next.delete(section.label); else next.add(section.label); return next; })}
-            className="flex w-full items-center justify-between rounded-md px-2.5 py-2 text-[9px] font-bold uppercase hover:bg-white/[0.03]"
+            className={cn("flex w-full items-center justify-between rounded-md px-2.5 py-2 text-[9px] font-bold uppercase hover:bg-white/[0.03]", FOCUS)}
             style={{ letterSpacing: "0.14em", color: containsActive ? "var(--text-dim)" : "var(--text-mute)" }}
           >
             <span>{section.label}</span><ChevronLeftIcon width={12} height={12} className={cn("transition-transform", expanded ? "-rotate-90" : "rotate-180")} />
@@ -147,6 +149,7 @@ function SidebarNav({ collapsed, activePanel, onSelect, sections = NAV_SECTIONS 
                   "flex flex-row items-center gap-[10px] w-full min-h-[32px] py-[4px] rounded-[7px]",
                   "text-[12px] font-medium transition-colors duration-150 ease-in-out",
                   collapsed ? "justify-center px-0" : "px-[11px]",
+                  FOCUS,
                   isActive
                     ? "text-[var(--text)]"
                     : "text-[var(--text-dim)] hover:text-[var(--text)] hover:bg-[color-mix(in_srgb,var(--panel-2)_60%,transparent)]"
@@ -204,7 +207,8 @@ function SidebarFooter({
           title={tiledMode ? "Back to one panel at a time" : "Open several panels at once"}
           className={cn(
             "flex flex-row items-center gap-[8px] w-full min-h-[30px] rounded-[8px] text-[11.5px] font-semibold",
-            collapsed ? "justify-center px-0" : "px-[11px]"
+            collapsed ? "justify-center px-0" : "px-[11px]",
+            FOCUS
           )}
           style={{
             background: tiledMode ? "var(--nav-active)" : "transparent",
@@ -223,7 +227,8 @@ function SidebarFooter({
           title="Command palette"
           className={cn(
             "flex flex-row items-center gap-[8px] w-full min-h-[30px] rounded-[8px] text-[11.5px] font-semibold",
-            collapsed ? "justify-center px-0" : "px-[11px]"
+            collapsed ? "justify-center px-0" : "px-[11px]",
+            FOCUS
           )}
           style={{ border: "1px solid var(--line)", color: "var(--text-dim)" }}
         >
@@ -336,7 +341,7 @@ export function Sidebar({
           type="button"
           aria-label="Open navigation"
           onClick={() => setMobileOpen(true)}
-          className="lg:hidden fixed top-3 left-3 z-40 grid place-items-center w-9 h-9 rounded-[7px]"
+          className="lg:hidden fixed top-3 left-3 z-40 grid place-items-center w-9 h-9 rounded-[7px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]"
           style={{
             background: "var(--panel)",
             border: "1px solid var(--line)",
@@ -373,7 +378,7 @@ export function Sidebar({
             type="button"
             aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
             onClick={() => setCollapsed((v) => !v)}
-            className="side-collapse grid place-items-center w-6 h-6 rounded-[7px]"
+            className="side-collapse grid place-items-center w-8 h-8 rounded-[7px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]"
             style={{ border: "1px solid var(--line)", color: "var(--text-mute)" }}
           >
             <ChevronLeftIcon
@@ -399,7 +404,7 @@ export function Sidebar({
       <aside
         className={cn(
           asideBase,
-          "lg:hidden fixed inset-y-0 left-0 z-50 w-[182px] min-w-[182px] transition-transform duration-200 ease-in-out",
+          "lg:hidden fixed inset-y-0 left-0 z-50 w-[182px] min-w-[182px] overscroll-contain transition-transform duration-200 ease-in-out",
           mobileOpen ? "translate-x-0" : "-translate-x-full"
         )}
         style={{ ...asideStyle, padding: "12px 10px" }}
@@ -412,14 +417,14 @@ export function Sidebar({
             type="button"
             aria-label="Close navigation"
             onClick={() => setMobileOpen(false)}
-            className="grid place-items-center w-6 h-6 rounded-[7px]"
+            className="grid place-items-center w-8 h-8 rounded-[7px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]"
             style={{ border: "1px solid var(--line)", color: "var(--text-mute)" }}
           >
             <ChevronLeftIcon width={16} height={16} />
           </button>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
           <SidebarNav
             collapsed={false}
             activePanel={activePanel}

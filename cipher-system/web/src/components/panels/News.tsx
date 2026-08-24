@@ -116,6 +116,7 @@ export function News({ ticker }: NewsProps) {
         )}
 
         {headlines.length > 0 && (
+          <div className="overflow-x-auto overflow-y-auto" role="region" aria-label={`${ticker} headlines scrollport`}>
           <ul className="flex flex-col gap-2">
             {headlines.map((row, i) => {
               const host = hostOf(row.link);
@@ -125,7 +126,7 @@ export function News({ ticker }: NewsProps) {
                     href={row.link}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex flex-col gap-[6px] rounded-[10px] px-4 py-3 transition-colors hover:brightness-125"
+                    className="flex flex-col gap-[6px] px-4 py-3 transition-colors hover:brightness-125"
                     style={{ background: "var(--panel-2)", border: "1px solid var(--line)" }}
                   >
                     <span className="text-[13px] leading-snug" style={{ color: "var(--text)" }}>
@@ -144,6 +145,7 @@ export function News({ ticker }: NewsProps) {
               );
             })}
           </ul>
+          </div>
         )}
       </section>
 

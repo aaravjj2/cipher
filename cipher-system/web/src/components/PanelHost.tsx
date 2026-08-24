@@ -1,6 +1,6 @@
 "use client";
 
-import { memo } from "react";
+import { memo, type ReactNode } from "react";
 import { StrikeMatrix as StrikeMatrixBase } from "@/components/panels/StrikeMatrix";
 import { NightVision as NightVisionBase } from "@/components/panels/NightVision";
 import { Spyglass as SpyglassBase, type SpyglassTab } from "@/components/panels/Spyglass";
@@ -34,6 +34,15 @@ import { GuestShowcase } from "@/components/panels/GuestShowcase";
 import { guestPanelMode } from "@/lib/guestCatalog";
 import { Autopilot as AutopilotBase } from "@/components/panels/Autopilot";
 import { SkewMap as SkewMapBase } from "@/components/panels/SkewMap";
+
+function headed(name: string, node: ReactNode) {
+  return (
+    <>
+      <h1 className="sr-only">{name}</h1>
+      {node}
+    </>
+  );
+}
 
 /**
  * One place that maps a sidebar label to the panel it renders.
@@ -169,7 +178,7 @@ export function PanelHost({
     case "Ticker Workbench":
       return <TickerWorkbench ticker={ticker} onNavigate={onNavigate} guestMode={guestMode} />;
     case "Strike Matrix":
-      return <StrikeMatrix ticker={ticker} toolbarSlot={toolbarSlot} guestMode={guestMode} />;
+      return headed("Strike Matrix", <StrikeMatrix ticker={ticker} toolbarSlot={toolbarSlot} guestMode={guestMode} />);
     case "Options Terminal":
       return <OptionsTerminal key={ticker} ticker={ticker} onNavigate={onNavigate} />;
     case "Skew Map":
@@ -177,23 +186,24 @@ export function PanelHost({
     case "Chart Workbench":
       return <ChartWorkbench key={ticker} ticker={ticker} />;
     case "Night Vision":
-      return <NightVision ticker={ticker} toolbarSlot={toolbarSlot} guestMode={guestMode} />;
+      return headed("Night Vision", <NightVision ticker={ticker} toolbarSlot={toolbarSlot} guestMode={guestMode} />);
     case "Spyglass":
-      return (
-        <Spyglass ticker={ticker} activeTab={spyglassTab} onActiveTabChange={onSpyglassTabChange} />
+      return headed(
+        "Spyglass",
+        <Spyglass ticker={ticker} activeTab={spyglassTab} onActiveTabChange={onSpyglassTabChange} />,
       );
     case "News":
-      return <News ticker={ticker} />;
+      return headed("News", <News ticker={ticker} />);
     case "My Watchlists":
       return <Watchlists />;
     case "Standing":
       return <Standing />;
     case "Beliefs":
-      return <Beliefs />;
+      return headed("Beliefs", <Beliefs />);
     case "Holdings":
       return <Holdings />;
     case "Portfolio Risk":
-      return <PortfolioRisk />;
+      return headed("Portfolio Risk", <PortfolioRisk />);
     case "Trader Journal":
       return <TraderJournal ticker={ticker} />;
     case "Company Context":
@@ -203,17 +213,17 @@ export function PanelHost({
     case "Ask Cipher":
       return <AskCipher ticker={ticker} />;
     case "Backtest":
-      return <Backtest ticker={ticker} />;
+      return headed("Backtest", <Backtest ticker={ticker} />);
     case "Strategies":
-      return <StrategyCatalog />;
+      return headed("Strategies", <StrategyCatalog />);
     case "Options Backtest":
-      return <OptionsBacktest />;
+      return headed("Options Backtest", <OptionsBacktest />);
     case "GEX Replay":
-      return <GexReplay key={ticker} ticker={ticker} />;
+      return headed("GEX Replay", <GexReplay key={ticker} ticker={ticker} />);
     case "Alerts":
-      return <Alerts ticker={ticker} />;
+      return headed("Alerts", <Alerts ticker={ticker} />);
     case "Trident":
-      return <Trident toolbarSlot={toolbarSlot} />;
+      return headed("Trident", <Trident toolbarSlot={toolbarSlot} />);
     case "Chart Saves":
       return <ChartSaves />;
     case "Setup Scanner":

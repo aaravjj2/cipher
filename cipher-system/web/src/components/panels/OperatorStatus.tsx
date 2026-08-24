@@ -11,7 +11,7 @@ export function OperatorStatus() {
   const [error, setError] = useState("");
   useEffect(() => { const ctrl = new AbortController(); fetchOperatorStatus(ctrl.signal).then(setData).catch((reason) => { if (!ctrl.signal.aborted) setError(reason instanceof Error ? reason.message : "Operator status unavailable"); }); return () => ctrl.abort(); }, []);
   if (!data) return <p style={{ color: "var(--text-mute)" }}>{error || "Checking local terminal health…"}</p>;
-  const card = "rounded-xl p-4 text-[11px]";
+  const card = "p-4 text-[11px]";
   return <div className="space-y-4" style={{ color: "var(--text)" }}>
     <section className={card} style={{ background: "var(--panel)", border: "1px solid var(--line)" }}>
       <div className="flex items-start justify-between gap-4"><div><h1 className="text-xl font-bold">Local operator status</h1><p style={{ color: "var(--text-mute)" }}>Storage, capture continuity, caches, database readability, and restore readiness. No execution capability.</p></div><b style={{ color: data.exceptions.length ? "var(--gold)" : "var(--positive)" }}>{data.exceptions.length ? `${data.exceptions.length} exception(s)` : "Healthy checks"}</b></div>

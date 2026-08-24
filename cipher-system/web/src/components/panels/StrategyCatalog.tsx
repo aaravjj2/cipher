@@ -59,7 +59,7 @@ const VERDICT_TONE: Record<string, { bg: string; fg: string }> = {
   NO_TRADES: { bg: "var(--panel-2)", fg: "var(--text-mute)" },
   WRONG_TIMEFRAME: { bg: "var(--panel-2)", fg: "var(--text-mute)" },
   ERROR: { bg: "color-mix(in srgb, #dc2626 20%, transparent)", fg: "#f87171" },
-  BLOCKED: { bg: "color-mix(in srgb, #7c3aed 22%, transparent)", fg: "#c4b5fd" },
+  BLOCKED: { bg: "color-mix(in srgb, var(--gold) 22%, transparent)", fg: "var(--gold)" },
 };
 
 function num(value: number | null | undefined, digits = 2): string {
@@ -135,8 +135,8 @@ function Toolbar({
         disabled={running}
         className="text-[11px] font-semibold px-[13px] py-[6px] rounded-[7px]"
         style={{
-          background: running ? "var(--panel-2)" : "var(--accent, #7c3aed)",
-          color: running ? "var(--text-mute)" : "#fff",
+          background: running ? "var(--panel-2)" : "var(--accent)",
+          color: running ? "var(--text-mute)" : "var(--accent-foreground)",
           border: "1px solid var(--line)",
           cursor: running ? "default" : "pointer",
         }}
@@ -227,7 +227,7 @@ export function StrategyCatalogPanel() {
              style={{ color: "var(--text-dim)" }}>
           <span><b style={{ color: "var(--text)" }}>{catalog.summary.total}</b> catalogued</span>
           <span><b style={{ color: "var(--text)" }}>{catalog.summary.evaluable}</b> evaluable</span>
-          <span><b style={{ color: "#c4b5fd" }}>{catalog.summary.blocked}</b> blocked — not scored</span>
+          <span><b style={{ color: "var(--gold)" }}>{catalog.summary.blocked}</b> blocked — not scored</span>
           {job?.result?.cost_source && (
             <span>cost: <b style={{ color: "var(--text)" }}>{job.result.cost_source}</b></span>
           )}
@@ -268,7 +268,7 @@ export function StrategyCatalogPanel() {
           wrapper owns horizontal scrolling; the table retains enough width for
           Strategy/Why text and numeric columns instead of collapsing into a
           page-level overflow trap. */}
-      <div className="overflow-x-auto rounded-[8px]" style={{ border: "1px solid var(--line)" }}>
+      <div className="overflow-x-auto rounded-[8px] overflow-y-auto" role="region" aria-label="Strategy catalog verdicts scrollport" style={{ border: "1px solid var(--line)" }}>
         <table aria-label="Strategy catalog verdicts" className="w-full min-w-[760px] text-[11.5px]" style={{ borderCollapse: "collapse" }}>
           <thead>
             <tr style={{ color: "var(--text-mute)" }}>
@@ -311,7 +311,7 @@ export function StrategyCatalogPanel() {
                   <td className="py-[7px] leading-[1.5]" style={{ color: "var(--text-dim)" }}>
                     {why}
                     {accrual && (
-                      <span style={{ color: "#c4b5fd" }}> · {accrual}</span>
+                      <span style={{ color: "var(--gold)" }}> · {accrual}</span>
                     )}
                   </td>
                 </tr>

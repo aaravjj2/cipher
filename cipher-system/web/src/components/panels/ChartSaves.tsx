@@ -21,7 +21,7 @@ import type { ChartSaveCard } from "@/types/cipher";
  * honest thumbnail is the level ladder, not invented candles.
  */
 
-/** Rank color per the app's purple/positive · red/negative convention (never green). */
+/** Rank color: gold, then amber accent, then red — not a P/L green/red scale. */
 function rankColor(index: number): string {
   if (index === 0) return "var(--gold)";
   if (index === 1) return "var(--accent)";
@@ -133,7 +133,7 @@ function Card({ card, onDelete }: { card: ChartSaveCard; onDelete: (id: string) 
           type="button"
           onClick={() => onDelete(card.id)}
           aria-label={`Delete saved chart for ${card.ticker}`}
-          className="absolute top-2 right-2 grid place-items-center w-[24px] h-[24px] rounded-full transition-colors duration-150 hover:brightness-125"
+          className="absolute top-2 right-2 grid place-items-center w-8 h-8 rounded-full transition-colors duration-150 hover:brightness-125"
           style={{ background: "rgba(7,9,15,0.65)", color: "var(--text)" }}
         >
           <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true">
@@ -242,7 +242,7 @@ export function ChartSaves() {
         </div>
       ) : (
         <div
-          className="flex items-center justify-center rounded-[10px] py-16 text-[14px]"
+          className="flex items-center justify-center py-16 text-[14px]"
           style={{ border: "1px dashed var(--line)", color: "var(--text-mute)" }}
         >
           No saved charts yet.

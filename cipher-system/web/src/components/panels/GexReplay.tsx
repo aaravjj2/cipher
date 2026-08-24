@@ -122,7 +122,7 @@ export function GexReplay({ ticker }: { ticker: string }) {
       </div>
     );
   }
-  if (!timeline.length) return <p className="text-[12px]" style={{ color: "var(--text-mute)" }}>No captured GEX snapshots for {ticker}. Capture history first, then return here to replay it.</p>;
+  if (!timeline.length) return <p className="text-[12px]" style={{ color: "var(--text-mute)" }}>No captured GEX snapshots for {ticker}. Capture history first, then return here to replay it. GEX is a public-OI heuristic, not verified dealer positioning.</p>;
 
   return (
     <div className="flex flex-col gap-4" style={{ color: "var(--text)" }}>
@@ -143,7 +143,7 @@ export function GexReplay({ ticker }: { ticker: string }) {
       {currentPayload ? <>
         <section className="grid gap-2 sm:grid-cols-3 xl:grid-cols-6">
           {[["Spot", currentPayload.snapshot.spot], ["Call wall", currentPayload.snapshot.call_wall_strike], ["Put wall", currentPayload.snapshot.put_wall_strike], ["Gamma flip", currentPayload.snapshot.gamma_flip_level], ["Global max", currentPayload.snapshot.global_max_strike], ["Contracts", currentPayload.snapshot.contracts]].map(([label, value]) =>
-            <div key={String(label)} className="rounded-[8px] p-3" style={{ background: "var(--panel)", border: "1px solid var(--line)" }}><div className="text-[9px] uppercase" style={{ color: "var(--text-mute)" }}>{label}</div><div className="mt-1 font-mono text-[13px]">{metric(value as number | null)}</div></div>
+            <div key={String(label)} className="rounded-[4px] p-3" style={{ background: "var(--panel)", border: "1px solid var(--line)" }}><div className="text-[9px] uppercase" style={{ color: "var(--text-mute)" }}>{label}</div><div className="mt-1 font-mono text-[13px]">{metric(value as number | null)}</div></div>
           )}
         </section>
         <section className="overflow-hidden rounded-[var(--radius)]" style={{ background: "var(--panel)", border: "1px solid var(--line)" }}>

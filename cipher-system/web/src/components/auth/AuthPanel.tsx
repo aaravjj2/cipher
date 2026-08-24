@@ -63,15 +63,15 @@ export function AuthPanel({ authError = null }: { authError?: string | null }) {
         </div>
 
         <form className="flex flex-col gap-4" onSubmit={submit}>
-          <label className="flex flex-col gap-1.5 text-sm">
+          <label htmlFor="cipher-auth-email" className="flex flex-col gap-1.5 text-sm">
             <span style={{ color: "var(--text-dim)" }}>Email</span>
-            <input required type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} className="rounded-md px-3 py-2" style={{ background: "var(--panel-2)", border: "1px solid var(--line)", color: "var(--text)" }} />
+            <input id="cipher-auth-email" name="email" required type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} className="rounded-[4px] px-3 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]" style={{ background: "var(--panel-2)", border: "1px solid var(--line)", color: "var(--text)" }} />
           </label>
-          {!resetMode && <label className="flex flex-col gap-1.5 text-sm">
+          {!resetMode && <label htmlFor="cipher-auth-password" className="flex flex-col gap-1.5 text-sm">
             <span style={{ color: "var(--text-dim)" }}>Password</span>
-            <input required minLength={8} type="password" autoComplete={mode === "sign-in" ? "current-password" : "new-password"} value={password} onChange={(event) => setPassword(event.target.value)} className="rounded-md px-3 py-2" style={{ background: "var(--panel-2)", border: "1px solid var(--line)", color: "var(--text)" }} />
+            <input id="cipher-auth-password" name="password" required minLength={8} type="password" autoComplete={mode === "sign-in" ? "current-password" : "new-password"} value={password} onChange={(event) => setPassword(event.target.value)} className="rounded-[4px] px-3 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]" style={{ background: "var(--panel-2)", border: "1px solid var(--line)", color: "var(--text)" }} />
           </label>}
-          <button type="submit" disabled={submitting} className="rounded-md px-3 py-2 text-sm font-semibold disabled:opacity-50" style={{ background: "var(--accent)", color: "var(--bg)" }}>
+          <button type="submit" disabled={submitting} className="rounded-[4px] px-3 py-2 text-sm font-semibold disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]" style={{ background: "var(--accent)", color: "var(--bg)" }}>
             {submitting ? "Working…" : resetMode ? "Send reset email" : mode === "sign-in" ? "Sign in" : "Create account"}
           </button>
         </form>
@@ -80,7 +80,7 @@ export function AuthPanel({ authError = null }: { authError?: string | null }) {
           <p className="text-[12px] leading-relaxed" style={{ color: "var(--text-dim)" }}>
             Explore the complete read-only Cipher workflow without an account. Guest sessions include clearly labelled MAG7 showcase content plus bounded live charts, Night Vision, and Strike Matrix views. Private writes, provider connections, system controls, and every order capability stay locked.
           </p>
-          <button type="button" disabled={guestBusy} onClick={() => { setGuestBusy(true); setMessage(null); void establishGuestSession().catch((error) => setMessage(error instanceof Error ? error.message : "Guest access failed.")).finally(() => setGuestBusy(false)); }} className="mt-3 rounded-md border px-3 py-2 text-sm font-semibold disabled:opacity-50" style={{ borderColor: "var(--line)", color: "var(--text)" }}>
+          <button type="button" disabled={guestBusy} onClick={() => { setGuestBusy(true); setMessage(null); void establishGuestSession().catch((error) => setMessage(error instanceof Error ? error.message : "Guest access failed.")).finally(() => setGuestBusy(false)); }} className="mt-3 rounded-[4px] border px-3 py-2 text-sm font-semibold disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]" style={{ borderColor: "var(--line)", color: "var(--text)" }}>
             {guestBusy ? "Opening demo…" : "Continue as guest"}
           </button>
         </div>
@@ -88,10 +88,10 @@ export function AuthPanel({ authError = null }: { authError?: string | null }) {
         {message && <p role="status" className="text-sm" style={{ color: "var(--text-dim)" }}>{message}</p>}
         {authError && <p role="alert" className="text-sm" style={{ color: "var(--neg)" }}>{authError}</p>}
 
-        {mode === "sign-in" && <button type="button" className="self-start text-sm underline underline-offset-4" style={{ color: "var(--text-dim)" }} onClick={() => { setResetMode((current) => !current); setMessage(null); }}>
+        {mode === "sign-in" && <button type="button" className="self-start text-sm underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]" style={{ color: "var(--text-dim)" }} onClick={() => { setResetMode((current) => !current); setMessage(null); }}>
           {resetMode ? "Back to sign in" : "Forgot password?"}
         </button>}
-        {!resetMode && <button type="button" className="self-start text-sm underline underline-offset-4" style={{ color: "var(--text-dim)" }} onClick={() => { setMode((current) => current === "sign-in" ? "sign-up" : "sign-in"); setMessage(null); }}>
+        {!resetMode && <button type="button" className="self-start text-sm underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]" style={{ color: "var(--text-dim)" }} onClick={() => { setMode((current) => current === "sign-in" ? "sign-up" : "sign-in"); setMessage(null); }}>
           {mode === "sign-in" ? "Need an account? Sign up" : "Already have an account? Sign in"}
         </button>}
       </section>
