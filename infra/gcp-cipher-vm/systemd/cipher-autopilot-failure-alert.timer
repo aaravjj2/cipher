@@ -2,8 +2,11 @@
 Description=Check Cipher paper-autopilot failures every two minutes
 
 [Timer]
-OnBootSec=2min
-OnUnitActiveSec=2min
+# Wall-clock cadence: Persistent=true only has meaning with OnCalendar, and a
+# calendar schedule catches up missed checks after downtime (OnBootSec/
+# OnUnitActiveSec silently skipped them).
+OnCalendar=*-*-* *:0/2:00
+AccuracySec=5s
 Persistent=true
 Unit=cipher-autopilot-failure-alert.service
 

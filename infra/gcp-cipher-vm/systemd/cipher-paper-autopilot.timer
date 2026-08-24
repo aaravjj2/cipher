@@ -9,6 +9,10 @@ OnCalendar=Mon..Fri *-*-* 09:15:00 America/New_York
 OnCalendar=Mon..Fri *-*-* 09:35/5:00 America/New_York
 OnCalendar=Mon..Fri *-*-* 10:00/5:00 America/New_York
 OnCalendar=Mon..Fri *-*-* 11:00/5:00 America/New_York
+# Afternoon monitor cadence: the executor keeps marking positions and applying
+# 15:45 ET exits after entry confirmation ends at 11:30; these sparse cycles
+# keep status.json and the cycle trace fresh instead of stale for ~21h.
+OnCalendar=Mon..Fri *-*-* 12:00/30:00 America/New_York
 Persistent=true
 RandomizedDelaySec=10
 Unit=cipher-paper-autopilot.service
