@@ -98,19 +98,22 @@ def build_skew_map(
             quadrant = "hedged_rally"
         else:
             quadrant = "fear"
-        quality = "usable"
+        quality = "provisional" if row["sessions"] < 20 else "usable"
         quality_reasons = []
         if row["sessions"] < 20:
-            quality, quality_reasons = "provisional", [f"only {row['sessions']} stored sessions"]
+            quality_reasons.append(f"only {row['sessions']} stored sessions")
         if (row["iv_coverage"] or 0) < .7 or (row["quote_coverage"] or 0) < .5:
-            quality = "limited"
             quality_reasons.append("thin IV or quote coverage")
+            if row["sessions"] >= 20:
+                quality = "limited"
         if raw is not None and abs(raw) > 1.0:
-            quality = "suspect"
             quality_reasons.append("raw skew exceeds 100 volatility points")
+            if row["sessions"] >= 20:
+                quality = "suspect"
         if price_return is None:
-            quality = "limited"
             quality_reasons.append("aligned one-month return unavailable")
+            if row["sessions"] >= 20:
+                quality = "limited"
         return {
             **row, "sector": SECTORS.get(row["ticker"], "Other"),
             "return_1m_pct": price_return, "price_as_of": price_as_of,
