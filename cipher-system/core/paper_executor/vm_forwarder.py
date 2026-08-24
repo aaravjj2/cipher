@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import os
+import tempfile
 import urllib.request
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -22,10 +24,22 @@ class VmForwarder:
     def enqueue(self, batch_id: str, payload: dict[str, Any]) -> str:
         item_id = sha256_id("forward", {"batch_id": batch_id, "payload": payload})
         body = json.dumps(payload, default=str)
-        tmp = self.queue_dir / f"{item_id}.tmp"
-        final = self.queue_dir / f"{item_id}.json"
-        tmp.write_text(body, encoding="utf-8")
-        tmp.replace(final)
+        # Crash-safe write: unique temp name plus fsync before the atomic
+        # rename, so a crash can never leave a queue file disagreeing with the
+        # committed database row.
+        handle, temporary_name = tempfile.mkstemp(
+            dir=self.queue_dir, prefix=f".{item_id}.", suffix=".tmp"
+        )
+        temporary = Path(temporary_name)
+        try:
+            with os.fdopen(handle, "w", encoding="utf-8") as stream:
+                stream.write(body)
+                stream.flush()
+                os.fsync(stream.fileno())
+            temporary.replace(self.queue_dir / f"{item_id}.json")
+        except BaseException:
+            temporary.unlink(missing_ok=True)
+            raise
         with self.db.connect() as db:
             db.execute(
                 "insert or ignore into forward_queue(id, batch_id, status, endpoint, payload_json) values (?, ?, ?, ?, ?)",

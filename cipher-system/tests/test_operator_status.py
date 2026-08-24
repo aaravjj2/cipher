@@ -34,11 +34,22 @@ def test_backup_is_hash_checked_and_restore_verified(tmp_path, monkeypatch):
 
 
 def test_operator_status_never_estimates_unproven_disk_runway(tmp_path, monkeypatch):
+    import shutil as _shutil
+
     monkeypatch.setattr(operator_status, "DATA", tmp_path)
     monkeypatch.setattr(operator_status, "SMALL_STORES", ("missing.sqlite",))
     monkeypatch.setattr(operator_status, "CAPTURES", {"capture": "missing/*.json"})
     monkeypatch.setattr(operator_status, "BACKUPS", tmp_path / "backups")
     monkeypatch.setattr(provider_telemetry, "DEFAULT_DB", tmp_path / "operational_metrics.sqlite")
+    # Hermetic disk probe: the host's real free-space ratio must not leak into
+    # the expected exception list (a genuinely low-disk host would otherwise
+    # append its own filesystem warning here).
+    usage = _shutil.disk_usage(tmp_path)
+    half = usage.total // 2
+    monkeypatch.setattr(
+        operator_status.shutil, "disk_usage",
+        lambda _path: type(usage)(total=usage.total, used=half, free=half),
+    )
     result = operator_status.status(caches=[{"name": "quote", "entries": 2}])
     assert result["execution_capability"] is False
     assert result["disk"]["runway_status"] == "INSUFFICIENT_HISTORY"
