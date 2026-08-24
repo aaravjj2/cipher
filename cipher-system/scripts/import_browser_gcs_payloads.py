@@ -57,6 +57,16 @@ class ImportValidationError(ValueError):
     """Raised when a raw browser batch is structurally unsafe to import."""
 
 
+class UnsupportedScanTypeSkipped(ImportValidationError):
+    """Structurally valid corpus file that is simply not a scanner batch.
+
+    The mirrored device-windows folder legitimately contains non-scanner
+    captures (watchlists, notes). Those are out of scope for scanner-ingest,
+    so they are skipped by classification rather than counted as errors that
+    fail the whole import pass.
+    """
+
+
 @dataclass(frozen=True)
 class LoadedBatch:
     path: Path
@@ -210,7 +220,7 @@ def load_batch(path: Path, max_file_bytes: int = MAX_FILE_BYTES) -> LoadedBatch:
 
     scan_type = str(payload.get("scan_type") or "").strip().lower()
     if scan_type not in ALLOWED_SCAN_TYPES:
-        raise ImportValidationError(
+        raise UnsupportedScanTypeSkipped(
             f"scan_type must be one of {sorted(ALLOWED_SCAN_TYPES)}"
         )
 
@@ -483,6 +493,14 @@ def import_file(
                 "invalid_records": response.get("invalid_records"),
                 "warnings": list(batch.warnings),
                 "governance_registration": governance_registration,
+            }
+        except UnsupportedScanTypeSkipped as exc:
+            # Out-of-scope corpus file: remembered as a skip, never an error.
+            return {
+                "path": str(path),
+                "batch_id": batch.batch_id if batch else None,
+                "status": "skipped_unsupported_scan_type",
+                "reason": str(exc),
             }
         except Exception as exc:
             _mark_error(db, path=path, batch=batch, error=str(exc))
