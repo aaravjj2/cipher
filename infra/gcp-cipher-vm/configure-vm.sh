@@ -134,7 +134,6 @@ sudo systemctl enable \
   cipher-core.service \
   cipher-web.service \
   cipher-devspace.service \
-  cipher-tradier.service \
   cipher-gex.service \
   cipher-backup.timer \
   cipher-governance-catalog.timer \
@@ -151,7 +150,7 @@ sudo systemctl restart cipher-secrets.service
 sleep 2
 
 # Start application services
-for svc in cipher-core cipher-web cipher-devspace cipher-tradier cipher-gex; do
+for svc in cipher-core cipher-web cipher-devspace cipher-gex; do
   sudo systemctl restart "$svc" || echo "WARN: $svc failed to start" >&2
 done
 
