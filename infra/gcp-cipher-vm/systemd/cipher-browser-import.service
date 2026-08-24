@@ -14,7 +14,9 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=full
 ProtectHome=read-only
-ReadWritePaths=/home/aarav/Aarav/cipher/cipher-system/data/browser_ingest
+# browser_ingest receives the corpus; the governance hooks also register every
+# accepted batch into the research_registry ledger under data/governance.
+ReadWritePaths=/home/aarav/Aarav/cipher/cipher-system/data/browser_ingest /home/aarav/Aarav/cipher/cipher-system/data/governance
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=cipher-browser-import
