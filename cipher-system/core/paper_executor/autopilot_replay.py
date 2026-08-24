@@ -285,8 +285,11 @@ def replay_history(
 
 def write_report(report: dict[str, Any], out_dir: Path) -> dict[str, str]:
     out_dir.mkdir(parents=True, exist_ok=True)
-    json_path = out_dir / "autopilot_replay_2026-08-19.json"
-    md_path = out_dir / "autopilot_replay_2026-08-19.md"
+    # Derive the report name from the replay itself so consecutive runs never
+    # silently overwrite one another under a stale hardcoded date.
+    day = str(report.get("generated_at") or "")[:10].replace(":", "-") or "undated"
+    json_path = out_dir / f"autopilot_replay_{day}.json"
+    md_path = out_dir / f"autopilot_replay_{day}.md"
     json_path.write_text(json.dumps(report, indent=2, default=str), encoding="utf-8")
     summary = report["summary"]
     lines = [

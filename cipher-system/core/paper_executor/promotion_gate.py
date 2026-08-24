@@ -70,8 +70,10 @@ def eligible_strategies(registry_path: Path = REGISTRY_PATH) -> set[str]:
                 "select strategy_id, to_state from promotion_events order by decided_at"
             ).fetchall()
         elif {"strategy_id", "state"}.issubset(event_columns):
+            # Legacy shape has no timestamp column; rowid preserves append order
+            # so "latest" is deterministic instead of whatever SQLite returns.
             rows = conn.execute(
-                "select strategy_id, state from promotion_events"
+                "select strategy_id, state from promotion_events order by rowid"
             ).fetchall()
         else:
             return set()

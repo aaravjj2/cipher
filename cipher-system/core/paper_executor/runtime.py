@@ -27,6 +27,22 @@ from .validation import validate_card
 from .vm_forwarder import VmForwarder
 
 
+# A simulated-fill rejection must become a classified entry decision, never a
+# generic worker exception. This maps fill-simulator ValueError messages to the
+# same SkipReason vocabulary used everywhere else on the entry path.
+SIMULATION_SKIP_REASONS = {
+    "stale quote": "SKIPPED_MARKET_DATA_UNAVAILABLE",
+    "invalid quote": "SKIPPED_MARKET_DATA_UNAVAILABLE",
+    "invalid spread debit": "SKIPPED_NO_CONTRACT",
+    "wide spread": "SKIPPED_WIDE_SPREAD",
+}
+
+# After a paper-broker exit submission fails or expires unfilled, hold off
+# resubmitting for this many seconds so the 0.5 s monitor loop cannot hammer
+# the broker API. The position stays open and continues to be marked.
+EXIT_RETRY_BACKOFF_SECONDS = 30.0
+
+
 @dataclass
 class WorkerState:
     name: str
@@ -68,6 +84,8 @@ class RuntimeCoordinator:
         }
         self.episodes = EpisodeTracker(db, cfg.scanner.episode_cooldown_minutes)
         self.risk = RiskGuard(cfg)
+        self._exit_retry_after: dict[str, float] = {}
+        self._next_due_forward_check = 0.0
         self.mode = cfg.safety.default_start_mode
         self.reconciliation_passed = False
         self.started_at = datetime.now(timezone.utc)
@@ -391,14 +409,18 @@ class RuntimeCoordinator:
         self.db.persist_candidates(episode_id, candidates)
         if not selected or not selected.quote:
             return self._entry_block(episode_id, card, "SKIPPED_NO_CONTRACT")
-        entry = simulate_entry(
-            selected.quote,
-            self.cfg.simulation,
-            self.cfg.contract,
-            self.cfg.portfolio.quantity_per_trade,
-            self.cfg.market_data.quote_maximum_age_seconds,
-            card.captured_at,
-        )
+        try:
+            entry = simulate_entry(
+                selected.quote,
+                self.cfg.simulation,
+                self.cfg.contract,
+                self.cfg.portfolio.quantity_per_trade,
+                self.cfg.market_data.quote_maximum_age_seconds,
+                card.captured_at,
+            )
+        except ValueError as exc:
+            reason = SIMULATION_SKIP_REASONS.get(str(exc), "SKIPPED_MARKET_DATA_UNAVAILABLE")
+            return self._entry_block(episode_id, card, reason, str(exc))
         position_id = sha256_id("position", {"episode_id": episode_id, "symbol": selected.contract.symbol})
         status = "SHADOW_OPEN" if self.mode == Mode.SHADOW else "OPEN"
         order_id = sha256_id("paper_order", {"position": position_id, "side": "BUY_TO_OPEN"})
@@ -518,15 +540,19 @@ class RuntimeCoordinator:
                 "accepted_spreads": sum(1 for spread in spread_candidates if spread.accepted),
             })
             return self._entry_block(episode_id, card, "SKIPPED_NO_CONTRACT")
-        entry = simulate_spread_entry(
-            selected.long_leg.quote,
-            selected.short_leg.quote,
-            self.cfg.simulation,
-            self.cfg.contract,
-            self.cfg.portfolio.quantity_per_trade,
-            self.cfg.market_data.quote_maximum_age_seconds,
-            card.captured_at,
-        )
+        try:
+            entry = simulate_spread_entry(
+                selected.long_leg.quote,
+                selected.short_leg.quote,
+                self.cfg.simulation,
+                self.cfg.contract,
+                self.cfg.portfolio.quantity_per_trade,
+                self.cfg.market_data.quote_maximum_age_seconds,
+                card.captured_at,
+            )
+        except ValueError as exc:
+            reason = SIMULATION_SKIP_REASONS.get(str(exc), "SKIPPED_MARKET_DATA_UNAVAILABLE")
+            return self._entry_block(episode_id, card, reason, str(exc))
         position_id = sha256_id("position", {"episode_id": episode_id, "symbol": selected.symbol})
         status = "SHADOW_OPEN" if self.mode == Mode.SHADOW else "OPEN"
         payload = {
@@ -638,7 +664,7 @@ class RuntimeCoordinator:
                 "drawdown_from_peak_pct": peak - pnl_pct,
                 "holding_seconds": (now - position.opened_at).total_seconds(),
                 "underlying_price": underlying,
-                "quote_age_seconds": (now - option_quote.timestamp.astimezone(timezone.utc)).total_seconds(),
+                "quote_age_seconds": max(0.0, (now - option_quote.timestamp.astimezone(timezone.utc)).total_seconds()),
                 "feed_degraded": self.quote_manager.degraded,
             }
             self._record_contract_quote(row["id"], row.get("episode_id"), row["symbol"],
@@ -649,10 +675,17 @@ class RuntimeCoordinator:
             reason = recovery_reason or exit_reason(position, option_quote, underlying, self.cfg.exit, now)
             if reason:
                 if self.mode == Mode.PAPER and self.cfg.execution.backend == "alpaca_paper":
+                    retry_key = f"{row['id']}:{reason}"
+                    ready_at = self._exit_retry_after.get(retry_key)
+                    if ready_at is not None and time.monotonic() < ready_at:
+                        results.append({"position_id": row["id"], "closed": False, "exit_reason": reason, "status": "broker_exit_backoff"})
+                        continue
                     broker_fill = self._paper_broker_exit(row, option_quote, reason, now)
                     if broker_fill is None:
+                        self._exit_retry_after[retry_key] = time.monotonic() + EXIT_RETRY_BACKOFF_SECONDS
                         results.append({"position_id": row["id"], "closed": False, "exit_reason": reason, "status": "broker_exit_unfilled"})
                         continue
+                    self._exit_retry_after.pop(retry_key, None)
                     closed = self.db.close_position(row["id"], broker_fill, reason, {**mark, "execution_backend": "alpaca_paper", "broker_fill_price": broker_fill})
                     results.append({"position_id": row["id"], "closed": closed, "exit_reason": reason, "execution_backend": "alpaca_paper"})
                     continue
@@ -740,8 +773,8 @@ class RuntimeCoordinator:
             "drawdown_from_peak_pct": peak - pnl_pct,
             "holding_seconds": (now - position.opened_at).total_seconds(),
             "underlying_price": underlying,
-            "long_quote": long_quote,
-            "short_quote": short_quote,
+            "long_quote_age_seconds": max(0.0, (now - long_quote.timestamp.astimezone(timezone.utc)).total_seconds()),
+            "short_quote_age_seconds": max(0.0, (now - short_quote.timestamp.astimezone(timezone.utc)).total_seconds()),
             "feed_degraded": self.quote_manager.degraded,
         }
         self._record_contract_quote(row["id"], row.get("episode_id"), long_symbol, "spread_long", long_quote, now)
@@ -830,6 +863,16 @@ class RuntimeCoordinator:
         try:
             item_id = self.forward_queue.get(timeout=0.25)
         except queue.Empty:
+            # Retry scheduling must not depend on a restart: periodically requeue
+            # database items whose backoff has elapsed so a transient network
+            # failure cannot strand a forward until the next process start.
+            if time.monotonic() >= self._next_due_forward_check:
+                self._next_due_forward_check = time.monotonic() + 60.0
+                for item_id in self.db.due_forward_items(datetime.now(timezone.utc).isoformat())[:50]:
+                    try:
+                        self.forward_queue.put_nowait(item_id)
+                    except queue.Full:
+                        break
             return
         self.forwarder.attempt(item_id)
 

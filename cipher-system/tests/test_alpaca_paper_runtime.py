@@ -33,6 +33,14 @@ class FailedBroker(FilledBroker):
         raise RuntimeError("paper provider unavailable")
 
 
+class UnfilledExitBroker(FilledBroker):
+    def wait_for_terminal(self, broker_order_id, timeout_seconds, poll_interval_seconds):
+        intent = self.intents[-1]
+        if intent.side == "sell":
+            return {"id": broker_order_id, "client_order_id": intent.client_order_id, "symbol": intent.contract_symbol, "status": "accepted", "average_fill_price": None, "paper_only": True}
+        return super().wait_for_terminal(broker_order_id, timeout_seconds, poll_interval_seconds)
+
+
 def make_runtime(tmp_path, broker):
     md = MockMarketData()
     cfg = ExecutorConfig(
@@ -87,6 +95,22 @@ def test_alpaca_paper_exit_closes_only_after_broker_fill(tmp_path):
     assert result["execution_backend"] == "alpaca_paper"
     assert runtime.db.rows("paper_positions")[0]["exit_price"] == 1.35
     assert [intent.side for intent in broker.intents] == ["buy", "sell"]
+
+
+def test_unfilled_broker_exit_backs_off_before_resubmitting(tmp_path):
+    broker = UnfilledExitBroker()
+    runtime, md = make_runtime(tmp_path, broker)
+    runtime.ingest_payload(signal(md.now))
+    runtime.drain_for_tests()
+    md.option_bid = 1.35
+    md.option_ask = 1.45
+    md.now += timedelta(seconds=1)
+    first = runtime.monitor_once(md.now)[0]
+    assert first["status"] == "broker_exit_unfilled"
+    submissions_after_first_failure = len(broker.intents)
+    second = runtime.monitor_once(md.now + timedelta(seconds=1))[0]
+    assert second["status"] == "broker_exit_backoff"
+    assert len(broker.intents) == submissions_after_first_failure
 
 
 def test_unknown_broker_position_blocks_reconciliation(tmp_path):

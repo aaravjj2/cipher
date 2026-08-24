@@ -51,8 +51,10 @@ try:
                     env[k.strip()] = v.strip().strip('"').strip("'")
     key = env.get("ALPACA_API_KEY") or os.environ.get("ALPACA_API_KEY")
     sec = env.get("ALPACA_SECRET_KEY") or os.environ.get("ALPACA_SECRET_KEY")
+    # Paper hostname only: the project forbids live brokerage hostnames, and the
+    # read-only clock endpoint is identical on the paper API.
     req = urllib.request.Request(
-        "https://api.alpaca.markets/v2/clock",
+        "https://paper-api.alpaca.markets/v2/clock",
         headers={"APCA-API-KEY-ID": key or "", "APCA-API-SECRET-KEY": sec or ""},
     )
     with urllib.request.urlopen(req, timeout=15) as r:

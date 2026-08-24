@@ -31,9 +31,14 @@ def in_entry_window(
     now: datetime | None = None,
     *,
     start: time = time(9, 35),
-    end: time = time(15, 0),
+    end: time = time(11, 30),
 ) -> bool:
-    """Return whether ``now`` is in the weekday entry window in New York."""
+    """Return whether ``now`` is in the weekday entry window in New York.
+
+    The window matches the autopilot plan contract (``latest_entry_et: 11:30``
+    and ``phase_at``'s ENTRY_CONFIRMATION end) so standalone observation runs
+    never submit cards the planner would classify as outside its own window.
+    """
     current = now or datetime.now(timezone.utc)
     if current.tzinfo is None:
         raise ValueError("now must be timezone-aware")

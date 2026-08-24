@@ -55,7 +55,10 @@ def _read(path: Path) -> dict[str, Any] | None:
 
 def _executor(url: str) -> dict[str, Any]:
     try:
-        with urlopen(Request(url, headers={"Accept": "application/json"}), timeout=0.75) as response:
+        # A short timeout under scan load flaps the operator view to DATA_FAILURE
+        # even while the executor is healthy; 2.5 s stays responsive without
+        # reporting false failures.
+        with urlopen(Request(url, headers={"Accept": "application/json"}), timeout=2.5) as response:
             payload = json.loads(response.read().decode("utf-8"))
         observed = payload.get("observability") or {}
         readiness = payload.get("market_data_readiness") or {}
@@ -108,12 +111,19 @@ def _executor(url: str) -> dict[str, Any]:
             },
         }
     except Exception as exc:
+        # Mirror the success schema so consumers never have to handle two shapes.
         return {
             "reachable": False, "reason": type(exc).__name__, "mode": "offline",
             "operating_state": "DATA_FAILURE", "market_data_ready": False,
+            "provider_session_ready": False, "last_chain_success_at": None,
+            "reconciliation_passed": False, "quote_feed_degraded": None,
+            "entry_blocked_reason": None, "last_entry_block": None,
             "open_shadow_positions": 0, "counts": {},
+            "last_mark_at": None, "last_worker_exception": None,
             "execution_backend": "unavailable",
-            "paper_broker": {"backend": "unavailable", "ready": False, "paper_only": True, "recent_orders": []},
+            "paper_broker": {"backend": "unavailable", "ready": False, "paper_only": True,
+                             "last_error": None, "account": None,
+                             "unknown_positions": [], "recent_orders": []},
         }
 
 

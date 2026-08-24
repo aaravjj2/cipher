@@ -249,7 +249,7 @@ class PaperExecutorDatabase:
                 "open_paper_positions": db.execute("select count(*) from paper_positions where status = 'OPEN'").fetchone()[0],
                 "closed_positions": db.execute("select count(*) from paper_positions where status = 'CLOSED'").fetchone()[0],
                 "entry_blocks": db.execute("select count(*) from system_events where event_type = 'ENTRY_BLOCKED'").fetchone()[0],
-                "forward_backlog": db.execute("select count(*) from forward_queue where status != 'SENT'").fetchone()[0],
+                "forward_backlog": db.execute("select count(*) from forward_queue where status in ('PENDING', 'FAILED_RETRYABLE')").fetchone()[0],
             }
             latest_batch = db.execute("select received_at from signal_batches order by received_at desc limit 1").fetchone()
             latest_episode = db.execute("select last_seen_at from signal_episodes order by last_seen_at desc limit 1").fetchone()
@@ -284,7 +284,7 @@ class PaperExecutorDatabase:
             rows = db.execute(
                 """
                 select id from forward_queue
-                where status != 'SENT'
+                where status in ('PENDING', 'FAILED_RETRYABLE')
                   and (next_attempt_at is null or next_attempt_at <= ?)
                 order by attempts asc
                 """,

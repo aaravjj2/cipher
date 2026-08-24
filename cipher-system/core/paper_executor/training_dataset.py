@@ -8,6 +8,7 @@ blocked until the prospective sample is large and spans enough market dates.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hashlib
 import json
 import math
@@ -113,7 +114,9 @@ def _sample(db: sqlite3.Connection, position: sqlite3.Row) -> dict[str, Any] | N
         "closed_at": position["closed_at"],
         "features": features,
         "labels": {
-            "profitable": bool(pnl_pct is not None and pnl_pct > 0),
+            # Unknown P&L (no executable exit mark) must stay unknown; labelling
+            # it False would train the model that unmeasurable trades lose.
+            "profitable": None if pnl_pct is None else bool(pnl_pct > 0),
             "pnl_pct": round(pnl_pct, 6) if pnl_pct is not None else None,
             "mfe_pct": _number(marks[1]),
             "mae_pct": _number(marks[0]),
@@ -142,7 +145,9 @@ def build_dataset(
     samples: list[dict[str, Any]] = []
     excluded = Counter()
     if database.is_file():
-        with sqlite3.connect(database) as db:
+        # closing() guarantees the read handle against the live executor
+        # database is released; `with sqlite3.connect(...)` alone only commits.
+        with contextlib.closing(sqlite3.connect(database)) as db:
             db.row_factory = sqlite3.Row
             positions = db.execute(
                 "select * from paper_positions where status = 'CLOSED' and closed_at is not null and exit_price is not null order by opened_at"
@@ -173,7 +178,12 @@ def build_dataset(
     }
     for name, rows in by_split.items():
         _write(output / f"{name}.jsonl", "".join(json.dumps(row, sort_keys=True) + "\n" for row in rows))
-    _write(output / "prospective.jsonl", "".join(json.dumps(row, sort_keys=True) + "\n" for row in samples))
+    # The prospective export is the trainable forward record: it must exclude
+    # the chronological holdout (and its embargo buffer) so nothing trained on
+    # it can peek at the evaluation dates.
+    held_out = set(test_dates) | set(embargo_dates)
+    prospective_rows = [row for row in samples if row["market_date"] not in held_out]
+    _write(output / "prospective.jsonl", "".join(json.dumps(row, sort_keys=True) + "\n" for row in prospective_rows))
     digest = hashlib.sha256("".join(row["sample_id"] for row in samples).encode()).hexdigest()
     ready = len(samples) >= minimum_samples and len(dates) >= minimum_market_dates and bool(test_dates)
     blockers = []
@@ -192,7 +202,7 @@ def build_dataset(
         "market_dates": len(dates),
         "train_samples": len(by_split["train"]),
         "test_samples": len(by_split["test"]),
-        "prospective_samples": len(samples),
+        "prospective_samples": len(prospective_rows),
         "embargo_dates": embargo_dates,
         "excluded": dict(excluded),
         "training_status": "READY_FOR_OFFLINE_EXPERIMENT" if ready else "INSUFFICIENT_PROSPECTIVE_DATA",

@@ -291,3 +291,40 @@ def test_runtime_shadow_debit_spread_entry_and_take_profit(tmp_path):
     result = rt.monitor_once(md.now)
     assert result[0]["closed"] is True
     assert result[0]["exit_reason"] == "option_take_profit"
+
+
+def test_stale_quote_at_entry_is_a_classified_block_not_worker_error(tmp_path):
+    class LaggingQuotes(MockMarketData):
+        def quotes(self, symbols):
+            out = super().quotes(symbols)
+            return {
+                symbol: Quote(quote.symbol, quote.bid, quote.ask,
+                              quote.timestamp - timedelta(seconds=120),
+                              volume=quote.volume, open_interest=quote.open_interest)
+                for symbol, quote in out.items()
+            }
+
+    md = MockMarketData()
+    rt = runtime(tmp_path, LaggingQuotes())
+    rt.ingest_payload(signal(md.now))
+    rt.drain_for_tests()
+    assert rt.db.rows("paper_positions") == []
+    worker_errors = [row for row in rt.db.rows("system_events") if row["event_type"] == "WORKER_ERROR"]
+    assert worker_errors == []
+    block = rt.db.operational_snapshot()["last_entry_block"]
+    assert block["reason"] == "SKIPPED_MARKET_DATA_UNAVAILABLE"
+    assert block["error"] == "stale quote"
+
+
+def test_mark_quote_age_is_never_negative(tmp_path):
+    import json
+
+    md = MockMarketData()
+    rt = runtime(tmp_path, md, vm_enabled=False)
+    open_shadow_position(rt, md)
+    earlier = md.now - timedelta(seconds=1)
+    rt.monitor_once(earlier)
+    marks = rt.db.rows("paper_marks")
+    assert marks
+    payload = json.loads(marks[-1]["payload_json"])
+    assert payload["quote_age_seconds"] == 0.0

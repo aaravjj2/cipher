@@ -285,47 +285,62 @@ def run_cycle(
                 confirm_strategies = ("cipher", "flash", "flash_agentic")
                 scans: list[dict[str, Any]] = []
                 scan_errors: list[str] = []
-                with service_provider_session(core_url):
-                    for strategy in confirm_strategies:
+                session_error: dict[str, Any] | None = None
+                try:
+                    with service_provider_session(core_url):
+                        for strategy in confirm_strategies:
+                            try:
+                                scans.append(request_json(
+                                    scanner_url(core_url, strategy, tickers, workers=1), timeout=600
+                                ))
+                            except (urllib.error.URLError, TimeoutError, ValueError) as exc:
+                                scan_errors.append(f"{strategy}:{type(exc).__name__}")
+                except (urllib.error.URLError, TimeoutError, ValueError, RuntimeError) as exc:
+                    # Symmetric with the premarket branch: a missing proxy token or
+                    # a failed provider-session connect is a retryable blocked
+                    # cycle, never a scheduler traceback.
+                    session_error = {
+                        "action": "blocked", "reason": "premarket_provider_unavailable",
+                        "retryable": True, "error_type": type(exc).__name__,
+                    }
+                if session_error is not None:
+                    status.update(session_error)
+                else:
+                    payload = confirmation_payload(plan, scans, now=now)
+                    if scan_errors:
+                        status["scan_errors"] = scan_errors
+                    if payload["cards"]:
                         try:
-                            scans.append(request_json(
-                                scanner_url(core_url, strategy, tickers, workers=1), timeout=600
-                            ))
+                            ensure_executor_market_data(executor_url, str(payload["cards"][0]["ticker"]))
+                            accepted = request_json(executor_url, payload=payload, timeout=30)
                         except (urllib.error.URLError, TimeoutError, ValueError) as exc:
-                            scan_errors.append(f"{strategy}:{type(exc).__name__}")
-                payload = confirmation_payload(plan, scans, now=now)
-                if payload["cards"]:
-                    try:
-                        ensure_executor_market_data(executor_url, str(payload["cards"][0]["ticker"]))
-                        accepted = request_json(executor_url, payload=payload, timeout=30)
-                    except (urllib.error.URLError, TimeoutError, ValueError) as exc:
-                        status.update({
-                            "action": "blocked", "reason": "executor_market_data_unavailable",
-                            "error_type": type(exc).__name__, "confirmed": 0,
-                            "rejected": len(payload["rejected"]), "plan_id": plan.get("plan_id"),
-                        })
+                            status.update({
+                                "action": "blocked", "reason": "executor_market_data_unavailable",
+                                "error_type": type(exc).__name__, "confirmed": 0,
+                                "rejected": len(payload["rejected"]), "plan_id": plan.get("plan_id"),
+                            })
+                        else:
+                            status.update({
+                                "action": "paper_confirmations_submitted",
+                                "plan_id": plan.get("plan_id"),
+                                "confirmed": len(payload["cards"]),
+                                "rejected": len(payload["rejected"]),
+                                "batch_id": accepted.get("batch_id"),
+                                "confirmed_tickers": [row.get("ticker") for row in payload["cards"]],
+                                "rejection_reason_counts": _reason_counts(payload["rejected"]),
+                                "confirmation_sources": payload.get("confirmation_sources") or [],
+                                "scan_types": payload.get("scan_types") or [],
+                            })
                     else:
                         status.update({
-                            "action": "paper_confirmations_submitted",
+                            "action": "no_confirmed_entries",
                             "plan_id": plan.get("plan_id"),
-                            "confirmed": len(payload["cards"]),
-                            "rejected": len(payload["rejected"]),
-                            "batch_id": accepted.get("batch_id"),
-                            "confirmed_tickers": [row.get("ticker") for row in payload["cards"]],
+                            "confirmed": 0,
+                            "rejected": payload["rejected"],
                             "rejection_reason_counts": _reason_counts(payload["rejected"]),
                             "confirmation_sources": payload.get("confirmation_sources") or [],
                             "scan_types": payload.get("scan_types") or [],
                         })
-                else:
-                    status.update({
-                        "action": "no_confirmed_entries",
-                        "plan_id": plan.get("plan_id"),
-                        "confirmed": 0,
-                        "rejected": payload["rejected"],
-                        "rejection_reason_counts": _reason_counts(payload["rejected"]),
-                        "confirmation_sources": payload.get("confirmation_sources") or [],
-                        "scan_types": payload.get("scan_types") or [],
-                    })
     elif phase == AutopilotPhase.OPENING_WAIT:
         status.update({"action": "wait_for_confirmed_0935_bar", "entries_allowed": False})
     elif phase in {AutopilotPhase.MONITOR_ONLY, AutopilotPhase.FORCE_CLOSE}:

@@ -173,13 +173,29 @@ def make_handler(app: PaperExecutorApp):
 
 
 def run(config_path: str | None = None) -> None:
+    import signal
+
     cfg = load_config(config_path)
     app = PaperExecutorApp(cfg)
     app.runtime.start()
     server = ThreadingHTTPServer((cfg.server.host, cfg.server.port), make_handler(app))
+    stop_event = threading.Event()
+
+    def _request_shutdown(signum, frame) -> None:
+        stop_event.set()
+
+    # systemd sends SIGTERM on restart/stop; record a clean SHUTDOWN event and
+    # stop the worker threads instead of dying mid-write.
+    signal.signal(signal.SIGTERM, _request_shutdown)
+    signal.signal(signal.SIGINT, _request_shutdown)
+    server_thread = threading.Thread(target=server.serve_forever, name="paper-executor-http", daemon=True)
+    server_thread.start()
     try:
-        threading.Thread(target=server.serve_forever, daemon=False).start()
-    except KeyboardInterrupt:
+        while not stop_event.wait(0.5):
+            pass
+    finally:
+        server.shutdown()
+        server_thread.join(timeout=5)
         app.runtime.stop()
 
 
