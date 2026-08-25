@@ -90,6 +90,22 @@ def test_an_unparseable_build_date_is_treated_as_stale(tmp_path: Path) -> None:
     assert health.profile_stale is True
 
 
+def test_a_frozen_profile_is_never_stale_regardless_of_age(tmp_path: Path) -> None:
+    """A profile whose source capture was retired by decision is a final artifact: age no
+    longer implies staleness, and the freeze reason is surfaced instead."""
+    path = _profile(tmp_path)
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload["frozen"] = True
+    payload["freeze_reason"] = "source retired 2026-08-24; parquet archive retains the days"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    late = datetime(2027, 3, 30, tzinfo=timezone.utc)
+    health = read(path, now=late)
+    assert health.profile_stale is False
+    assert health.profile_age_days is not None and health.profile_age_days > PROFILE_STALE_AFTER_DAYS
+    assert "frozen artifact" in health.reason
+    assert "window is final" in health.verdict
+
+
 def test_a_missing_profile_reports_unknown_rather_than_continuous(tmp_path: Path) -> None:
     health = read(tmp_path / "absent.json", now=NOW)
     assert health.available is False

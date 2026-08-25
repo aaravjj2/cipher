@@ -67,6 +67,8 @@ class CaptureHealth:
                 "the profile is stale, so this describes coverage as of the last rebuild, "
                 "not as of today"
             )
+        if self.reason.startswith("frozen artifact"):
+            return f"{self.reason}; window is final"
         if self.gap_count == 0:
             return "continuous over the captured window"
         return f"{self.gap_count} imperfect day(s) in the captured window"
@@ -130,6 +132,9 @@ def read(path: Path = DEFAULT_PROFILE, *, now: datetime | None = None) -> Captur
     built_at = payload.get("created_at")
     age = _age_days(str(built_at) if built_at else None, now)
 
+    frozen = payload.get("frozen") is True
+    frozen_reason = str(payload.get("freeze_reason") or "")
+
     return CaptureHealth(
         available=True,
         first_event=(str(window["first_event"]) if window.get("first_event") else None),
@@ -141,6 +146,11 @@ def read(path: Path = DEFAULT_PROFILE, *, now: datetime | None = None) -> Captur
         profile_age_days=age,
         # An unparseable or absent build date is treated as stale rather than fresh: reporting
         # unknown age as current is the one error that would make a decision wrong instead of
-        # merely uninformed.
-        profile_stale=age is None or age > PROFILE_STALE_AFTER_DAYS,
+        # merely uninformed. A profile explicitly marked frozen is the opposite case: its
+        # source capture was retired by decision, so age no longer implies staleness — the
+        # window it describes is final, and that fact is surfaced in the reason.
+        profile_stale=(
+            (age is None or age > PROFILE_STALE_AFTER_DAYS) and not frozen
+        ),
+        reason=("frozen artifact: " + frozen_reason if frozen else ""),
     )

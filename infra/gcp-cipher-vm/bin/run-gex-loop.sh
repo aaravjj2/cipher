@@ -10,7 +10,10 @@ PYTHON="/home/aarav/.venvs/cipher/bin/python"
 INTERVAL_SECONDS="${GEX_CAPTURE_INTERVAL_SECONDS:-900}"
 SMOKE_LIMIT="${GEX_SMOKE_LIMIT:-5}"        # first-pass limit; 0 = unlimited
 TIERS="${GEX_CAPTURE_TIERS:-mega,large,medium}"
-EXPIRATIONS="${GEX_CAPTURE_EXPIRATIONS:-1}"
+# Three expiration columns per matrix request: term-structure context for walls
+# and flips while staying inside the Alpaca rate budget (the matrix endpoint
+# returns all requested expirations in a single call).
+EXPIRATIONS="${GEX_CAPTURE_EXPIRATIONS:-3}"
 SLEEP_MS="${GEX_CAPTURE_SLEEP_MS:-1500}"
 
 pass_count=0
