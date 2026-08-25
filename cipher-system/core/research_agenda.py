@@ -291,6 +291,41 @@ RULES: tuple[Rule, ...] = (
             "assuming the best case. That is a strength being reported as a caveat."
         ),
     ),
+    # ── Earnings gap-magnitude walkforward (2026-08) ────────────────────────────────
+    Rule(
+        match="single-sourced (yahoo)",
+        classification=BlockerClass.ACTIONABLE,
+        action="Re-run the study once enough history accrues under the dual-source calendar",
+        detail=(
+            "The Nasdaq cross-check has existed only since 2026-08, so every historical "
+            "fold rests on dates that were never independently confirmed. The scanner now "
+            "records both sources per event; the fix is time, not code -- re-run after "
+            "enough dual-sourced sessions accumulate to cover the folds."
+        ),
+        latency="months of forward-accruing dual-sourced events",
+        limitation=(
+            "This bounds date fidelity, not the magnitude model itself. A wrong session "
+            "label dilutes measured edge toward zero, so the current REJECT is the "
+            "conservative direction; confirmation can only sharpen it."
+        ),
+    ),
+    Rule(
+        match="implied-move proxy",
+        classification=BlockerClass.ACQUIRABLE,
+        action="Start capturing pre-earnings implied moves so future folds can benchmark against them",
+        detail=(
+            "Option chains with IV were simply never captured before 2026, so no historical "
+            "implied move exists for the study window. The chain capture now running (3 "
+            "expiries across 542 names) accumulates exactly this input for every future "
+            "report date."
+        ),
+        latency="one earnings cycle per ticker before a fold is benchmarkable",
+        limitation=(
+            "Implied-move comparison strengthens the baseline, not the verdict: it tests "
+            "whether the model beats the market's own number, which is a higher bar than "
+            "the naive baselines already failed."
+        ),
+    ),
 )
 
 
