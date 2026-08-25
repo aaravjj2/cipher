@@ -54,6 +54,7 @@ def ensure_schema(db_path: Path) -> None:
                 ticker_count integer not null,
                 success_count integer not null default 0,
                 error_count integer not null default 0,
+                errors_json text,
                 caveat text not null
             );
 
@@ -105,6 +106,12 @@ def ensure_schema(db_path: Path) -> None:
                 on gex_strike_cells(snapshot_id, expiration, strike);
             """
         )
+        try:
+            # In-place migration for ledgers created before error details were
+            # persisted; counts alone forced journal archaeology per audit.
+            db.execute("alter table gex_capture_runs add column errors_json text")
+        except sqlite3.OperationalError:
+            pass
 
 
 def load_universe(tiers: Iterable[str] = DEFAULT_TIERS) -> list[str]:
@@ -153,15 +160,28 @@ def create_run(
         return int(cur.lastrowid)
 
 
-def finish_run(db_path: Path, run_id: int, *, success_count: int, error_count: int) -> None:
+def finish_run(
+    db_path: Path,
+    run_id: int,
+    *,
+    success_count: int,
+    error_count: int,
+    errors: list[dict] | None = None,
+) -> None:
     with _connect(db_path) as db:
         db.execute(
             """
             update gex_capture_runs
-            set completed_at = ?, success_count = ?, error_count = ?
+            set completed_at = ?, success_count = ?, error_count = ?, errors_json = ?
             where id = ?
             """,
-            (utcnow(), int(success_count), int(error_count), int(run_id)),
+            (
+                utcnow(),
+                int(success_count),
+                int(error_count),
+                json.dumps(errors or [], default=str) if errors else None,
+                int(run_id),
+            ),
         )
 
 
@@ -327,7 +347,7 @@ def capture_once(args: argparse.Namespace) -> dict:
             print(f"[{index}/{len(tickers)}] {ticker} ERROR {exc}", flush=True)
         if args.sleep_ms > 0 and index < len(tickers):
             time.sleep(args.sleep_ms / 1000.0)
-    finish_run(args.db, run_id, success_count=ok, error_count=len(errors))
+    finish_run(args.db, run_id, success_count=ok, error_count=len(errors), errors=errors)
     result = {
         "run_id": run_id,
         "db": str(args.db),
