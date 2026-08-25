@@ -12,7 +12,10 @@ Two properties are structural, not conventions to be remembered:
 *   **Read-only.** `_get` issues HTTP GET only, against an explicit path allowlist. There
     is no POST path in this file, no broker or account endpoint in the allowlist, and no
     tool that can place, size, modify or cancel an order. Cipher is research software;
-    its own `/api/health` reports `read_only: true`.
+    its own `/api/health` reports `read_only: true`. The paper-autopilot tools extend
+    this property rather than weaken it: one more loopback GET (the executor status
+    endpoint, which itself reports `live_execution_capability: false`), and two local
+    files read through immutable read-only handles (`mode=ro` SQLite, JSONL tail).
 
 *   **Small results.** `/api/night-vision` and `/api/matrix` return ~730 KB each, which is
     roughly 180k tokens and would exhaust any host's context in a single call. Every tool
@@ -30,14 +33,33 @@ from __future__ import annotations
 
 import json
 import os
+import sqlite3
 import sys
 import urllib.error
 import urllib.parse
 import urllib.request
+from pathlib import Path
 from typing import Any
 
 BASE_URL = os.environ.get("CIPHER_CORE_URL", "http://127.0.0.1:8282").rstrip("/")
 TIMEOUT = float(os.environ.get("CIPHER_MCP_TIMEOUT", "45"))
+
+# Paper-executor status surface (loopback only). Separate allowlist from
+# cipher-core's: one URL, a GET, and the endpoint itself reports
+# live_execution_capability: false.
+EXECUTOR_STATUS_URL = os.environ.get(
+    "CIPHER_EXECUTOR_URL", "http://127.0.0.1:8787"
+).rstrip("/") + "/api/paper/status"
+
+# Local ledgers read through immutable, read-only SQLite/JSONL handles.
+PAPER_LEDGER_DB = Path(os.environ.get(
+    "CIPHER_PAPER_LEDGER",
+    "/home/aarav/Aarav/cipher/runtime/data/paper_runtime/data/paper_trades/autopilot_shadow.sqlite",
+))
+PROSPECTIVE_LOG = Path(os.environ.get(
+    "CIPHER_PROSPECTIVE_LOG",
+    "/home/aarav/Aarav/cipher/runtime/data/earnings_prospective_log.jsonl",
+))
 
 # GET-only allowlist. Adding a path here is the only way to reach cipher-core, and every
 # entry below is a read. cipher-core also serves POST routes (/api/backtest, /api/holdings,
@@ -284,6 +306,28 @@ def tool_specs() -> list[dict[str, Any]]:
             "description": "Status of prospective (forward-testing) strategy registrations: sample progress, scored count and whether a verdict is yet supportable.",
             "inputSchema": schema({}),
         },
+        {
+            "name": "autopilot_status",
+            "description": "Health of the local paper autopilot executor: mode, reconciliation, market-data and broker readiness, entry blocker, ledger counts. Paper-only by construction.",
+            "inputSchema": schema({}),
+        },
+        {
+            "name": "paper_ledger_summary",
+            "description": "Truth from the paper-trading ledger: totals (trades/wins/P&L), the 20 most recent closed positions, open positions, and the last five orders.",
+            "inputSchema": schema({}),
+        },
+        {
+            "name": "decision_quality",
+            "description": "Decision-quality statistics over closed paper trades: expectancy per trade, win rate, payoff ratio, dead-on-arrival share (losses that never reached +5% MFE), buckets by entry hour and exit reason.",
+            "inputSchema": schema({}),
+        },
+        {
+            "name": "prospective_log_tail",
+            "description": "The most recent rows of the append-only earnings prediction log, including NO_TRADE decisions. Written once per digest run per ticker.",
+            "inputSchema": schema({
+                "limit": {"type": "integer", "description": "Rows to return, 1-100. Defaults to 20.", "default": 20, "minimum": 1, "maximum": 100},
+            }),
+        },
         # ChatGPT's deep-research mode looks for a `search`/`fetch` pair by name and will
         # not drive arbitrary tools. These two wrap the same read-only calls so one server
         # satisfies both hosts; Claude Desktop can ignore them and use the specific tools.
@@ -395,6 +439,113 @@ def _fetch(identifier: str) -> dict[str, Any]:
     return record
 
 
+# ---------------------------------------------------------------- paper autopilot
+
+def _executor_status() -> dict[str, Any]:
+    """Condensed paper-executor health. Read-only GET against one loopback URL."""
+    request = urllib.request.Request(EXECUTOR_STATUS_URL, headers={"Accept": "application/json"})
+    with urllib.request.urlopen(request, timeout=TIMEOUT) as response:
+        payload = json.loads(response.read().decode("utf-8"))
+    observed = payload.get("observability") or {}
+    readiness = payload.get("market_data_readiness") or {}
+    broker = payload.get("paper_broker") or {}
+    counts = observed.get("counts") or {}
+    return {
+        "mode": payload.get("mode"),
+        "reconciliation_passed": bool(payload.get("reconciliation_passed")),
+        "market_data_ready": bool(readiness.get("market_data_ready")),
+        "broker_ready": bool(broker.get("ready")),
+        "entry_blocked_reason": observed.get("entry_blocked_reason"),
+        "quote_feed_degraded": bool((payload.get("quote_manager") or {}).get("degraded")),
+        "counts": {k: counts.get(k) for k in (
+            "signal_batches", "signal_cards", "paper_orders",
+            "open_paper_positions", "closed_positions", "entry_blocks",
+        )},
+        "last_worker_exception": observed.get("last_worker_exception"),
+        "live_execution_capability": False,
+        "paper_only": True,
+    }
+
+
+def _ledger_summary() -> dict[str, Any]:
+    """Closed/open position truth from the shadow ledger, opened mode=ro."""
+    if not PAPER_LEDGER_DB.is_file():
+        return {"available": False, "reason": f"no ledger at {PAPER_LEDGER_DB}"}
+    db = sqlite3.connect(f"file:{PAPER_LEDGER_DB}?mode=ro", uri=True, timeout=5)
+    db.row_factory = sqlite3.Row
+    try:
+        closed = [dict(r) for r in db.execute(
+            """select ticker, direction, quantity, entry_price, exit_price, exit_reason, closed_at
+               from paper_positions where status='CLOSED' order by closed_at desc limit 20""")]
+        for row in closed:
+            row["pnl_usd"] = round(
+                (row["exit_price"] - row["entry_price"]) * 100 * row["quantity"], 2)
+        open_positions = [dict(r) for r in db.execute(
+            """select ticker, direction, entry_price, opened_at from paper_positions
+               where status in ('OPEN','SHADOW_OPEN')""")]
+        orders = [dict(r) for r in db.execute(
+            """select side, symbol, status, created_at from paper_orders
+               order by created_at desc limit 5""")]
+        totals = db.execute(
+            """select count(*) n,
+                      sum(case when (exit_price-entry_price)>0 then 1 else 0 end) wins,
+                      round(sum((exit_price-entry_price)*100*quantity),2) pnl
+               from paper_positions where status='CLOSED'""").fetchone()
+    finally:
+        db.close()
+    return {
+        "available": True,
+        "closed_total": dict(totals) if totals else {},
+        "recent_closed": closed,
+        "open_positions": open_positions,
+        "recent_orders": orders,
+        "paper_only": True,
+        "live_execution_capability": False,
+    }
+
+
+def _decision_quality() -> dict[str, Any]:
+    """Reuse the ledger analyzer; import by path so the server stays dependency-free."""
+    scripts_dir = Path(__file__).resolve().parents[1] / "scripts"
+    if str(scripts_dir.parent) not in sys.path:
+        sys.path.insert(0, str(scripts_dir.parent))
+    try:
+        from scripts.autopilot_decision_quality import analyze as _analyze  # noqa: E402
+        from scripts.autopilot_decision_quality import DEFAULT_DB  # noqa: E402
+    except Exception as exc:  # pragma: no cover - environment-specific
+        return {"available": False, "reason": f"analyzer unavailable: {exc}"}
+    db_path = Path(os.environ.get("CIPHER_PAPER_LEDGER", str(DEFAULT_DB)))
+    db = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, timeout=5)
+    db.row_factory = sqlite3.Row
+    try:
+        rows = [dict(r) for r in db.execute(
+            """select ticker, direction, quantity, entry_price, exit_price,
+                      exit_reason, opened_at, closed_at, payload_json
+               from paper_positions where status='CLOSED' order by opened_at""")]
+    finally:
+        db.close()
+    report = _analyze(rows)
+    # The full per-trade dump is noise through MCP; keep the decision-relevant half.
+    report.pop("trades", None)
+    return report
+
+
+def _prospective_tail(limit: int) -> dict[str, Any]:
+    limit = max(1, min(100, int(limit or 20)))
+    if not PROSPECTIVE_LOG.is_file():
+        return {"available": False,
+                "reason": f"no prospective log yet at {PROSPECTIVE_LOG}",
+                "note": "the daily digest writes it from 2026-08-26 onward"}
+    lines = PROSPECTIVE_LOG.read_text(encoding="utf-8").splitlines()
+    tail = []
+    for line in lines[-limit:]:
+        try:
+            tail.append(json.loads(line))
+        except json.JSONDecodeError:
+            tail.append({"malformed": True})
+    return {"available": True, "returned": len(tail), "rows": tail}
+
+
 def handle_tool(name: str, args: dict[str, Any]) -> Any:
     symbol = str(args.get("symbol") or "").strip().upper()
     if name in {"get_quote", "get_bars", "get_gex_levels", "get_night_vision", "search_contract", "get_news_headlines"}:
@@ -439,6 +590,14 @@ def handle_tool(name: str, args: dict[str, Any]) -> Any:
         return _search(str(args.get("query") or ""))
     if name == "fetch":
         return _fetch(str(args.get("id") or ""))
+    if name == "autopilot_status":
+        return _executor_status()
+    if name == "paper_ledger_summary":
+        return _ledger_summary()
+    if name == "decision_quality":
+        return _decision_quality()
+    if name == "prospective_log_tail":
+        return _prospective_tail(int(args.get("limit") or 20))
     raise ValueError(f"unknown tool: {name}")
 
 
