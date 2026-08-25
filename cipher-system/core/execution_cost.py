@@ -24,9 +24,17 @@ rows, because the corpus does not fit comfortably in memory and does not need to
 bucketing to a fixed resolution and reading the percentile off the cumulative
 counts is exact to that resolution.
 
-The database is opened read-only via a `mode=ro` URI. It is irreplaceable — the
-quotes cannot be re-fetched from any vendor at a later date — so this module never
+The database was opened read-only via a `mode=ro` URI. This module never
 writes, never creates an index, and never runs VACUUM.
+
+Status note (2026-08-24): the raw `tradier_stream.sqlite` source was retired
+with the decommissioned Tradier feed and is no longer on disk; the built
+profile JSON is the calibration artifact and remains authoritative for every
+consumer. The archived days are fully reconstructable from the verified
+Parquet partitions under `data/parquet_archive/tradier_stream_events/`
+(all 17 columns including raw_json, ledger-checked per day); a rebuild would
+first restore a database from those partitions. Days after the archive cutoff
+are gone — the profile window above records exactly what it measured.
 """
 from __future__ import annotations
 
