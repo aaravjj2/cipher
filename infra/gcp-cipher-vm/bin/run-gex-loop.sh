@@ -20,8 +20,11 @@ pass_count=0
 
 while true; do
   weekday="$(TZ=America/New_York date +%u)"
-  market_time="$(TZ=America/New_York date +%H%M)"
-  if [[ "$weekday" -le 5 && "$market_time" -ge 0930 && "$market_time" -le 1605 ]]; then
+  # Force base 10: %H%M emits leading zeros, and bare 0930/0830 constants are
+  # invalid octal in [[ ]] arithmetic -- the comparison then errors every
+  # iteration and silently skips all captures before 10:00 ET.
+  market_time=$((10#$(TZ=America/New_York date +%H%M)))
+  if [[ "$weekday" -le 5 && "$market_time" -ge 930 && "$market_time" -le 1605 ]]; then
     pass_count=$((pass_count + 1))
 
     # Use smoke limit on first 2 passes, then full run
