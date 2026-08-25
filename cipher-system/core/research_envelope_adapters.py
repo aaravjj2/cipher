@@ -620,3 +620,114 @@ def wave_lock_envelope(
             f"bar size {params.get('bar_minutes', 1)} minute, pivot anchor doubles as the stop",
         ),
     )
+
+
+#: The improvement a |gap| magnitude candidate must clear over the strongest naive
+#: baseline before its result can count as a pass. Kept numerically in step with
+#: earnings_model.model.MIN_GAP_MAE_IMPROVEMENT (5%), the same bar the earnings
+#: engine itself applies to a single split; the walk-forward must clear it pooled
+#: across folds, which is a strictly harder test.
+EARNINGS_GAP_MIN_IMPROVEMENT_PCT = 5.0
+
+
+def earnings_gap_magnitude_walkforward_envelope(
+    payload: Mapping[str, Any],
+    *,
+    study_id: str,
+    commit: str = UNKNOWN,
+    cost_basis: str = UNKNOWN,
+) -> ResearchResult:
+    """Envelope for `earnings_model.walkforward_study`'s report.json.
+
+    The only earnings study with genuine out-of-sample months. One candidate is
+    one regressor; its primary metric is pooled out-of-sample MAE on the absolute
+    opening gap, where lower is better. A candidate passes only if it beats the
+    STRONGEST naive baseline by at least EARNINGS_GAP_MIN_IMPROVEMENT_PCT --
+    judged against the best baseline, not the weakest, mirroring the EOD
+    walk-forward's harshest-execution rule.
+
+    The verdict is recomputed here from the published numbers via the shared
+    rule rather than trusted from the payload, exactly like every other adapter:
+    an artifact that asserts its own verdict is an artifact nobody has to lie to.
+    """
+    aggregates = [a for a in (payload.get("aggregate_results") or []) if isinstance(a, Mapping)]
+
+    candidates: list[Candidate] = []
+    for row in aggregates:
+        baselines = row.get("baseline_oos_mae_pct")
+        baselines = baselines if isinstance(baselines, Mapping) else {}
+        candidates.append(
+            Candidate(
+                candidate_id=str(row.get("candidate") or "candidate"),
+                primary=Metric(
+                    name="oos_mae_pct",
+                    value=_number(row.get("oos_mae_pct")),
+                    unit="pct",
+                    higher_is_better=False,
+                ),
+                metrics={
+                    "months_selected": _number(row.get("months_selected")),
+                    "evaluated_events": _number(row.get("evaluated_events")),
+                    **{
+                        f"baseline_mae_{name}": _number(value)
+                        for name, value in sorted(baselines.items())
+                    },
+                    "improvement_vs_strongest_baseline_pct": _number(
+                        row.get("improvement_vs_strongest_baseline_pct")
+                    ),
+                },
+            )
+        )
+
+    # Each candidate is evaluated on the same holdout events it was selected for,
+    # so the sample is the largest single arm, not the sum across candidates.
+    observations = max(
+        (int(_number(r.get("evaluated_events")) or 0) for r in aggregates), default=0
+    )
+
+    survives = any(
+        (_number(r.get("improvement_vs_strongest_baseline_pct")) or 0.0)
+        >= EARNINGS_GAP_MIN_IMPROVEMENT_PCT
+        for r in aggregates
+    )
+
+    blockers = [str(b) for b in (payload.get("blockers") or ()) if str(b)]
+
+    resolved_cost = cost_basis
+    if resolved_cost == UNKNOWN:
+        resolved_cost = str(payload.get("cost_basis") or UNKNOWN)
+
+    verdict = verdict_from_blockers(blockers, observations, passes=survives)
+
+    fold_count = len(payload.get("folds") or ())
+    embargo = _number(payload.get("embargo_days"))
+    notes = [
+        f"{fold_count} monthly holdout folds"
+        + (f", {embargo:.0f}-day embargo" if embargo is not None else ""),
+        (
+            "judged against the strongest naive baseline: "
+            f"{'a candidate clears the improvement threshold' if survives else 'no candidate clears the improvement threshold'}"
+        ),
+    ]
+    if payload.get("status") == "INSUFFICIENT_DATA":
+        notes.append("insufficient local data for a real walk-forward; blockers say what capture would need")
+
+    return ResearchResult(
+        study_id=study_id,
+        engine="earnings_gap_magnitude_walkforward",
+        verdict=verdict,
+        sample=Sample(
+            observations=observations,
+            symbols=(),
+            start=payload.get("analysis_start"),
+            end=payload.get("analysis_end"),
+        ),
+        provenance=Provenance(
+            cost_basis=resolved_cost,
+            commit=commit,
+            generated_at=str(payload.get("generated_at") or UNKNOWN),
+        ),
+        blockers=tuple(blockers),
+        candidates=tuple(candidates),
+        notes=tuple(notes),
+    )

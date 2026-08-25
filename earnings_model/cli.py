@@ -232,11 +232,29 @@ def main():
         symbols = [args.symbol.upper()] if args.symbol else None
         print(f"Scanning for upcoming earnings in the next {args.days} days...")
         cards = find_upcoming_earnings(days_ahead=args.days, tiers=tiers, symbols=symbols)
+        model_results = (load_trained_models() or {}).get("results", {})
+        # Prospective prediction log: every radar card, including NO_TRADE
+        # decisions, is recorded before outcomes exist. Idempotent per
+        # (date, ticker), so scheduled reruns never duplicate lines. A write
+        # failure degrades loudly but must not break the digest chain.
+        try:
+            from .prospective_log import log_radar_cards
+
+            log_summary = log_radar_cards(
+                cards,
+                model_version=model_results.get("model_version"),
+                gate_status=(model_results.get("strategy_gate") or {}).get("status"),
+            )
+            print(
+                f"Prospective log: wrote {log_summary['written']} new record(s) "
+                f"({log_summary['skipped_existing']} already logged) -> {log_summary['path']}"
+            )
+        except (OSError, ValueError) as exc:
+            print(f"[prospective-log] FAILED to record radar predictions: {exc}")
         if args.json_output:
             # Write the machine-readable radar for the web core to serve.
             import os
             from pathlib import Path
-            model_results = (load_trained_models() or {}).get("results", {})
             model_metrics = model_results.get("models", {})
             direction_metrics = model_metrics.get("day5_direction", {})
             gap_metrics = model_metrics.get("expected_abs_gap", {})

@@ -20,6 +20,7 @@ from core.research_envelope import ResearchResult, current_commit, rank
 from core.research_envelope_adapters import (
     eod_option_walkforward_envelope,
     eod_pattern_lab_envelope,
+    earnings_gap_magnitude_walkforward_envelope,
     structural_fib_envelope,
     wave_lock_envelope,
     wheel_engine_envelope,
@@ -41,6 +42,10 @@ ROUTES: tuple[tuple[str, str, Adapter], ...] = (
     ("variants", "leveraged_etf_wheel_parameter_lab", wheel_parameter_lab_envelope),
     ("patterns_full", "eod_pattern_lab", eod_pattern_lab_envelope),
     ("fold_results", "eod_option_walkforward", eod_option_walkforward_envelope),
+    # The earnings |gap| walk-forward deliberately names its fold key differently:
+    # `route` matches the FIRST key a payload carries, and reusing `fold_results`
+    # would send the earnings report to the EOD option adapter.
+    ("gap_fold_results", "earnings_gap_magnitude_walkforward", earnings_gap_magnitude_walkforward_envelope),
     ("stock_positions", "leveraged_etf_csp_wheel", wheel_engine_envelope),
     ("premarket_filter_check", "structural_fib_lab", structural_fib_envelope),
     ("policies_tested", "wave_lock_exits", wave_lock_envelope),
