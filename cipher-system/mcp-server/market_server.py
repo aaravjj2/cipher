@@ -363,14 +363,42 @@ def annotated_tool_specs() -> list[dict[str, Any]]:
     return [{**spec, "annotations": dict(TOOL_ANNOTATIONS)} for spec in tool_specs()]
 
 
-# Symbols the research surface covers. Kept explicit so `search` never invents a ticker
-# that cipher-core would then fail on.
-SEARCHABLE = (
+# Symbols the research surface covers. Loaded from the same cap-tiered
+# optionable universe the capture loop and scanner consume, so `search` is
+# never narrower than what Cipher actually trades — the hardcoded list this
+# replaced had gone stale (SNDK, NBIS and ALAB were invisible). The static
+# tuple remains only as the fail-closed fallback when the file is unreadable,
+# and as the ETF/anchor floor that survives any universe reshuffle.
+UNIVERSE_JSON = Path(os.environ.get(
+    "CIPHER_UNIVERSE_JSON",
+    str(Path(__file__).resolve().parents[1] / "data" / "optionable_universe_by_cap.json"),
+))
+
+FALLBACK_SEARCHABLE = (
     "SPY", "QQQ", "IWM", "DIA", "SMH", "XLE", "XLF", "XLI", "XLK", "XLP", "XLV",
     "AAPL", "AMD", "AMZN", "AVGO", "BA", "BAC", "CAT", "COST", "CRM", "CVX", "DIS",
     "GOOGL", "GS", "HD", "INTC", "JNJ", "JPM", "KO", "LLY", "MCD", "META", "MSFT",
     "MU", "NFLX", "NVDA", "ORCL", "TSLA", "UNH", "WMT", "XOM", "IBIT",
 )
+
+
+def _load_searchable() -> tuple[str, frozenset[str]]:
+    try:
+        payload = json.loads(UNIVERSE_JSON.read_text(encoding="utf-8-sig"))
+        tiers = payload.get("sorted_tickers") or {}
+        symbols: set[str] = set()
+        for rows in tiers.values():
+            for row in rows or []:
+                ticker = row.get("ticker") if isinstance(row, dict) else row
+                if ticker:
+                    symbols.add(str(ticker).upper().strip())
+        symbols.update(FALLBACK_SEARCHABLE)
+        return f"{UNIVERSE_JSON.name}: {len(symbols)} symbols", frozenset(symbols)
+    except (OSError, ValueError, AttributeError):
+        return "fallback static list", frozenset(FALLBACK_SEARCHABLE)
+
+
+SEARCHABLE_SOURCE, SEARCHABLE = _load_searchable()
 
 # Words a query may contain that name a ticker without spelling it.
 ALIASES = {
@@ -413,6 +441,7 @@ def _search(query: str) -> dict[str, Any]:
             for symbol in hits[:10]
         ],
         "query": text,
+        "universe_source": SEARCHABLE_SOURCE,
         "note": (
             "No match means the symbol is not in Cipher's covered universe, not that it does not exist."
             if not hits else RESEARCH_NOTICE
@@ -470,7 +499,8 @@ def _executor_status() -> dict[str, Any]:
 def _ledger_summary() -> dict[str, Any]:
     """Closed/open position truth from the shadow ledger, opened mode=ro."""
     if not PAPER_LEDGER_DB.is_file():
-        return {"available": False, "reason": f"no ledger at {PAPER_LEDGER_DB}"}
+        return {"available": False, "reason": f"no ledger at {PAPER_LEDGER_DB}",
+                "paper_only": True, "live_execution_capability": False}
     db = sqlite3.connect(f"file:{PAPER_LEDGER_DB}?mode=ro", uri=True, timeout=5)
     db.row_factory = sqlite3.Row
     try:
