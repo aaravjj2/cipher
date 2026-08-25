@@ -18,7 +18,10 @@ scanner:
 
 strategy:
   allowed_tickers: [SPY, QQQ, IWM, AAPL, MSFT, NVDA, AMZN, GOOGL, META, TSLA, AVGO, AMD, MU, SNDK, NFLX, PLTR, COIN, IBIT]
-  entry_window_et_start: "09:35"
+  # 09:45 start (was 09:35): every DOA loss in the Aug 24-25 record clustered in
+  # the first confirmation passes after the open; this is a single-variable
+  # experiment against the accumulating decision-quality report.
+  entry_window_et_start: "09:45"
   entry_window_et_end: "11:30"
   # Autopilot premarket-entry mode: cipher cards may enter before 09:35 ET on
   # the fresh premarket setup (the window close still binds; other scanner types
