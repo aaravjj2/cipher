@@ -47,6 +47,9 @@ def test_buckets_group_by_entry_hour_and_reason() -> None:
     assert hours["14:20"]["wins"] == 1 and hours["13:35"]["wins"] == 0
     reasons = report["by_exit_reason"]
     assert reasons["option_stop_loss"]["trades"] == 3
+    tickers = report["by_ticker"]
+    assert set(tickers) == {"AAA", "BBB", "CCC"}
+    assert tickers["AAA"]["wins"] == 1 and tickers["AAA"]["trades"] == 1
 
 
 def test_empty_ledger_produces_honest_zeros() -> None:

@@ -119,6 +119,7 @@ def analyze(rows: list[dict]) -> dict:
         **bucket(lambda t: t["entry_hour_et"], "by_entry_hour_et"),
         **bucket(lambda t: t["exit_reason"], "by_exit_reason"),
         **bucket(lambda t: t["direction"], "by_direction"),
+        **bucket(lambda t: t["ticker"], "by_ticker"),
         "trades": trades,
     }
 
