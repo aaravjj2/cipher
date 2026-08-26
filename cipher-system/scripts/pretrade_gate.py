@@ -36,11 +36,13 @@ DECISION_LOG = Path("/home/aarav/Aarav/cipher/runtime/data/agent_decision_log.js
 
 NEW_YORK = ZoneInfo("America/New_York")
 
-# Mirrors config/paper_autopilot_shadow.yaml [portfolio]; kept literal here so
-# the gate stays stdlib-only. If the yaml changes, change these with it.
+# Mirrors config/paper_autopilot_shadow.yaml [portfolio]/[contract]; kept
+# literal here so the gate stays stdlib-only. If the yaml changes, change
+# these with it.
 MAX_OPEN_POSITIONS = 3
 MAX_POSITIONS_PER_TICKER = 1
 MAX_NEW_POSITIONS_PER_DAY = 5
+MAX_CONTRACT_COST_USD = 700.0
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from agent_decision_log import has_event  # noqa: E402
@@ -84,7 +86,8 @@ def _portfolio_state(ticker: str) -> dict:
     }
 
 
-def evaluate(*, decision_id: str, ticker: str) -> dict:
+def evaluate(*, decision_id: str, ticker: str, limit_price: float | None = None,
+             quantity: int = 1) -> dict:
     checks: list[dict] = []
     blocked_reason = None
 
@@ -93,6 +96,21 @@ def evaluate(*, decision_id: str, ticker: str) -> dict:
         checks.append({"check": "kill_switch", "ok": False})
     else:
         checks.append({"check": "kill_switch", "ok": True})
+
+    # Contract cost cap mirrors the executor's maximum_contract_cost: a
+    # single contract must not exceed the per-trade budget. Checked on the
+    # limit price the agent actually intends to pay.
+    cost = None
+    if limit_price is not None:
+        try:
+            cost = round(float(limit_price) * 100 * int(quantity), 2)
+            cost_ok = 0 < cost <= MAX_CONTRACT_COST_USD
+        except (TypeError, ValueError):
+            cost_ok = False
+        checks.append({"check": "contract_cost", "ok": cost_ok,
+                       "detail": f"${cost} <= ${MAX_CONTRACT_COST_USD:.0f}"})
+        if not cost_ok and not blocked_reason:
+            blocked_reason = "SKIPPED_MAX_COST"
 
     is_open, session_note = _session_is_open()
     checks.append({"check": "market_open", "ok": is_open, "detail": session_note})
@@ -133,8 +151,12 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--decision-id", required=True)
     parser.add_argument("--ticker", required=True)
+    parser.add_argument("--limit-price", type=float, default=None,
+                        help="intended limit per contract; enables the cost cap check")
+    parser.add_argument("--quantity", type=int, default=1)
     args = parser.parse_args(argv)
-    verdict = evaluate(decision_id=args.decision_id, ticker=args.ticker)
+    verdict = evaluate(decision_id=args.decision_id, ticker=args.ticker,
+                       limit_price=args.limit_price, quantity=args.quantity)
     print(json.dumps(verdict, indent=2))
     return 0 if verdict["verdict"] == "PASS" else 2
 

@@ -181,3 +181,71 @@ def test_chain_reports_unknown_decision_and_duplicates(tmp_path) -> None:
                                      "filled_quantity": 1})
     weird = agent_log.chain(log, "dup")
     assert any("multiple terminal" in a for a in weird["anomalies"])
+
+
+def test_gate_blocks_contracts_over_the_cost_cap(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(gate, "DECISION_LOG", tmp_path / "log.jsonl")
+    monkeypatch.setattr(gate, "_session_is_open", lambda: (True, "forced"))
+    monkeypatch.setattr(gate, "_portfolio_state", lambda ticker: {
+        "open_count": 0, "ticker_already_held": False, "opened_today": 0})
+
+    pricey = gate.evaluate(decision_id="c1", ticker="SPY",
+                           limit_price=8.0, quantity=1)
+    assert pricey["reason"] == "SKIPPED_MAX_COST"
+    assert [c for c in pricey["checks"] if c["check"] == "contract_cost"][0]["ok"] is False
+
+    cheap = gate.evaluate(decision_id="c2", ticker="SPY",
+                          limit_price=5.0, quantity=1)
+    assert cheap["verdict"] == "PASS"
+
+
+# ------------------------------------------------------------------ session report
+
+def _session_report_module():
+    spec = importlib.util.spec_from_file_location(
+        "agent_session_report", SCRIPTS / "agent_session_report.py")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["agent_session_report"] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_session_report_counts_today_and_flags_anomalies(tmp_path) -> None:
+    from datetime import datetime, timezone
+    sr = _session_report_module()
+    log = tmp_path / "log.jsonl"
+    today = datetime.now(timezone.utc).date().isoformat()
+
+    def row(event, decision_id, **extra):
+        base = {"ts": f"{today}T12:00:00+00:00", "event": event,
+                "decision_id": decision_id, **extra}
+        return json.dumps(base)
+
+    with open(log, "w", encoding="utf-8") as handle:
+        handle.write(row("INTENT", "a", ticker="SPY") + "\n")
+        handle.write(row("SUBMITTED", "a", broker_order_id="b1") + "\n")
+        handle.write(row("FILLED", "a", filled_price=3.0, filled_quantity=1) + "\n")
+        handle.write(row("INTENT", "b", ticker="MU") + "\n")
+        handle.write(row("BLOCKED", "b", reason="SKIPPED_KILL_SWITCH") + "\n")
+        # stale row from yesterday must not count in today's report
+        handle.write(json.dumps({
+            "ts": "2020-01-01T00:00:00+00:00", "event": "INTENT",
+            "decision_id": "old", "ticker": "X"}) + "\n")
+
+    report = sr.build_report(log, today=today)
+    assert report["decisions"] == 2
+    assert report["outcomes"] == {"FILLED": 1, "BLOCKED": 1}
+    assert report["blocked_reasons"] == ["SKIPPED_KILL_SWITCH"]
+    # 'a' is FILLED but never reconciled -> anomaly the operator must see
+    assert any(c["decision_id"] == "a" and
+               any("not reconciled" in a_ for a_ in c["anomalies"])
+               for c in report["chain_anomalies"])
+    text = sr.render(report)
+    assert "session report" in text and "SKIPPED_KILL_SWITCH" in text
+
+
+def test_session_report_on_empty_log_says_so(tmp_path) -> None:
+    sr = _session_report_module()
+    report = sr.build_report(tmp_path / "none.jsonl")
+    assert report["decisions"] == 0
+    assert "No decisions" in sr.render(report)
