@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from agent_decision_log import DEFAULT_LOG, chain, tail_rows  # noqa: E402
+from agent_decision_log import DEFAULT_LOG, chain, positions, tail_rows  # noqa: E402
 
 
 def _utc_date(row: dict) -> str:
@@ -44,11 +44,14 @@ def build_report(log_path: Path, *, today: str | None = None) -> dict:
         outcomes[key] = outcomes.get(key, 0) + 1
     anomalies = [c for c in chains if c["anomalies"]]
 
+    book = positions(log_path)
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "session_date_utc": today,
         "decisions": len(decisions),
         "outcomes": outcomes,
+        "open_positions": book["open_positions"],
+        "closed_round_turns": book["closed_round_turns"],
         "blocked_reasons": sorted({
             str(row.get("reason")) for row in rows
             if row.get("event") == "BLOCKED" and row.get("reason")
@@ -72,6 +75,10 @@ def render(report: dict) -> str:
     if report["blocked_reasons"]:
         lines.append("Blocked reasons:")
         lines.extend(f"- `{r}`" for r in report["blocked_reasons"])
+    if report["open_positions"]:
+        lines.append("Open positions:")
+        lines.extend(f"- `{p_['contract_symbol']}` x{p_['quantity']} @ {p_['avg_open_price']}"
+                     for p_ in report["open_positions"])
     if report["chain_anomalies"]:
         lines.append("**Chain anomalies (must be investigated):**")
         lines.extend(f"- `{c['decision_id']}`: {', '.join(c['anomalies'])}"

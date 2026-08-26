@@ -342,7 +342,7 @@ def agent_showcase() -> dict:
     summary. No credentials, no order authority: every row already carries
     paper_only/live_execution_capability false-truths from the writer.
     """
-    log_path = ROOT.parent / "runtime" / "data" / "agent_decision_log.jsonl"
+    log_path = ROOT / "data" / "agent_decision_log.jsonl"
     events: list[dict] = []
     if log_path.is_file():
         for line in log_path.read_text(encoding="utf-8").splitlines()[-12:]:
@@ -369,6 +369,30 @@ def agent_showcase() -> dict:
         quality.update({k: v for k, v in report.items() if k != "trades"})
     except Exception as exc:
         quality = {"available": False, "reason": f"{type(exc).__name__}: {exc}"[:160]}
+    regime: dict = {"available": False}
+    try:
+        import sqlite3 as _sqlite3
+        gex_db = ROOT / "data" / "gex_history.sqlite"
+        db = _sqlite3.connect(f"file:{gex_db}?mode=ro", uri=True, timeout=5)
+        row = db.execute(
+            """select captured_at, spot, gamma_flip_level from gex_snapshots
+               where ticker='SPY' order by captured_at desc limit 1"""
+        ).fetchone()
+        net = db.execute(
+            """select round(sum(net_gex)/1e9, 3) from gex_strike_cells
+               where ticker='SPY' and captured_at=(
+                 select max(captured_at) from gex_strike_cells where ticker='SPY')"""
+        ).fetchone()
+        db.close()
+        if row and row[2] is not None:
+            regime = {
+                "available": True, "as_of": row[0], "spot": row[1],
+                "gamma_flip_level": row[2],
+                "regime": "positive_gamma" if (row[1] or 0) > row[2] else "negative_gamma",
+                "net_gex_b": net[0] if net else None,
+            }
+    except Exception as exc:
+        regime = {"available": False, "reason": f"{type(exc).__name__}"[:80]}
     scheduler_path = ROOT / "data" / "paper_runtime" / "autopilot" / "status.json"
     scheduler = {}
     try:
@@ -379,6 +403,7 @@ def agent_showcase() -> dict:
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "decision_log": {"available": bool(events), "rows": events},
         "decision_quality": quality,
+        "gex_regime": regime,
         "scheduler": {k: scheduler.get(k) for k in (
             "as_of", "phase", "action", "confirmed", "rejected") if k in scheduler},
         "read_only": True,

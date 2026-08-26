@@ -51,6 +51,7 @@ const FALLBACK: Demo = { title: "Explore Cipher's research workflow", summary: "
 
 type AgentShowcase = {
   decision_log?: { available?: boolean; rows?: { event?: string; decision_id?: string; reason?: string; ticker?: string }[] };
+  gex_regime?: { available?: boolean; regime?: string; gamma_flip_level?: number | null; spot?: number | null; net_gex_b?: number | null };
   decision_quality?: {
     available?: boolean; trade_count?: number;
     expectancy?: { sample_size?: number; win_rate_pct?: number; expectancy_per_trade_pct?: number; note?: string | null };
@@ -82,10 +83,13 @@ function LiveAgentRecord() {
   if (!quality.trade_count && !events.length) return null;
   return <section className="border-t border-[var(--gold)] bg-[color-mix(in_srgb,var(--gold)_6%,transparent)]" data-testid="guest-live-agent">
     <header className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--line)] p-4"><p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[var(--gold)]">Live · this machine&apos;s actual paper record</p><span className="border border-[var(--line)] px-2 py-1 text-[9px] uppercase text-[var(--text-mute)]">Not demo</span></header>
-    <dl className="grid border-b border-[var(--line)] sm:grid-cols-3">
-      <div className="border-b border-[var(--line)] p-4 sm:border-b-0 sm:border-r"><dt className="text-[9px] font-bold uppercase tracking-[0.1em] text-[var(--text-mute)]">Closed trades</dt><dd className="mt-1 font-mono text-base font-semibold">{quality.trade_count ?? 0}</dd></div>
+    <dl className="grid grid-cols-2 border-b border-[var(--line)] lg:grid-cols-3">
+      <div className="border-b border-r border-[var(--line)] p-4"><dt className="text-[9px] font-bold uppercase tracking-[0.1em] text-[var(--text-mute)]">Closed trades</dt><dd className="mt-1 font-mono text-base font-semibold">{quality.trade_count ?? 0}</dd></div>
       <div className="border-b border-[var(--line)] p-4 sm:border-b-0 sm:border-r"><dt className="text-[9px] font-bold uppercase tracking-[0.1em] text-[var(--text-mute)]">Win rate · expectancy/trade</dt><dd className="mt-1 font-mono text-base font-semibold">{expectancy.win_rate_pct ?? "–"}% · {expectancy.expectancy_per_trade_pct ?? "–"}%</dd></div>
       <div className="p-4"><dt className="text-[9px] font-bold uppercase tracking-[0.1em] text-[var(--text-mute)]">Dead-on-arrival losses</dt><dd className="mt-1 font-mono text-base font-semibold">{doa.count ?? 0} ({doa.share_pct ?? 0}%)</dd></div>
+      <div className="border-t border-[var(--line)] p-4 sm:border-t-0 sm:border-r"><dt className="text-[9px] font-bold uppercase tracking-[0.1em] text-[var(--text-mute)]">SPY gamma regime</dt><dd className="mt-1 font-mono text-base font-semibold">{data.gex_regime?.regime ?? "–"}{data.gex_regime?.net_gex_b != null ? ` · ${data.gex_regime.net_gex_b}B` : ""}</dd></div>
+      <div className="border-t border-[var(--line)] p-4 sm:border-t-0 sm:border-r"><dt className="text-[9px] font-bold uppercase tracking-[0.1em] text-[var(--text-mute)]">Gamma flip level</dt><dd className="mt-1 font-mono text-base font-semibold">{data.gex_regime?.gamma_flip_level ?? "–"}</dd></div>
+      <div className="border-t border-[var(--line)] p-4 sm:border-t-0"><dt className="text-[9px] font-bold uppercase tracking-[0.1em] text-[var(--text-mute)]">Decision log</dt><dd className="mt-1 font-mono text-base font-semibold">{events.length} recent</dd></div>
     </dl>
     {events.length > 0 && <ol className="divide-y divide-[var(--line-soft)] p-4 text-xs text-[var(--text-dim)]">
       {events.map((event, index) => <li key={`${event.decision_id}-${index}`} className="py-1.5 font-mono">

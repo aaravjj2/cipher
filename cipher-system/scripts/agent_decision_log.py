@@ -112,6 +112,70 @@ def tail_rows(log_path: Path, limit: int | None = 20) -> list[dict]:
 TERMINAL_EVENTS = ("FILLED", "UNFILLED", "BLOCKED")
 
 
+def positions(log_path: Path) -> dict[str, Any]:
+    """Derive the agent's option book from matched fills in its own log.
+
+    The agent trades a dedicated paper account, so its book is whatever its
+    log proves: each FILLED whose intent side is 'buy' opens quantity of that
+    contract; a 'sell' fill reduces it. Contracts are keyed by symbol; lots
+    carry no cost-basis modelling beyond the average of opening fills, which
+    is all the record honestly supports.
+    """
+    intents: dict[str, dict] = {}
+    fills: list[dict] = []
+    for row in tail_rows(log_path, limit=None):
+        if not isinstance(row, dict):
+            continue
+        did = row.get("decision_id")
+        if row.get("event") == "INTENT" and did:
+            intents[did] = {
+                "ticker": row.get("ticker"),
+                "contract_symbol": row.get("contract_symbol"),
+                "side": str(row.get("side") or "").lower(),
+            }
+        elif row.get("event") == "FILLED" and did:
+            fills.append(row)
+
+    books: dict[str, dict[str, Any]] = {}
+    closed = 0
+    for fill in fills:
+        intent = intents.get(str(fill.get("decision_id"))) or {}
+        contract = str(intent.get("contract_symbol") or "?")
+        ticker = str(intent.get("ticker") or "?")
+        side = intent.get("side") or ("sell" if str(fill.get("decision_id", "")).endswith("_close") else "buy")
+        signed = int(fill.get("filled_quantity") or 0) * (-1 if side == "sell" else 1)
+        book = books.setdefault(ticker, {})
+        lot = book.setdefault(contract, {"quantity": 0, "cost_sum": 0.0, "opened_at": None})
+        if signed > 0 and lot["quantity"] <= 0 and lot["cost_sum"] == 0:
+            lot["opened_at"] = fill.get("ts")
+        if signed > 0:
+            lot["quantity"] += signed
+            lot["cost_sum"] += float(fill.get("filled_price") or 0) * signed
+        else:
+            lot["quantity"] += signed
+            if lot["quantity"] <= 0:
+                closed += 1
+                lot["quantity"], lot["cost_sum"] = 0, 0.0
+    open_positions = [
+        {
+            "ticker": ticker,
+            "contract_symbol": contract,
+            "quantity": lot["quantity"],
+            "avg_open_price": round(lot["cost_sum"] / lot["quantity"], 4) if lot["quantity"] else None,
+            "opened_at": lot["opened_at"],
+        }
+        for ticker, book in sorted(books.items())
+        for contract, lot in sorted(book.items())
+        if lot["quantity"] > 0
+    ]
+    return {
+        "open_positions": open_positions,
+        "closed_round_turns": closed,
+        "fills_processed": len(fills),
+        "paper_only": True,
+    }
+
+
 def chain(log_path: Path, decision_id: str) -> dict:
     """The full event trail for one decision plus an honesty verdict.
 
@@ -164,6 +228,7 @@ def main(argv: list[str] | None = None) -> int:
     p_tail.add_argument("--limit", type=int, default=20)
     p_chain = sub.add_parser("chain")
     p_chain.add_argument("--decision-id", required=True)
+    p_pos = sub.add_parser("positions")
     args = parser.parse_args(argv)
     if args.command == "append":
         payload = json.loads(args.payload)
@@ -171,6 +236,9 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "chain":
         print(json.dumps(chain(args.log, args.decision_id), indent=2, sort_keys=True))
+        return 0
+    if args.command == "positions":
+        print(json.dumps(positions(args.log), indent=2, sort_keys=True))
         return 0
     print(json.dumps(tail_rows(args.log, args.limit), indent=2, default=str))
     return 0

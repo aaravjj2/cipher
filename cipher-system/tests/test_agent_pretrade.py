@@ -249,3 +249,52 @@ def test_session_report_on_empty_log_says_so(tmp_path) -> None:
     report = sr.build_report(tmp_path / "none.jsonl")
     assert report["decisions"] == 0
     assert "No decisions" in sr.render(report)
+
+
+# ------------------------------------------------------------------ reconciliation
+
+def _reconcile_module():
+    spec = importlib.util.spec_from_file_location(
+        "agent_reconcile", SCRIPTS / "agent_reconcile.py")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["agent_reconcile"] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_reconcile_matches_a_clean_fill(tmp_path) -> None:
+    rc = _reconcile_module()
+    log = tmp_path / "log.jsonl"
+    agent_log.append(log, "INTENT", _intent("r1"))
+    agent_log.append(log, "SUBMITTED", {"decision_id": "r1", "broker_order_id": "abc"})
+    broker = {"id": "abc", "status": "filled", "symbol": "NVDA260918C00180000",
+              "filled_quantity": 1, "average_fill_price": 2.51}
+    result = rc.reconcile(log, decision_id="r1", broker_order=broker)
+    assert result["matches"] is True and result["problems"] == []
+    done = agent_log.chain(log, "r1")
+    assert done["complete"] is True and done["anomalies"] == []
+
+
+def test_reconcile_names_price_and_id_mismatches(tmp_path) -> None:
+    rc = _reconcile_module()
+    log = tmp_path / "log.jsonl"
+    agent_log.append(log, "INTENT", _intent("r2"))  # buy, limit 2.5
+    agent_log.append(log, "SUBMITTED", {"decision_id": "r2", "broker_order_id": "xyz"})
+    broker = {"id": "different", "status": "filled", "symbol": "nvda260918c00180000",
+              "filled_quantity": 1, "average_fill_price": 2.9}
+    result = rc.reconcile(log, decision_id="r2", broker_order=broker)
+    assert result["matches"] is False
+    assert any("above limit" in p for p in result["problems"])
+    assert any("id mismatch" in p for p in result["problems"])
+    # the failed reconciliation is itself recorded, honestly
+    tail = [r for r in agent_log.tail_rows(log) if r.get("event") == "RECONCILED"]
+    assert tail[-1]["matches_local_ledger"] is False
+
+
+def test_reconcile_requires_intent(tmp_path) -> None:
+    rc = _reconcile_module()
+    result = rc.reconcile(tmp_path / "none.jsonl", decision_id="ghost",
+                          broker_order={"id": "x", "status": "filled",
+                                        "average_fill_price": 1.0})
+    assert result["matches"] is False
+    assert any("no INTENT" in p for p in result["problems"])
