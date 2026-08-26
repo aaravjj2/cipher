@@ -52,6 +52,11 @@ const accessProfiles = createAccessProfileResolver({
 const publicAssetPaths = new Set(["/manifest.webmanifest", "/sw.js"]);
 const isPublicStaticAsset = (pathname) =>
   publicAssetPaths.has(pathname) || pathname.startsWith("/icons/");
+// Non-symbol public reads any visitor (including judges) may see.
+const guestPublicRoutes = new Set([
+  "/api/agent-showcase",
+]);
+
 const guestMarketRoutes = new Set([
   "/api/quote",
   "/api/bars",
@@ -204,6 +209,7 @@ function guestRateAllowed(req) {
 function guestAccessAllowed(req, url) {
   if (!hostedMode || !guestMode) return false;
   if ((req.method || "GET").toUpperCase() !== "GET") return false;
+  if (guestPublicRoutes.has(url.pathname)) return guestRateAllowed(req);
   if (!guestMarketRoutes.has(url.pathname)) return false;
   const origin = String(req.headers.origin || "");
   if (origin && !hostedOrigins.has(origin)) return false;
@@ -251,6 +257,8 @@ const routes = {
   "/api/quote": "/api/quote",
   "/api/governance": "/api/governance",
   "/api/standing": "/api/standing",
+  // Public judge-safe showcase: read-only agent decisions and quality stats.
+  "/api/agent-showcase": "/api/agent-showcase",
   "/api/holdings": "/api/holdings",
   "/api/news": "/api/news",
   "/api/workspace-layouts": "/api/workspace-layouts",

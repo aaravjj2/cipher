@@ -335,6 +335,57 @@ def _earnings_radar_is_stale(produced: datetime, now: datetime) -> bool:
     return produced.astimezone(timezone.utc) < _latest_due_earnings_run(now) - timedelta(minutes=15)
 
 
+def agent_showcase() -> dict:
+    """Public, read-only snapshot of the paper agent for the showcase panel.
+
+    Serves the append-only decision log tail and the decision-quality
+    summary. No credentials, no order authority: every row already carries
+    paper_only/live_execution_capability false-truths from the writer.
+    """
+    log_path = ROOT.parent / "runtime" / "data" / "agent_decision_log.jsonl"
+    events: list[dict] = []
+    if log_path.is_file():
+        for line in log_path.read_text(encoding="utf-8").splitlines()[-12:]:
+            try:
+                events.append(json.loads(line))
+            except json.JSONDecodeError:
+                continue
+    quality = {"available": False}
+    ledger_path = ROOT / "data" / "paper_runtime" / "data" / "paper_trades" / "autopilot_shadow.sqlite"
+    try:
+        import sqlite3 as _sqlite3
+        db = _sqlite3.connect(f"file:{ledger_path}?mode=ro", uri=True, timeout=5)
+        db.row_factory = _sqlite3.Row
+        rows = [dict(r) for r in db.execute(
+            """select ticker, direction, quantity, entry_price, exit_price,
+                      exit_reason, opened_at, closed_at, payload_json
+               from paper_positions where status='CLOSED' order by opened_at""")]
+        db.close()
+        sys.path.insert(0, str(ROOT))
+        from scripts.autopilot_decision_quality import analyze
+        report = analyze(rows)
+        quality = {"available": rows and True or False,
+                   "trade_count": report.get("expectancy", {}).get("sample_size", 0)}
+        quality.update({k: v for k, v in report.items() if k != "trades"})
+    except Exception as exc:
+        quality = {"available": False, "reason": f"{type(exc).__name__}: {exc}"[:160]}
+    scheduler_path = ROOT / "data" / "paper_runtime" / "autopilot" / "status.json"
+    scheduler = {}
+    try:
+        scheduler = json.loads(scheduler_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        pass
+    return {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "decision_log": {"available": bool(events), "rows": events},
+        "decision_quality": quality,
+        "scheduler": {k: scheduler.get(k) for k in (
+            "as_of", "phase", "action", "confirmed", "rejected") if k in scheduler},
+        "read_only": True,
+        "live_execution_capability": False,
+    }
+
+
 def earnings_radar() -> dict:
     """Serve the latest earnings radar JSON written by the digest pass.
 
@@ -2513,6 +2564,8 @@ class Handler(BaseHTTPRequestHandler):
                 }
             elif parsed.path == "/api/provider-capabilities":
                 data = provider_capabilities()
+            elif parsed.path == "/api/agent-showcase":
+                data = agent_showcase()
             elif parsed.path == "/api/earnings-radar":
                 data = earnings_radar()
             elif parsed.path == "/api/governance":
