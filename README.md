@@ -59,6 +59,31 @@ The browser never receives order authority. The adapter is hard-locked to
   trades, feed-provided Greeks, and verified dealer positioning stay explicitly
   unavailable rather than zero.
 
+## MCP Servers & the Paper Agent
+
+Cipher exposes its research surface to AI agents over MCP, and ships an
+options paper-trading agent whose every decision is gated, logged, and
+reconciled:
+
+- **`cipher-market`** (`cipher-system/mcp-server/market_server.py`) — read-only
+  research tools: quotes, gamma walls and flip levels, stored gamma regime,
+  strategy standings, paper-autopilot status, ledger truth, decision-quality
+  statistics (expectancy, dead-on-arrival share), and the prospective
+  prediction log. GETs against two loopback URLs plus `mode=ro` SQLite only.
+- **`alpaca` / `alpaca-trading`** (`cipher-system/scripts/alpaca_paper_mcp.sh`)
+  — Alpaca's official MCP server behind a wrapper that forces
+  `ALPACA_PAPER_TRADE=true`, refuses any key without the paper `PK` prefix,
+  and registers no order tools unless explicitly opted in.
+
+The agent's rules live in `cipher-system/docs/agent/AGENT_CHARTER.md`
+(paper-only, intent-before-submission, kill-switch respect, classified
+outcomes) and its procedure in `cipher-system/docs/agent/PLAYBOOK.md`.
+Deterministic authority is split from model judgement: `scripts/pretrade_gate.py`
+answers PASS/BLOCKED on plain facts, `scripts/agent_decision_log.py` keeps an
+append-only intent→outcome trail, and `scripts/autopilot_decision_quality.py`
+scores the results. Refusals are first-class: a session that logs six NO_TRADE
+decisions with reasons had a successful day.
+
 ## Research Governance Platform
 
 Cipher now includes a separate governance and strategy-graduation plane under
