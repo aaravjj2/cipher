@@ -17,8 +17,8 @@ procedure that obeys it.
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │ 1. RESEARCH   cipher-market tools:                              │
-│      get_quote / get_gex_levels / decision_quality /            │
-│      autopilot_status                                           │
+│      get_quote / get_gex_levels / gex_regime /                  │
+│      decision_quality / autopilot_status                        │
 │ 2. THESIS     cite every input: snapshot fields, gamma flip,    │
 │               spread %, and what would falsify the idea         │
 │ 3. GATE       pretrade_gate.py --decision-id <id> --ticker <T>  │
@@ -45,6 +45,8 @@ unique without coordination, and read honestly in the ledger.
   environment, not with the idea.
 - Refusals are results. A session that logs six NO_TRADEs and zero fills had
   a successful day if the gates said so.
+- Before reporting, run `agent_decision_log.py chain --decision-id <id>` for
+  each decision of the session: anomalies are reported, never fixed in place.
 
 ## End-of-session report
 
