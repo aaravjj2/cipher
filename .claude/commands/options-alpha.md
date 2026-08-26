@@ -39,5 +39,9 @@ Procedure:
 7. **Verify** — call `paper_ledger_summary`; confirm the position appears;
    append RECONCIALIZED with matches_local_ledger set accordingly.
 
+7b. **Session report** — if this was the last idea of the session, run:
+    `python3 cipher-system/scripts/agent_session_report.py`
+    and paste its output verbatim as the closing message.
+
 Report back: verdict per step, the decision_id, and any BLOCKED reasons —
 plainly, without spin. Two consecutive tool failures: append BLOCKED and stop.

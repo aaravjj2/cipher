@@ -50,6 +50,8 @@ unique without coordination, and read honestly in the ledger.
 
 ## End-of-session report
 
-Tail the decision log, run `decision_quality`, and state plainly:
-trades attempted, blocked count with reasons, fills reconciled true/false,
-and the current expectancy caveat from the analyzer.
+Run `python3 cipher-system/scripts/agent_session_report.py` — it chains every
+decision from today, counts outcomes, names anomalies and blocked reasons,
+and renders the summary. Append `decision_quality` statistics and state
+plainly: trades attempted, blocked count with reasons, fills reconciled
+true/false, and the current expectancy caveat from the analyzer.
