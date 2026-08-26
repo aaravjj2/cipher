@@ -66,6 +66,11 @@ def test_rows_carry_paper_only_truth_and_tail_counts_malformed(tmp_path) -> None
 # ------------------------------------------------------------------ pre-trade gate
 
 def _seed_ledger(db_path: Path, held: list[str], opened_today: int) -> None:
+    # Dates are relative to "now" because the gate compares against the live
+    # UTC date; hardcoded strings would break at every midnight rollover.
+    from datetime import datetime, timezone as _tz
+    today = datetime.now(_tz.utc).isoformat(timespec="seconds")
+    hour_ago = datetime.now(_tz.utc).replace(microsecond=0).isoformat()
     with sqlite3.connect(db_path) as conn:
         conn.executescript(
             """
@@ -79,13 +84,13 @@ def _seed_ledger(db_path: Path, held: list[str], opened_today: int) -> None:
             conn.execute(
                 "insert into paper_positions values(?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (f"p{i}", None, ticker, "bullish", "SYM", 1, 1.0,
-                 "2026-08-25T14:00+00:00", None, None, None, "OPEN", "{}"),
+                 hour_ago, None, None, None, "OPEN", "{}"),
             )
         for j in range(opened_today - len(held)):
             conn.execute(
                 "insert into paper_positions values(?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (f"q{j}", None, "MU", "bullish", "MU_SYM", 1, 1.0,
-                 "2026-08-25T15:00+00:00", "2026-08-25T16:00+00:00", 1.1,
+                 hour_ago, today, 1.1,
                  "option_take_profit", "CLOSED", "{}"),
             )
 
@@ -143,3 +148,36 @@ def test_clean_pass_when_everything_is_clear(tmp_path, monkeypatch) -> None:
     verdict = gate.evaluate(decision_id="ok1", ticker="SPY")
     assert verdict["verdict"] == "PASS" and verdict["reason"] is None
     assert all(check["ok"] for check in verdict["checks"])
+
+
+# ------------------------------------------------------------------ chain integrity
+
+def test_chain_tracks_lifecycle_and_flags_anomalies(tmp_path) -> None:
+    log = tmp_path / "log.jsonl"
+    agent_log.append(log, "INTENT", _intent("d9"))
+    pending = agent_log.chain(log, "d9")
+    assert pending["known"] is True and pending["complete"] is False
+    assert pending["anomalies"] == ["no terminal event yet"]
+
+    agent_log.append(log, "SUBMITTED", {"decision_id": "d9", "broker_order_id": "b1"})
+    dangling = agent_log.chain(log, "d9")
+    assert "no terminal event yet" in dangling["anomalies"]
+
+    agent_log.append(log, "FILLED", {"decision_id": "d9", "filled_price": 3.12,
+                                     "filled_quantity": 1})
+    filled = agent_log.chain(log, "d9")
+    assert filled["anomalies"] == ["filled but not reconciled yet"]
+    agent_log.append(log, "RECONCILED", {"decision_id": "d9", "matches_local_ledger": True})
+    done = agent_log.chain(log, "d9")
+    assert done["complete"] is True and done["anomalies"] == []
+
+
+def test_chain_reports_unknown_decision_and_duplicates(tmp_path) -> None:
+    log = tmp_path / "log.jsonl"
+    assert agent_log.chain(log, "ghost")["known"] is False
+    agent_log.append(log, "INTENT", _intent("dup"))
+    agent_log.append(log, "BLOCKED", {"decision_id": "dup", "reason": "gate"})
+    agent_log.append(log, "FILLED", {"decision_id": "dup", "filled_price": 1.0,
+                                     "filled_quantity": 1})
+    weird = agent_log.chain(log, "dup")
+    assert any("multiple terminal" in a for a in weird["anomalies"])

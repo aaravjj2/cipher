@@ -109,6 +109,49 @@ def tail_rows(log_path: Path, limit: int | None = 20) -> list[dict]:
     return rows
 
 
+TERMINAL_EVENTS = ("FILLED", "UNFILLED", "BLOCKED")
+
+
+def chain(log_path: Path, decision_id: str) -> dict:
+    """The full event trail for one decision plus an honesty verdict.
+
+    A healthy chain is INTENT followed by exactly one terminal event
+    (FILLED/UNFILLED/BLOCKED); RECONCILED is expected after FILLED but not
+    mandatory at log time. Anomalies -- missing INTENT, a dangling SUBMITTED,
+    duplicated events -- are named, never smoothed over.
+    """
+    events = [
+        row for row in tail_rows(log_path, limit=None)
+        if isinstance(row, dict)
+        and row.get("decision_id") == decision_id
+        and row.get("event") in EVENTS
+    ]
+    kinds = [row.get("event") for row in events]
+    anomalies: list[str] = []
+    if kinds.count("INTENT") > 1:
+        anomalies.append(f"duplicate INTENT x{kinds.count('INTENT')}")
+    if not kinds:
+        pass  # unknown decision: reported as such below
+    else:
+        terminals = [k for k in kinds if k in TERMINAL_EVENTS]
+        if len(terminals) == 0:
+            anomalies.append("no terminal event yet")
+        elif len(terminals) > 1:
+            anomalies.append(f"multiple terminal events: {terminals}")
+        if "SUBMITTED" in kinds and "FILLED" in kinds and "RECONCILED" not in kinds:
+            anomalies.append("filled but not reconciled yet")
+        if "RECONCILED" in kinds and "FILLED" not in kinds:
+            anomalies.append("reconciled without a fill")
+    return {
+        "decision_id": decision_id,
+        "known": bool(kinds),
+        "events": [{"ts": row.get("ts"), "event": row.get("event")} for row in events],
+        "anomalies": anomalies,
+        "complete": bool(kinds) and not anomalies and any(
+            k in TERMINAL_EVENTS for k in kinds),
+    }
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--log", type=Path, default=DEFAULT_LOG)
@@ -119,10 +162,15 @@ def main(argv: list[str] | None = None) -> int:
                        help="JSON object with the event's required fields")
     p_tail = sub.add_parser("tail")
     p_tail.add_argument("--limit", type=int, default=20)
+    p_chain = sub.add_parser("chain")
+    p_chain.add_argument("--decision-id", required=True)
     args = parser.parse_args(argv)
     if args.command == "append":
         payload = json.loads(args.payload)
         print(json.dumps(append(args.log, args.event, payload), indent=2, sort_keys=True))
+        return 0
+    if args.command == "chain":
+        print(json.dumps(chain(args.log, args.decision_id), indent=2, sort_keys=True))
         return 0
     print(json.dumps(tail_rows(args.log, args.limit), indent=2, default=str))
     return 0

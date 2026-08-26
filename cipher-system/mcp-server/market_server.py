@@ -56,6 +56,10 @@ PAPER_LEDGER_DB = Path(os.environ.get(
     "CIPHER_PAPER_LEDGER",
     "/home/aarav/Aarav/cipher/runtime/data/paper_runtime/data/paper_trades/autopilot_shadow.sqlite",
 ))
+GEX_HISTORY_DB = Path(os.environ.get(
+    "CIPHER_GEX_HISTORY",
+    "/home/aarav/Aarav/cipher/runtime/data/gex_history.sqlite",
+))
 PROSPECTIVE_LOG = Path(os.environ.get(
     "CIPHER_PROSPECTIVE_LOG",
     "/home/aarav/Aarav/cipher/runtime/data/earnings_prospective_log.jsonl",
@@ -305,6 +309,11 @@ def tool_specs() -> list[dict[str, Any]]:
             "name": "get_research_standing",
             "description": "Status of prospective (forward-testing) strategy registrations: sample progress, scored count and whether a verdict is yet supportable.",
             "inputSchema": schema({}),
+        },
+        {
+            "name": "gex_regime",
+            "description": "Stored gamma regime for one ticker from capture history: spot vs gamma-flip (positive/negative gamma), walls, latest net GEX in billions, and the last eight captures. Complements get_gex_levels, which reads the live matrix.",
+            "inputSchema": schema({"symbol": symbol}, ["symbol"]),
         },
         {
             "name": "autopilot_status",
@@ -560,6 +569,65 @@ def _decision_quality() -> dict[str, Any]:
     return report
 
 
+def _gex_regime(symbol: str) -> dict[str, Any]:
+    """Historical gamma regime for one ticker from the local GEX history ledger.
+
+    Complements `get_gex_levels` (the live matrix view): this reads the stored
+    capture history, so a session can see the regime as of the most recent
+    completed capture even after hours, and how today's net exposure compares
+    with the last several captures.
+    """
+    ticker = symbol.strip().upper()
+    if not GEX_HISTORY_DB.is_file():
+        return {"available": False, "reason": f"no gex history at {GEX_HISTORY_DB}"}
+    db = sqlite3.connect(f"file:{GEX_HISTORY_DB}?mode=ro", uri=True, timeout=5)
+    db.row_factory = sqlite3.Row
+    try:
+        snap = db.execute(
+            """select captured_at, spot, call_wall_strike, put_wall_strike,
+                      gamma_flip_level
+               from gex_snapshots where ticker = ?
+               order by captured_at desc limit 1""",
+            (ticker,),
+        ).fetchone()
+        if not snap:
+            return {"available": False,
+                    "reason": f"no stored snapshots for {ticker}",
+                    "note": "get_gex_levels reads the live matrix instead"}
+        recent = [dict(r) for r in db.execute(
+            """select captured_at, round(sum(net_gex)/1e9, 3) net_gex_b,
+                      count(*) cells
+               from gex_strike_cells where ticker = ?
+               group by captured_at order by captured_at desc limit 8""",
+            (ticker,),
+        )]
+    finally:
+        db.close()
+    latest_cells = recent[0] if recent else {}
+    spot = snap["spot"]
+    flip = snap["gamma_flip_level"]
+    regime = None
+    if spot is not None and flip is not None:
+        regime = "positive_gamma" if spot > flip else "negative_gamma"
+    return {
+        "available": True,
+        "ticker": ticker,
+        "as_of": snap["captured_at"],
+        "spot": spot,
+        "call_wall": snap["call_wall_strike"],
+        "put_wall": snap["put_wall_strike"],
+        "gamma_flip_level": flip,
+        "regime": regime,
+        "net_gex_b_latest": latest_cells.get("net_gex_b"),
+        "cells_latest": latest_cells.get("cells"),
+        "recent_net_gex_b": [
+            {"captured_at": row["captured_at"], "net_gex_b": row["net_gex_b"]}
+            for row in reversed(recent)
+        ],
+        "caveat": RESEARCH_NOTICE,
+    }
+
+
 def _prospective_tail(limit: int) -> dict[str, Any]:
     limit = max(1, min(100, int(limit or 20)))
     if not PROSPECTIVE_LOG.is_file():
@@ -622,6 +690,10 @@ def handle_tool(name: str, args: dict[str, Any]) -> Any:
         return _fetch(str(args.get("id") or ""))
     if name == "autopilot_status":
         return _executor_status()
+    if name == "gex_regime":
+        if not symbol:
+            raise ValueError("symbol is required")
+        return _gex_regime(symbol)
     if name == "paper_ledger_summary":
         return _ledger_summary()
     if name == "decision_quality":
