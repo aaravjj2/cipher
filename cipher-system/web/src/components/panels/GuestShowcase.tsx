@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useState } from "react";
+
 import { guestPanelMode } from "@/lib/guestCatalog";
 
 type Demo = {
@@ -47,16 +49,64 @@ const DEMOS: Record<string, Demo> = {
 
 const FALLBACK: Demo = { title: "Explore Cipher's research workflow", summary: "A deterministic representation of this private feature.", metrics: [["Mode", "Read-only demo"], ["Universe", "MAG7 + leaders"], ["Orders", "Disabled"]], rows: ["Point-in-time inputs", "Explicit uncertainty", "Human decision gate"], next: "Sign in for private data and interactive tools." };
 
+type AgentShowcase = {
+  decision_log?: { available?: boolean; rows?: { event?: string; decision_id?: string; reason?: string; ticker?: string }[] };
+  decision_quality?: {
+    available?: boolean; trade_count?: number;
+    expectancy?: { sample_size?: number; win_rate_pct?: number; expectancy_per_trade_pct?: number; note?: string | null };
+    dead_on_arrival?: { count?: number; share_pct?: number };
+  };
+};
+
+/**
+ * Live paper record for the Autopilot panel: real decisions and quality
+ * statistics from the public read-only feed. Renders nothing when the feed is
+ * empty or unreachable, so the illustrative content below stays the fallback
+ * rather than a broken state.
+ */
+function LiveAgentRecord() {
+  const [data, setData] = useState<AgentShowcase | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/agent-showcase", { headers: { accept: "application/json" } })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((payload) => { if (!cancelled && payload) setData(payload); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+  if (!data) return null;
+  const quality = data.decision_quality || {};
+  const expectancy = quality.expectancy || {};
+  const doa = quality.dead_on_arrival || {};
+  const events = (data.decision_log?.rows || []).slice(-4).reverse();
+  if (!quality.trade_count && !events.length) return null;
+  return <section className="border-t border-[var(--gold)] bg-[color-mix(in_srgb,var(--gold)_6%,transparent)]" data-testid="guest-live-agent">
+    <header className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--line)] p-4"><p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[var(--gold)]">Live · this machine&apos;s actual paper record</p><span className="border border-[var(--line)] px-2 py-1 text-[9px] uppercase text-[var(--text-mute)]">Not demo</span></header>
+    <dl className="grid border-b border-[var(--line)] sm:grid-cols-3">
+      <div className="border-b border-[var(--line)] p-4 sm:border-b-0 sm:border-r"><dt className="text-[9px] font-bold uppercase tracking-[0.1em] text-[var(--text-mute)]">Closed trades</dt><dd className="mt-1 font-mono text-base font-semibold">{quality.trade_count ?? 0}</dd></div>
+      <div className="border-b border-[var(--line)] p-4 sm:border-b-0 sm:border-r"><dt className="text-[9px] font-bold uppercase tracking-[0.1em] text-[var(--text-mute)]">Win rate · expectancy/trade</dt><dd className="mt-1 font-mono text-base font-semibold">{expectancy.win_rate_pct ?? "–"}% · {expectancy.expectancy_per_trade_pct ?? "–"}%</dd></div>
+      <div className="p-4"><dt className="text-[9px] font-bold uppercase tracking-[0.1em] text-[var(--text-mute)]">Dead-on-arrival losses</dt><dd className="mt-1 font-mono text-base font-semibold">{doa.count ?? 0} ({doa.share_pct ?? 0}%)</dd></div>
+    </dl>
+    {events.length > 0 && <ol className="divide-y divide-[var(--line-soft)] p-4 text-xs text-[var(--text-dim)]">
+      {events.map((event, index) => <li key={`${event.decision_id}-${index}`} className="py-1.5 font-mono">
+        <span className="text-[var(--gold)]">{event.event}</span> · {event.decision_id}{event.reason ? ` · ${event.reason}` : ""}
+      </li>)}
+    </ol>}
+    {expectancy.note && <p className="border-t border-[var(--line)] px-4 py-3 text-[10px] leading-5 text-[var(--text-mute)]">{expectancy.note}</p>}
+  </section>;
+}
+
 export function GuestShowcase({ panel, ticker, titleTag: Title = "h1" }: { panel: string; ticker: string; titleTag?: "h1" | "h2" }) {
   const content = DEMOS[panel] || FALLBACK;
   const locked = guestPanelMode(panel) === "locked" ? GUEST_LOCKED_BOUNDARY : null;
-  return <section data-testid="guest-showcase" data-guest-panel={panel} data-guest-source="demo" className="mx-auto w-full max-w-6xl border border-[var(--line)] bg-[var(--panel)]">
+  return <section data-testid="guest-showcase" data-guest-panel={panel} data-guest-source={panel === "Autopilot" ? "demo+live" : "demo"} className="mx-auto w-full max-w-6xl border border-[var(--line)] bg-[var(--panel)]">
     <header className="border-b border-[var(--line)] p-4 sm:p-5">
       <div className="flex flex-wrap items-center justify-between gap-2"><p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[var(--gold)]">Illustrative · {ticker} · read only</p><span className="border border-[var(--line)] px-2 py-1 text-[9px] uppercase text-[var(--text-mute)]">Demo data</span></div>
       <Title className="mt-3 text-xl font-semibold sm:text-2xl">{panel}</Title>
       <p className="mt-1 text-sm font-medium text-[var(--text-dim)]">{content.title}</p>
       <p className="mt-2 max-w-3xl text-xs leading-5 text-[var(--text-mute)]">{content.summary}</p>
     </header>
+    {panel === "Autopilot" && <LiveAgentRecord />}
     <dl className="grid border-b border-[var(--line)] sm:grid-cols-3">{content.metrics.map(([label, value]) => <div key={label} className="border-b border-[var(--line)] p-4 last:border-b-0 sm:border-b-0 sm:border-r sm:last:border-r-0"><dt className="text-[9px] font-bold uppercase tracking-[0.1em] text-[var(--text-mute)]">{label}</dt><dd className="mt-1 font-mono text-base font-semibold text-[var(--text)]">{value}</dd></div>)}</dl>
     <div className="grid lg:grid-cols-[1.4fr_1fr]">
       <div className="border-b border-[var(--line)] p-4 lg:border-b-0 lg:border-r"><h2 className="text-xs font-semibold">What Cipher surfaces</h2><ol className="mt-3 divide-y divide-[var(--line-soft)] text-xs text-[var(--text-dim)]">{content.rows.map((row, index) => <li key={row} className="grid grid-cols-[24px_1fr] gap-2 py-2"><span className="font-mono text-[var(--gold)]">{String(index + 1).padStart(2, "0")}</span><span>{row}</span></li>)}</ol></div>
