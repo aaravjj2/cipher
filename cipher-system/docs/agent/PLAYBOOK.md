@@ -28,8 +28,12 @@ procedure that obeys it.
 │ 5. ORDER      alpaca-trading MCP place_option_order             │
 │      limit at ask + executor slippage convention; quantity 1    │
 │ 6. LOG        SUBMITTED (broker order id) → FILLED/UNFILLED     │
-│ 7. VERIFY     paper_ledger_summary must show the position;      │
-│      append RECONCIALIZED with matches_local_ledger true/false  │
+│ 7. RECONCILE  agent_reconcile.py --decision-id <id> \           │
+│                 --broker-order '<json from MCP/CLI>'            │
+│      stamps RECONCILED (and a missing FILLED terminal);         │
+│      cross-checks id/symbol/qty/price, mismatches named         │
+│ 8. VERIFY      cipher-market agent_book shows the position;     │
+│      paper_ledger_summary stays authoritative for the autopilot │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -50,7 +54,8 @@ unique without coordination, and read honestly in the ledger.
 
 ## End-of-session report
 
-Run `python3 cipher-system/scripts/agent_session_report.py` — it chains every
+Run `python3 cipher-system/scripts/agent_session_report.py` — it includes the
+agent's open positions and chains every
 decision from today, counts outcomes, names anomalies and blocked reasons,
 and renders the summary. Append `decision_quality` statistics and state
 plainly: trades attempted, blocked count with reasons, fills reconciled

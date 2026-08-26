@@ -20,7 +20,10 @@ that it is **auditable end-to-end and honest about its own performance**:
   - `pretrade_gate.py`: PASS/BLOCKED on kill switch, session clock, portfolio
     limits, cost cap, duplicate intents.
   - `agent_decision_log.py`: append-only intent→outcome trail with per-decision
-    chain integrity (pending/dangling/duplicate anomalies named).
+    chain integrity and a derived position book (open contracts, closed
+    round-turns).
+  - `agent_reconcile.py`: broker-order JSON in, RECONCILED verdict out —
+    id/symbol/quantity/price checked against the chain, mismatches named.
 - **Rules** — AGENT_CHARTER.md (paper-only, intent-before-submission,
   classified outcomes) and PLAYBOOK.md (the seven-step loop).
 - **Mirror** — the production autopilot runs the same discipline continuously:

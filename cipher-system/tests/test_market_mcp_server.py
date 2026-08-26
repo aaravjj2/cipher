@@ -94,3 +94,29 @@ def test_paper_ledger_summary_reads_real_schema(tmp_path, monkeypatch) -> None:
     assert out["closed_total"]["wins"] == 1
     assert out["recent_closed"][0]["pnl_usd"] == 20.0
     assert out["live_execution_capability"] is False
+
+
+def test_agent_book_reports_absence_honestly(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(ms, "AGENT_DECISION_LOG", tmp_path / "none.jsonl")
+    out = ms.handle_tool("agent_book", {})
+    assert out["available"] is False
+    assert out["open_positions"] == [] and out["paper_only"] is True
+
+
+def test_agent_book_projects_open_lots_from_real_log(tmp_path, monkeypatch) -> None:
+    import importlib.util as _iu
+    spec = _iu.spec_from_file_location(
+        "adl_for_mcp", Path(__file__).resolve().parents[1] / "scripts" / "agent_decision_log.py")
+    adl = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(adl)
+    log = tmp_path / "log.jsonl"
+    adl.append(log, "INTENT", {"decision_id": "ab1", "ticker": "SPY", "side": "buy",
+                               "contract_symbol": "SPY260904C00765000", "quantity": 1,
+                               "limit_price": 3.1, "rationale": "t"})
+    adl.append(log, "FILLED", {"decision_id": "ab1", "filled_price": 3.12,
+                               "filled_quantity": 1})
+    monkeypatch.setattr(ms, "AGENT_DECISION_LOG", log)
+    out = ms.handle_tool("agent_book", {})
+    assert out["available"] is True
+    assert out["open_positions"][0]["quantity"] == 1
+    assert out["open_positions"][0]["avg_open_price"] == 3.12

@@ -64,6 +64,10 @@ PROSPECTIVE_LOG = Path(os.environ.get(
     "CIPHER_PROSPECTIVE_LOG",
     "/home/aarav/Aarav/cipher/runtime/data/earnings_prospective_log.jsonl",
 ))
+AGENT_DECISION_LOG = Path(os.environ.get(
+    "CIPHER_AGENT_LOG",
+    "/home/aarav/Aarav/cipher/runtime/data/agent_decision_log.jsonl",
+))
 
 # GET-only allowlist. Adding a path here is the only way to reach cipher-core, and every
 # entry below is a read. cipher-core also serves POST routes (/api/backtest, /api/holdings,
@@ -325,6 +329,11 @@ def tool_specs() -> list[dict[str, Any]]:
         {
             "name": "get_research_standing",
             "description": "Status of prospective (forward-testing) strategy registrations: sample progress, scored count and whether a verdict is yet supportable.",
+            "inputSchema": schema({}),
+        },
+        {
+            "name": "agent_book",
+            "description": "The trading agent's current option book derived from its append-only decision log: open contracts with quantity and average open price, closed round-turns. Empty until the agent's first fill.",
             "inputSchema": schema({}),
         },
         {
@@ -645,6 +654,30 @@ def _gex_regime(symbol: str) -> dict[str, Any]:
     }
 
 
+def _agent_book() -> dict[str, Any]:
+    """The Options Alpha agent's option book derived from its decision log.
+
+    Read-only projection of the same append-only file the gate and
+    reconciliation write: open contracts with average open price, closed
+    round-turn count. Absent file means the agent has not traded yet — an
+    honest empty state, not an error.
+    """
+    if not AGENT_DECISION_LOG.is_file():
+        return {"available": False,
+                "reason": "no decisions logged yet",
+                "open_positions": [], "closed_round_turns": 0,
+                "paper_only": True}
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    try:
+        from scripts.agent_decision_log import positions as _positions
+    except Exception as exc:
+        return {"available": False, "reason": f"loader failed: {exc}",
+                "paper_only": True}
+    book = _positions(AGENT_DECISION_LOG)
+    book["available"] = True
+    return book
+
+
 def _prospective_tail(limit: int) -> dict[str, Any]:
     limit = max(1, min(100, int(limit or 20)))
     if not PROSPECTIVE_LOG.is_file():
@@ -711,6 +744,8 @@ def handle_tool(name: str, args: dict[str, Any]) -> Any:
         if not symbol:
             raise ValueError("symbol is required")
         return _gex_regime(symbol)
+    if name == "agent_book":
+        return _agent_book()
     if name == "paper_ledger_summary":
         return _ledger_summary()
     if name == "decision_quality":
