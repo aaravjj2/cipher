@@ -256,3 +256,126 @@ def test_rollout_accepts_only_complete_regular_session_with_restart(tmp_path):
     with db:
         db.execute('update passes set covered=0 where at=?', (start.isoformat(),))
     assert not p.rollout(db)['eligible']
+
+
+def test_quotes_received_during_request_use_completion_clock(tmp_path):
+    db = book(tmp_path)
+    provider = Provider()
+    provider.now = NOW + timedelta(seconds=2)
+    p.ingest(db, message(), NOW)
+    ticks = iter([NOW, NOW, NOW, provider.now])
+    p.tick(db, provider, clock=lambda: next(ticks, provider.now))
+    row = db.execute('select * from positions').fetchone()
+    assert row and row['opened_at'] == provider.now.isoformat()
+
+
+def test_signal_expiring_during_quote_request_cannot_open(tmp_path):
+    db = book(tmp_path)
+    provider = Provider()
+    current = [NOW]
+    original_quotes = provider.quotes
+
+    def delayed_quotes(symbols):
+        current[0] = provider.now = NOW + timedelta(seconds=121)
+        return original_quotes(symbols)
+
+    provider.quotes = delayed_quotes
+    p.ingest(db, message(), NOW)
+    p.tick(db, provider, clock=lambda: current[0])
+    assert not db.execute('select 1 from positions').fetchone()
+    assert db.execute('select reason from candidates').fetchone()[0] == 'expired_signal'
+
+
+def test_cached_deadline_survives_restart_and_calendar_outage(tmp_path):
+    db = book(tmp_path)
+    provider = Provider()
+    p.ingest(db, message(text=TEXT.replace('swing', 'same-day')), NOW)
+    p.tick(db, provider, NOW)
+    db.close()
+    db = p.connect(tmp_path/'quote.sqlite')
+
+    def outage(*args):
+        raise RuntimeError('calendar_unavailable')
+
+    provider.session = provider.contract_close = outage
+    p.tick(db, provider, NOW.replace(hour=19, minute=45))
+    row = db.execute('select * from positions').fetchone()
+    assert row['status'] == 'OPEN'
+    assert row['pending_reason'] == 'session_deadline'
+    assert row['pnl'] is None and row['mark_pnl'] is None
+    assert db.execute("select count(*) from events where event_id like '%:pending:%'").fetchone()[0] == 1
+
+
+def test_open_positions_checked_before_new_entry_metadata(tmp_path):
+    db = book(tmp_path)
+    provider = Provider()
+    p.ingest(db, message(), NOW)
+    p.tick(db, provider, NOW)
+    p.ingest(db, message(2, TEXT.replace('600C', '610C')), NOW)
+    calls = []
+    contracts, quotes = provider.contracts, provider.quotes
+    provider.contracts = lambda *args: (calls.append('contracts'), contracts(*args))[1]
+    provider.quotes = lambda *args: (calls.append('quotes'), quotes(*args))[1]
+    p.tick(db, provider, NOW)
+    assert calls[0] == 'quotes'
+
+
+def test_idle_session_does_not_claim_quote_health(tmp_path):
+    db = book(tmp_path, False)
+    p.tick(db, Provider(), NOW)
+    result = p.snapshot(tmp_path/'quote.sqlite', NOW)
+    assert result['data_health'] == 'no_quote_evidence'
+    assert result['quote_coverage'] == {'passes': 1, 'requested': 0, 'covered': 0}
+    assert not result['rollout']['eligible']
+
+
+def test_nontrading_day_is_not_calendar_outage(tmp_path):
+    db = book(tmp_path, False)
+    provider = Provider()
+    provider.session = lambda day: None
+    p.tick(db, provider, NOW)
+    assert p.snapshot(tmp_path/'quote.sqlite', NOW)['data_health'] == 'outside_session'
+    assert not db.execute('select 1 from incidents where active=1').fetchone()
+
+
+@pytest.mark.parametrize('seconds,closed', [(2, True), (902, False)])
+def test_exit_quote_request_crossing_deadline_or_close(tmp_path, seconds, closed):
+    db = book(tmp_path)
+    provider = Provider()
+    p.ingest(db, message(text=TEXT.replace('swing', 'same-day')), NOW)
+    p.tick(db, provider, NOW)
+    current = [NOW.replace(hour=19, minute=44, second=59)]
+    original_quotes = provider.quotes
+
+    def delayed_quotes(symbols):
+        current[0] += timedelta(seconds=seconds)
+        provider.now = current[0]
+        return original_quotes(symbols)
+
+    provider.quotes = delayed_quotes
+    p.tick(db, provider, clock=lambda: current[0])
+    row = db.execute('select * from positions').fetchone()
+    assert (row['status'] == 'CLOSED') == closed
+    assert row['pending_reason'] == 'session_deadline'
+    if not closed:
+        assert row['pnl'] is None and row['exit_json'] is None
+
+
+def test_review_racing_decision_does_not_overwrite_or_audit(tmp_path, monkeypatch):
+    db = book(tmp_path)
+    p.ingest(db, message(text='incomplete'), NOW)
+    parse = e.parse
+
+    def concurrent_rejection(*args):
+        other = p.connect(tmp_path/'quote.sqlite')
+        try:
+            p.review(other, 1, 'reject', 'owner', NOW)
+        finally:
+            other.close()
+        return parse(*args)
+
+    monkeypatch.setattr(e, 'parse', concurrent_rejection)
+    with pytest.raises(ValueError, match='candidate_not_reviewable'):
+        p.review(db, 1, 'approve', 'owner', NOW, TEXT)
+    assert db.execute('select status from candidates').fetchone()[0] == 'rejected'
+    assert [r[0] for r in db.execute('select action from reviews')] == ['reject']

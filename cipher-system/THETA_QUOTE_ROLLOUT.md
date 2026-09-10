@@ -36,6 +36,28 @@ is used. Strategy and fill assumptions are versioned `theta-quote-v1`.
 
 ## Verified session sources and limits
 
+### Reliability follow-up
+
+The production monitor refreshes UTC after provider requests and validates both
+quote age and the entry/exit time window at completion. Existing positions are
+checked before new candidates. Verified per-position session times are stored
+additively in `verified_sessions`; an already-known deadline can therefore create
+a persistent pending exit after a restart even when session metadata is down.
+Cached times never authorize a fabricated fill or substitute for fresh quotes.
+Old positions without a saved session acquire one only from verified metadata.
+
+Snapshot responses now include `quote_coverage` totals (`passes`, `requested`,
+`covered`). Data health distinguishes `no_quote_evidence`, `outside_session`,
+`stale`, `unresolved`, and `current`; an idle heartbeat is not quote coverage.
+Review decisions use a conditional update and transactional audit so a competing
+approval cannot overwrite a rejection. Observation activation requirements and
+the historical ledger are unchanged. Monitoring is still sequential: slow
+provider requests can exceed ten seconds and must fail the existing gap gate.
+
+Still pending: representative screenshot parsing improvements, broader verified
+contract-class support, and the complete real-session observation/restart gate.
+No historical candidates are replayed by this follow-up.
+
 The default Alpaca adapter currently resolves regular/early closes for standard
 SPY, QQQ and IWM options from provider calendar dates plus the published exchange
 class schedule. Other classes require explicit provider `session_close` and

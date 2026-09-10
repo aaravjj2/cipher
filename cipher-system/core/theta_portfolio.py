@@ -62,6 +62,10 @@ def connect(path=DB):
       create table if not exists observations(
         candidate_id integer primary key, at text not null, result_json text not null);
       create table if not exists incidents(key text primary key, active integer not null, at text not null);
+      create table if not exists verified_sessions(
+        position_id integer not null references positions(id), day text not null,
+        session_open text not null, session_close text not null,
+        primary key(position_id,day));
       create table if not exists reviews(
         id integer primary key, candidate_id integer not null, actor text not null,
         at text not null, action text not null, correction_json text);
@@ -213,64 +217,47 @@ def available(db):
     return STARTING_CASH + pnl - reserved
 
 
-def tick(db, provider, now):
+def tick(db, provider, now=None, *, clock=None):
+    # Explicit timestamps keep offline replays deterministic; production passes
+    # no timestamp and refreshes UTC after every provider operation.
+    clock = clock or ((lambda: now) if now is not None else lambda: datetime.now(timezone.utc))
+    now = clock()
     mode = get(db, 'mode', 'observe')
     requested = covered = 0
     session = None
+    session_error = False
     try:
         session = provider.session(now.astimezone(NY).date().isoformat())
     except Exception:
-        pass
+        session_error = True
+    now = clock()
     with db:
-        incident(db, 'session_unavailable', session is None, now)
+        incident(db, 'session_unavailable', session_error, now)
     market_open = session and session[0] <= now < session[1]
-    for row in db.execute("select * from candidates where status='ready' order by observed_at,id").fetchall():
-        parsed = json.loads(row['correction_json'] or row['parsed_json'])
-        try:
-            age = (now - stamp(row['observed_at'])).total_seconds()
-            if not 0 <= age <= SIGNAL_AGE or parsed['expiration'] < now.astimezone(NY).date().isoformat():
-                raise ValueError('expired_signal')
-            if not market_open:
-                raise ValueError('outside_verified_entry_session')
-            requested += 1
-            legs = resolve(parsed, provider.contracts(parsed['symbol'], parsed['expiration']))
-            # Provider must attest session close for this exact contract class.
-            closes = [provider.contract_close(l.contract, now.astimezone(NY).date().isoformat()) for l in legs]
-            if any(c is None for c in closes):
-                raise ValueError('contract_session_unresolved')
-            if now >= min(closes) - timedelta(minutes=15):
-                raise ValueError('outside_verified_entry_session')
-            quotes = provider.quotes([l.contract.symbol for l in legs])
-            fill = entry(legs, {l.contract.symbol: l.contract for l in legs}, quotes, now=now, slippage_bps=SLIPPAGE_BPS, fee_per_contract=FEE)
-            if fill['entry_convention'] != parsed['price_style'] or not fill['premium']:
-                raise ValueError('price_convention_conflict')
-            reserve = collateral(legs, fill)
-            covered += 1
-            with db:
-                db.execute('insert or replace into observations values(?,?,?)', (row['id'], now.isoformat(), dump({'fill': fill, 'legs': [asdict(l) for l in legs], 'collateral': reserve})))
-                if mode == 'paper':
-                    if available(db) < reserve:
-                        raise ValueError('insufficient_available_cash')
-                    if stamp(row['observed_at']) < stamp(get(db, 'activated_at')):
-                        raise ValueError('preactivation_signal')
-                    db.execute('insert into positions(id,candidate_id,symbol,expiration,holding,legs_json,entry_json,collateral,opened_at) values(?,?,?,?,?,?,?,?,?)',
-                               (row['id'], row['id'], parsed['symbol'], parsed['expiration'], parsed['holding'], dump([asdict(l) for l in legs]), dump(fill), reserve, now.isoformat()))
-                    event(db, f'open:{row["id"]}', {'action': 'opened', 'position_id': row['id'], 'symbol': parsed['symbol'], 'fill': fill}, now)
-                db.execute('update candidates set status=?,reason=null where id=?', ('opened' if mode == 'paper' else 'observed', row['id']))
-        except (ValueError, RuntimeError, OSError, KeyError, TypeError) as exc:
-            with db:
-                db.execute("update candidates set status='needs_review',reason=? where id=?", (str(exc)[:200], row['id']))
     for row in db.execute("select * from positions where status='OPEN'").fetchall():
+        now = clock()
         requested += 1
         legs = _legs(row)
         try:
             day = now.astimezone(NY).date().isoformat()
             if day > row['expiration']:
                 raise ValueError('unsupported_expiry_settlement')
+            cached = db.execute('select * from verified_sessions where position_id=? and day=?', (row['id'], day)).fetchone()
+            # Persist an already-attested deadline before any network request.
+            with db:
+                if row['holding'] == 'same_day' and stamp(row['opened_at']).astimezone(NY).date() < now.astimezone(NY).date():
+                    request_exit(db, row, 'session_deadline', now)
+                elif cached and (row['holding'] == 'same_day' or day == row['expiration']) and now >= stamp(cached['session_close']) - timedelta(minutes=15):
+                    request_exit(db, row, 'session_deadline', now)
             closes = [provider.contract_close(l.contract, day) for l in legs]
             if any(c is None for c in closes):
                 raise ValueError('contract_session_unresolved')
             close = min(closes)
+            now = clock()
+            with db:
+                if session:
+                    db.execute('insert or replace into verified_sessions values(?,?,?,?)',
+                               (row['id'], day, session[0].isoformat(), close.isoformat()))
             with db:
                 if row['holding'] == 'same_day' or day == row['expiration']:
                     if now >= close - timedelta(minutes=15) or stamp(row['opened_at']).astimezone(NY).date() < now.astimezone(NY).date() and row['holding'] == 'same_day':
@@ -279,6 +266,13 @@ def tick(db, provider, now):
                 raise ValueError('outside_verified_session')
             reverse = [Leg(l.contract, 'SELL' if l.side == 'BUY' else 'BUY') for l in legs]
             quotes = provider.quotes([l.contract.symbol for l in legs])
+            now = clock()
+            with db:
+                if (row['holding'] == 'same_day' or day == row['expiration']) and now >= close - timedelta(minutes=15):
+                    latest = db.execute('select * from positions where id=?', (row['id'],)).fetchone()
+                    request_exit(db, latest, 'session_deadline', now)
+            if not session[0] <= now < close:
+                raise ValueError('outside_verified_session')
             fill = entry(reverse, {l.contract.symbol: l.contract for l in legs}, quotes, now=now, slippage_bps=SLIPPAGE_BPS, fee_per_contract=FEE)
             opening = json.loads(row['entry_json'])
             pnl = round(-fill['entry_value'] - opening['entry_value'], 2)
@@ -296,6 +290,50 @@ def tick(db, provider, now):
                 db.execute('update positions set mark_pnl=null,mark_error=? where id=?', (str(exc)[:200], row['id']))
                 if str(exc) == 'unsupported_expiry_settlement':
                     request_exit(db, row, str(exc), now)
+    for row in db.execute("select * from candidates where status='ready' order by observed_at,id").fetchall():
+        now = clock()
+        parsed = json.loads(row['correction_json'] or row['parsed_json'])
+        try:
+            age = (now - stamp(row['observed_at'])).total_seconds()
+            if not 0 <= age <= SIGNAL_AGE or parsed['expiration'] < now.astimezone(NY).date().isoformat():
+                raise ValueError('expired_signal')
+            if not session or not session[0] <= now < session[1]:
+                raise ValueError('outside_verified_entry_session')
+            requested += 1
+            legs = resolve(parsed, provider.contracts(parsed['symbol'], parsed['expiration']))
+            # Provider must attest session close for this exact contract class.
+            closes = [provider.contract_close(l.contract, now.astimezone(NY).date().isoformat()) for l in legs]
+            if any(c is None for c in closes):
+                raise ValueError('contract_session_unresolved')
+            if now >= min(closes) - timedelta(minutes=15):
+                raise ValueError('outside_verified_entry_session')
+            quotes = provider.quotes([l.contract.symbol for l in legs])
+            now = clock()
+            if not 0 <= (now - stamp(row['observed_at'])).total_seconds() <= SIGNAL_AGE:
+                raise ValueError('expired_signal')
+            if not session[0] <= now < min(session[1], min(closes) - timedelta(minutes=15)):
+                raise ValueError('outside_verified_entry_session')
+            fill = entry(legs, {l.contract.symbol: l.contract for l in legs}, quotes, now=now, slippage_bps=SLIPPAGE_BPS, fee_per_contract=FEE)
+            if fill['entry_convention'] != parsed['price_style'] or not fill['premium']:
+                raise ValueError('price_convention_conflict')
+            reserve = collateral(legs, fill)
+            covered += 1
+            with db:
+                db.execute('insert or replace into observations values(?,?,?)', (row['id'], now.isoformat(), dump({'fill': fill, 'legs': [asdict(l) for l in legs], 'collateral': reserve})))
+                if mode == 'paper':
+                    if available(db) < reserve:
+                        raise ValueError('insufficient_available_cash')
+                    if stamp(row['observed_at']) < stamp(get(db, 'activated_at')):
+                        raise ValueError('preactivation_signal')
+                    db.execute('insert into positions(id,candidate_id,symbol,expiration,holding,legs_json,entry_json,collateral,opened_at) values(?,?,?,?,?,?,?,?,?)',
+                               (row['id'], row['id'], parsed['symbol'], parsed['expiration'], parsed['holding'], dump([asdict(l) for l in legs]), dump(fill), reserve, now.isoformat()))
+                    db.execute('insert or replace into verified_sessions values(?,?,?,?)',
+                               (row['id'], now.astimezone(NY).date().isoformat(), session[0].isoformat(), min(closes).isoformat()))
+                    event(db, f'open:{row["id"]}', {'action': 'opened', 'position_id': row['id'], 'symbol': parsed['symbol'], 'fill': fill}, now)
+                db.execute('update candidates set status=?,reason=null where id=?', ('opened' if mode == 'paper' else 'observed', row['id']))
+        except (ValueError, RuntimeError, OSError, KeyError, TypeError) as exc:
+            with db:
+                db.execute("update candidates set status='needs_review',reason=? where id=?", (str(exc)[:200], row['id']))
     # Continue sampling every observed structure until that session ends. This
     # exercises repeated quote retrieval without opening a paper position.
     if mode == 'observe' and market_open:
@@ -304,10 +342,15 @@ def tick(db, provider, now):
             try:
                 observed = json.loads(row['result_json'])
                 legs = [Leg(Contract(**l['contract']), l['side']) for l in observed['legs']]
-                entry(legs, {l.contract.symbol:l.contract for l in legs}, provider.quotes([l.contract.symbol for l in legs]), now=now)
+                quotes = provider.quotes([l.contract.symbol for l in legs])
+                now = clock()
+                if not session[0] <= now < session[1]:
+                    raise ValueError('outside_verified_session')
+                entry(legs, {l.contract.symbol:l.contract for l in legs}, quotes, now=now)
                 covered += 1
             except (ValueError, RuntimeError, OSError, KeyError, TypeError):
                 pass
+    now = clock()
     with db:
         ok = reconcile(db)
         incident(db, 'quote_coverage_incomplete', covered < requested, now)
@@ -331,8 +374,10 @@ def review(db, candidate_id, action, actor, now, correction=None):
         if not parsed:
             raise ValueError('complete_correction_required')
     with db:
+        updated = db.execute("update candidates set status=?,reviewed_by=?,reviewed_at=?,correction_json=? where id=? and status='needs_review'", ('ready' if action == 'approve' else 'rejected', actor, now.isoformat(), dump(parsed) if parsed else None, row['id']))
+        if updated.rowcount != 1:
+            raise ValueError('candidate_not_reviewable')
         db.execute('insert into reviews(candidate_id,actor,at,action,correction_json) values(?,?,?,?,?)', (row['id'], actor, now.isoformat(), action, dump(parsed) if parsed else None))
-        db.execute('update candidates set status=?,reviewed_by=?,reviewed_at=?,correction_json=? where id=?', ('ready' if action == 'approve' else 'rejected', actor, now.isoformat(), dump(parsed) if parsed else None, row['id']))
     return {'status': 'queued_for_fresh_validation' if parsed else 'rejected'}
 
 
@@ -381,12 +426,23 @@ def snapshot(path=DB, now=None):
                 p['mark_error'] = p['mark_error'] or 'stale_quote'
         opens = [p for p in positions if p['status'] == 'OPEN']
         last = get(db, 'last_tick')
+        latest_pass = db.execute('select * from passes order by julianday(at) desc limit 1').fetchone()
+        coverage = dict(db.execute('select count(*) as passes, coalesce(sum(requested),0) as requested, coalesce(sum(covered),0) as covered from passes').fetchone())
+        data_health = 'no_quote_evidence'
+        if latest_pass and latest_pass['requested']:
+            data_health = 'current' if latest_pass['covered'] == latest_pass['requested'] else 'unresolved'
+        elif latest_pass and (not latest_pass['session_open'] or not stamp(latest_pass['session_open']) <= now < stamp(latest_pass['session_close'])):
+            data_health = 'outside_session'
+        if any(p['mark_error'] for p in opens) or db.execute('select 1 from incidents where active=1').fetchone():
+            data_health = 'unresolved'
+        elif data_health == 'current' and (not last or not 0 <= (now-stamp(last)).total_seconds() <= 30):
+            data_health = 'stale'
         return {'version': VERSION, 'mode': get(db, 'mode'), 'available_cash': round(available(db), 2),
                 'open_exposure': sum(p['collateral'] for p in opens), 'pending_exits': sum(bool(p['pending_reason']) for p in opens),
                 'realized_pnl': round(sum(p['pnl'] or 0 for p in positions if p['status'] == 'CLOSED'), 2),
                 'unresolved_pnl': sum(p['mark_pnl'] is None for p in opens),
                 'execution_health': 'current' if last and (now-stamp(last)).total_seconds() <= 30 else 'stopped_or_stale',
-                'data_health': 'unresolved' if any(p['mark_error'] for p in opens) or db.execute('select 1 from incidents where active=1').fetchone() else 'current',
+                'data_health': data_health, 'quote_coverage': coverage,
                 'notification_health': 'retrying' if db.execute('select 1 from events where delivered_at is null and attempts>0').fetchone() else 'pending' if db.execute('select 1 from events where delivered_at is null').fetchone() else 'current',
                 'last_tick': last, 'positions': positions[:100], 'candidates': [dict(r) for r in db.execute("select id,observed_at,body,media_json,status,reason from candidates where status='needs_review' order by id desc limit 100")],
                 'rollout': rollout(db), 'external_order_capability': False}

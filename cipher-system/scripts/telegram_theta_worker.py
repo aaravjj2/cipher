@@ -62,7 +62,7 @@ def ingest_row(row):
 def monitor(provider):
     db = portfolio.connect()
     try:
-        portfolio.tick(db, provider, datetime.now(timezone.utc))
+        portfolio.tick(db, provider)
     finally:
         db.close()
 
