@@ -10,6 +10,32 @@ from core import fronttest_portfolios
 NY = ZoneInfo("America/New_York")
 
 
+def test_theta_daily_counts_use_source_dates_and_never_expose_evidence(tmp_path):
+    from core import theta_portfolio as theta
+    path = tmp_path/'theta.sqlite'
+    db = theta.connect(path)
+    now = datetime(2026, 9, 10, 16, 10, tzinfo=NY)
+    theta.ingest(db, {'id': 1, 'date': now.isoformat(), 'text': 'private incomplete caption'}, now)
+    theta.ingest(db, {'id': 2, 'date': '2026-09-11T02:00:00+00:00', 'text': 'Menu'}, now)
+    theta.ingest(db, {'id': 3, 'date': '2026-09-11T05:00:00+00:00', 'text': 'Menu'}, now)
+    db.close()
+    result = daily._theta_snapshot(path, now.date())
+    assert result['messages_today'] == 2
+    assert result['dispositions_today'] == {'ignored': 1, 'needs_review': 1}
+    assert 'private incomplete caption' not in str(result)
+    message = daily.current_message({'report_day': '2026-09-10', 'theta': result})
+    assert 'observe' in message and '2 messages today' in message
+    assert '0 validated entries' in message
+
+
+def test_daily_service_can_read_all_wal_ledgers():
+    service = (Path(__file__).resolve().parents[2]/'infra/gcp-cipher-vm/systemd/cipher-portfolio-discord-daily.service').read_text()
+    for suffix in ('paper_runtime/data/paper_trades', 'paper_runtime/cohorts/confirmation',
+                   'paper_runtime/cohorts/cost', 'paper_runtime/cohorts/exit', 'telegram'):
+        assert f'ReadWritePaths=/home/aarav/Aarav/cipher/runtime/data/{suffix}' in service
+    assert 'ReadWritePaths=/home/aarav/Aarav/cipher/runtime\n' not in service
+
+
 def test_current_notification_excludes_legacy_research_totals():
     message = daily.current_message({'report_day':'2026-09-10', 'portfolios':[{'portfolio_id':'v6_nvda_c05'}], 'earnings':{'settled':33}, 'autopilot':{}, 'autopilot_cohorts':[]})
     assert 'v6_nvda' not in message and '33 settled' not in message

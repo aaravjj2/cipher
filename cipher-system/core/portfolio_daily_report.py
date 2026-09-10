@@ -11,10 +11,28 @@ from core.fronttest_portfolios import DEFAULT_DB, NY, ACTIVE_SPECS, connect, por
 from core.paper_portfolio_api import _open_mark
 from core.prospective_fronttests import DEFAULT_DB as DEFAULT_PROSPECTIVE_DB
 from core.exchange_calendar import is_session
+from core import theta_portfolio
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_AUTOPILOT_DB = Path("/home/aarav/Aarav/cipher/runtime/data/paper_runtime/data/paper_trades/autopilot_shadow.sqlite")
 DEFAULT_EARNINGS_PAPER_DB = REPO_ROOT / "earnings_model/data/paper_portfolio.sqlite"
+
+
+def _theta_snapshot(path: Path, report_day: date) -> dict:
+    """Daily ingestion evidence, not a fabricated paper-performance record."""
+    if not path.is_file():
+        return {'available': False}
+    status = theta_portfolio.snapshot(path)
+    start = datetime.combine(report_day, datetime.min.time(), tzinfo=NY)
+    end = start + timedelta(days=1)
+    with sqlite3.connect(f'file:{path.resolve()}?mode=ro', uri=True, timeout=2) as db:
+        rows = db.execute("select status,count(*) from candidates where julianday(observed_at)>=julianday(?) and julianday(observed_at)<julianday(?) group by status", (start.isoformat(), end.isoformat())).fetchall()
+        last = db.execute('select max(observed_at) from candidates').fetchone()[0]
+    counts = dict(rows)
+    return {'available': True, 'mode': status['mode'], 'messages_today': sum(counts.values()),
+            'dispositions_today': counts, 'last_message_at': last,
+            **{key: status.get(key) for key in ('ingestion_health', 'last_ingestion_poll', 'review_pending',
+               'review_reasons', 'notification_health', 'quote_coverage', 'pending_exits', 'unresolved_pnl', 'rollout')}}
 
 
 def ensure_schema(db: sqlite3.Connection) -> None:
@@ -227,6 +245,7 @@ def snapshot(
             if (path := autopilot_db_path.parents[2] / "cohorts" / name / "paper.sqlite").is_file()
         ],
         "earnings": _earnings_snapshot(earnings_db_path),
+        "theta": _theta_snapshot(theta_portfolio.DB, report_day),
     }
 
 
@@ -302,7 +321,17 @@ def current_message(data: dict) -> str:
             lines.append(f"{row['cohort_id']}: unavailable")
             continue
         lines.append(f"{row['cohort_id']}: {row['entries']} in / {row['exits']} out · "
-                     f"{row['wins']}W/{row['losses']}L · equity ${row['closing_marked_equity']:,.2f}")
+                     f"{row['wins']}W/{row['losses']}L · equity ${row['closing_marked_equity']:,.2f} · "
+                     f"data blocks today {row.get('data_failures', 0)}")
+    theta = data.get('theta') or {}
+    if theta.get('available'):
+        lines.append(f"Theta: {theta['mode']} · Telegram {theta['ingestion_health']} · "
+                     f"{theta['messages_today']} messages today · {theta['review_pending']} awaiting review")
+        counts = theta.get('dispositions_today') or {}
+        lines.append(f"Theta: {counts.get('opened', 0)} validated entries today · "
+                     f"{theta.get('pending_exits', 0)} pending exits · no historical-price conversion")
+    else:
+        lines.append('Theta: unavailable')
     lines.append('Paper experiments; not promoted. Historical research books remain in Cipher, excluded from this alert.')
     lines.append('Paper simulation only — no broker orders.')
     return '\n'.join(lines)

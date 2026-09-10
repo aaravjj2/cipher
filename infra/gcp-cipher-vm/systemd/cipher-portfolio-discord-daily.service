@@ -15,6 +15,14 @@ ProtectSystem=full
 ProtectHome=read-only
 ReadWritePaths=/home/aarav/Aarav/cipher/runtime/data/fronttest_portfolios
 ReadWritePaths=/home/aarav/Aarav/cipher/runtime/data/prospective_fronttests
+# SQLite WAL readers may need to initialize shared-memory sidecars. Keep these
+# exceptions restricted to the specific ledger directories, not runtime root.
+ReadWritePaths=/home/aarav/Aarav/cipher/runtime/data/paper_runtime/data/paper_trades
+ReadWritePaths=/home/aarav/Aarav/cipher/runtime/data/paper_runtime/cohorts/confirmation
+ReadWritePaths=/home/aarav/Aarav/cipher/runtime/data/paper_runtime/cohorts/cost
+ReadWritePaths=/home/aarav/Aarav/cipher/runtime/data/paper_runtime/cohorts/exit
+ReadWritePaths=/home/aarav/Aarav/cipher/runtime/data/telegram
+ReadWritePaths=/home/aarav/Aarav/cipher/earnings_model/data
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 StandardOutput=journal
 StandardError=journal

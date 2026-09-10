@@ -77,6 +77,18 @@ Tesseract TSV and retains line boundaries. Literal quotation marks no longer
 swallow later TSV rows. The 85 minimum-confidence requirement remains in force;
 chart images and incomplete or conflicting structures still require review.
 
+The daily Discord recap now includes Theta's message count, ingestion health,
+review backlog, validated entries and pending exits. It does not expose message
+text or image evidence. Autopilot data-block counts are explicitly labeled as
+daily incidents rather than current transport health. Source-date counts use
+New York day boundaries, including UTC timestamps after midnight.
+
+The recap systemd unit includes narrowly scoped ledger-directory write access
+for SQLite WAL shared-memory sidecars, including all three experimental cohort
+directories. Without those exceptions its read-only database queries can fail
+under `ProtectHome=read-only` even when an interactive preview succeeds. Failed
+delivery remains retryable; the same report date is not resent after success.
+
 The default Alpaca adapter currently resolves regular/early closes for standard
 SPY, QQQ and IWM options from provider calendar dates plus the published exchange
 class schedule. Other classes require explicit provider `session_close` and
