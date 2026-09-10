@@ -89,6 +89,13 @@ directories. Without those exceptions its read-only database queries can fail
 under `ProtectHome=read-only` even when an interactive preview succeeds. Failed
 delivery remains retryable; the same report date is not resent after success.
 
+Autopilot failure alerts now check durable pending-exit position state before
+recent event logs. An unresolved exit does not expire after ten minutes or get
+hidden by routine rejection events. Each pending position is acknowledged
+separately only after successful delivery, with a stable event ID in the notice.
+Closed positions are no longer eligible for a pending-exit alert. This reporting
+change does not alter cohort strategies, execution assumptions or promotion.
+
 The default Alpaca adapter currently resolves regular/early closes for standard
 SPY, QQQ and IWM options from provider calendar dates plus the published exchange
 class schedule. Other classes require explicit provider `session_close` and
