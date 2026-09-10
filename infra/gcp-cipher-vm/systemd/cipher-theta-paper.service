@@ -1,0 +1,21 @@
+[Unit]
+Description=Cipher Theta Telegram local paper worker
+After=network-online.target cipher-paper-autopilot-executor.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=aarav
+Group=aarav
+WorkingDirectory=/home/aarav/Aarav/cipher/cipher-github/cipher-system
+EnvironmentFile=-/etc/cipher/cipher.env
+ExecStart=/home/aarav/.venvs/cipher/bin/python /home/aarav/Aarav/cipher/cipher-github/cipher-system/scripts/telegram_theta_worker.py
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/home/aarav/Aarav/cipher/runtime
+
+[Install]
+WantedBy=multi-user.target

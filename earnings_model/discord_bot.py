@@ -192,10 +192,18 @@ def build_this_week_preview_embed(cards: List[Dict[str, Any]]) -> Dict[str, Any]
         bias = str(item.get('direction_bias') or 'NEUTRAL')
         state_badge = "🟢" if bias.startswith('BULLISH') else ("🔴" if bias.startswith('BEARISH') else "⚪")
         eps = item.get('eps_estimate_avg')
+        raw_probability = item.get('prob_day5_up')
+        beat = f"{item['hist_beat_rate'] * 100:.1f}%" if item.get('hist_beat_rate') is not None else 'unknown'
+        drift = f"{item['pre_drift_20d']:+.1f}%" if item.get('pre_drift_20d') is not None else 'unavailable'
+        gap = f"±{item['expected_gap_pct']:.1f}%" if item.get('expected_gap_pct') is not None else 'unavailable'
+        forecast = (
+            f"**Raw 5D up probability**: `{float(raw_probability) * 100:.1f}%` — `{item.get('forecast_status', 'UNVALIDATED')}`\n"
+            if raw_probability is not None else "**Raw forecast**: `unavailable`\n"
+        )
         val_str = (
-            f"**Consensus EPS**: `{eps if eps is not None else 'unknown'}` | **Historical Beat**: `{float(item.get('hist_beat_rate') or 0) * 100:.1f}%`\n"
-            f"**Model Bias**: `{bias}` | **Confidence**: `{float(item.get('confidence') or 0) * 100:.1f}%`\n"
-            f"**Current 20D Drift**: `{float(item.get('pre_drift_20d') or 0):+.1f}%` | **Expected Gap**: `±{float(item.get('expected_gap_pct') or 0):.1f}%`\n"
+            f"**Consensus EPS**: `{eps if eps is not None else 'unknown'}` | **Historical Beat**: `{beat}`\n"
+            + forecast +
+            f"**Current 20D Drift**: `{drift}` | **Expected Gap**: `{gap}`\n"
             f"**Paper Structure**: `{item.get('recommended_strategy') or 'research only'}`"
         )
         fields.append({
@@ -238,9 +246,30 @@ def notify_discord_paper_book(webhook_url: Optional[str] = None) -> Dict[str, An
             **({'payloads': payloads} if status == 'skipped' else {})}
 
 
-def notify_discord_weekly_preview(webhook_url: Optional[str] = None) -> Dict[str, Any]:
+def notify_discord_weekly_preview(webhook_url: Optional[str] = None, radar_path: Optional[str] = None) -> Dict[str, Any]:
     """Send this week's earnings radar digest to Discord."""
-    payload = build_this_week_preview_embed(find_upcoming_earnings(days_ahead=7))
+    if radar_path:
+        try:
+            artifact = json.loads(Path(radar_path).read_text())
+            produced = datetime.fromisoformat(artifact['as_of'].replace('Z', '+00:00'))
+            age = (datetime.now(timezone.utc) - produced).total_seconds()
+            if not 0 <= age <= 3600 or artifact.get('data_status') == 'unavailable':
+                return {'status': 'warning', 'reason': 'radar_refresh_unavailable_or_stale'}
+            cards = artifact['cards']
+        except (OSError, ValueError, TypeError, KeyError):
+            return {'status': 'warning', 'reason': 'radar_artifact_unavailable'}
+    else:
+        cards = find_upcoming_earnings(days_ahead=7)
+    payload = build_this_week_preview_embed(cards)
+    if cards and all(card.get('strategy_eligible') is False for card in cards):
+        holdout_blocks = sum('failed independent holdout' in str(card.get('recommended_strategy', '')).lower() for card in cards)
+        reason = (f'Direction model failed independent holdout validation for {holdout_blocks}/{len(cards)} reports. '
+                  if holdout_blocks else 'Model/data gates remain enforced. ')
+        payload['embeds'][0]['title'] = 'Cipher earnings research — entries blocked'
+        payload['embeds'][0]['description'] = (f"{len(cards)} upcoming reports tracked. No earnings strategy is eligible for paper entry. "
+            + reason + 'Full raw forecasts and per-symbol reasons are available in Earnings Radar. '
+            'Research only; no broker orders.')
+        payload['embeds'][0]['fields'] = []
     return send_discord_payload(payload, webhook_url=webhook_url)
 
 

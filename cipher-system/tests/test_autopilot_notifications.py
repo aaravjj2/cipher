@@ -42,7 +42,28 @@ def test_strategy_rejection_does_not_page_operations(tmp_path):
     assert autopilot_notifications.latest_failure(db_path) is None
 
 
-def test_after_close_recap_includes_separate_autopilot_and_earnings_ledgers(tmp_path):
+def test_failed_auto_promotion_pages_operations(tmp_path):
+    db_path = tmp_path / "paper.sqlite"
+    db = PaperExecutorDatabase(db_path)
+    event_id = db.insert_system_event("AUTO_PAPER_PROMOTION", {
+        "ok": False, "reason": "database reconciliation has not passed",
+    })
+    event = autopilot_notifications.latest_failure(db_path)
+    assert event and event["id"] == event_id
+
+
+def test_successful_auto_promotion_clears_older_failure(tmp_path):
+    db_path = tmp_path / "paper.sqlite"
+    db = PaperExecutorDatabase(db_path)
+    db.insert_system_event("AUTO_PAPER_PROMOTION", {
+        "ok": False, "reason": "database reconciliation has not passed",
+    })
+    db.insert_system_event("AUTO_PAPER_PROMOTION", {"ok": True, "reason": "ready"})
+
+    assert autopilot_notifications.latest_failure(db_path) is None
+
+
+def test_after_close_recap_preserves_earnings_data_without_retired_summary(tmp_path):
     autopilot_db = tmp_path / "autopilot.sqlite"
     db = PaperExecutorDatabase(autopilot_db)
     db.insert_system_event("ENTRY_BLOCKED", {
@@ -59,5 +80,5 @@ def test_after_close_recap_includes_separate_autopilot_and_earnings_ledgers(tmp_
     assert result["snapshot"]["autopilot"]["operating_state"] == "DATA_FAILURE"
     assert result["snapshot"]["earnings"]["available"] is True
     assert "Local autopilot: DATA_FAILURE" in result["message"]
-    assert "Earnings legacy:" in result["message"]
+    assert "Earnings legacy:" not in result["message"]
     assert len(result["message"]) < 1900

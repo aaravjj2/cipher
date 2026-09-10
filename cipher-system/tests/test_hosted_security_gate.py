@@ -12,7 +12,7 @@ def test_hosted_proxy_fails_closed_and_only_exposes_liveness_without_auth():
     assert 'return sendJson(res, 401, { error: "authentication required" }' in source
     assert 'if (!userContext || userContext.guest) return sendJson(res, 200, { status: "ok" }' in source
     assert 'CIPHER_INTERNAL_PROXY_TOKEN' in source
-    assert 'trustedCoreHeaders(coreUserContext)' in source
+    assert 'trustedCoreHeaders(coreUserContext,' in source
     assert 'headers["x-cipher-guest"] = "1"' in source
     assert '"/api/chart-saves": "/api/chart-saves"' in source
     assert '"/api/standing-notes": "/api/standing-notes"' in source

@@ -14,6 +14,7 @@ import pandas as pd
 import numpy as np
 import datetime
 import logging
+import math
 from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime as dt, timedelta, date
 
@@ -49,6 +50,9 @@ def current_price_drift(ticker) -> Dict[str, float]:
         return {}
     closes = history["Close"].dropna()
     if len(closes) < 6:
+        return {}
+    closes = pd.to_numeric(closes, errors='coerce')
+    if not all(math.isfinite(float(value)) and value > 0 for value in closes):
         return {}
     latest = float(closes.iloc[-1])
     drift = {"pre_5d_return_pct": (latest / float(closes.iloc[-6]) - 1.0) * 100.0}
@@ -167,7 +171,8 @@ def find_upcoming_earnings(
     days_ahead: int = 14,
     tiers: Optional[List[str]] = None,
     symbols: Optional[List[str]] = None,
-    conn=None
+    conn=None,
+    diagnostics: Optional[Dict[str, Any]] = None,
 ) -> List[Dict[str, Any]]:
     """Scan the universe for companies with scheduled earnings announcements."""
     own_connection = conn is None
@@ -178,6 +183,8 @@ def find_upcoming_earnings(
         symbols = load_universe(tiers)
 
     equities = [s for s in symbols if not is_etf(s)]
+    diagnostics = diagnostics if diagnostics is not None else {}
+    diagnostics.update(symbols_requested=len(equities), calendars_received=0, errors=[])
 
     today = date.today()
     target_end = today + timedelta(days=days_ahead)
@@ -189,6 +196,7 @@ def find_upcoming_earnings(
         try:
             t = yf.Ticker(sym)
             cal = t.get_calendar()
+            diagnostics['calendars_received'] += 1
             if not cal:
                 continue
 
@@ -227,18 +235,33 @@ def find_upcoming_earnings(
             eps_avg = cal.get('Earnings Average')
 
             # Run prediction from model
-            drift = current_price_drift(t)
-            pred = predict_for_symbol(sym, conn=conn, feature_overrides=drift)
+            try:
+                drift = current_price_drift(t)
+            except Exception as exc:
+                drift = {}
+                diagnostics['errors'].append({'symbol': sym, 'stage': 'price_history', 'error': type(exc).__name__})
+            try:
+                pred = predict_for_symbol(sym, conn=conn, feature_overrides=drift)
+            except Exception as exc:
+                pred = {'error': f'Model inference unavailable ({type(exc).__name__})'}
+            if pred.get('error'):
+                diagnostics['errors'].append({'symbol': sym, 'stage': 'prediction', 'error': str(pred['error'])[:200]})
+                pred = {'forecast_status': 'UNAVAILABLE', 'strategy_eligible': False,
+                        'primary_strategy': 'NO TRADE — forecast unavailable', 'rationale': str(pred['error'])[:200]}
+            elif not all(key in drift for key in ('pre_5d_return_pct', 'pre_20d_return_pct')):
+                pred = {**pred, 'strategy_eligible': False, 'forecast_status': 'DEGRADED_INPUTS',
+                        'primary_strategy': 'NO TRADE — current price history unavailable',
+                        'rationale': 'Raw model output may use historical-event drift; current 5D/20D inputs are incomplete.'}
 
             # Historical beat rate from DB
             past_events = get_earnings_for_symbol(conn, sym)
             if past_events:
                 valid_beats = [e for e in past_events if e['eps_actual'] is not None and e['eps_estimate'] is not None]
                 beat_count = sum(1 for e in valid_beats if e['eps_actual'] > e['eps_estimate'])
-                hist_beat_rate = round(beat_count / len(valid_beats), 3) if valid_beats else 0.5
+                hist_beat_rate = round(beat_count / len(valid_beats), 3) if valid_beats else None
                 total_hist_reports = len(valid_beats)
             else:
-                hist_beat_rate = 0.5
+                hist_beat_rate = None
                 total_hist_reports = 0
 
             days_to_report = (matched_date - today).days
@@ -266,22 +289,35 @@ def find_upcoming_earnings(
                 'hist_beat_rate': hist_beat_rate,
                 'total_hist_reports': total_hist_reports,
                 'direction_bias': pred.get('direction', 'NEUTRAL'),
-                'confidence': pred.get('confidence', 0.5),
-                'expected_gap_pct': pred.get('expected_gap_pct', 2.0),
-                'reversal_risk_pct': pred.get('prob_reversal', 0.25),
-                'recommended_strategy': pred.get('primary_strategy', 'Iron Condor'),
+                'confidence': pred.get('confidence'),
+                'raw_direction': pred.get('raw_direction'),
+                'raw_confidence': pred.get('raw_confidence'),
+                'prob_day5_up': pred.get('prob_day5_up'),
+                'forecast_status': pred.get('forecast_status', 'UNVALIDATED'),
+                'feature_method': pred.get('inputs_snapshot', {}).get('feature_method'),
+                'model_artifact_sha256': pred.get('model_artifact_sha256'),
+                'forward_baseline': pred.get('forward_baseline'),
+                'last_mature_report_date': pred.get('inputs_snapshot', {}).get('last_mature_report_date'),
+                'strategy_eligible': pred.get('strategy_eligible', False),
+                'expected_gap_pct': pred.get('expected_gap_pct'),
+                'reversal_risk_pct': pred.get('prob_reversal'),
+                'recommended_strategy': pred.get('primary_strategy', 'NO TRADE — forecast unavailable'),
                 'rationale': pred.get('rationale', ''),
-                'pre_drift_5d': pred.get('inputs_snapshot', {}).get('pre_5d_drift_pct', 0.0),
-                'pre_drift_20d': pred.get('inputs_snapshot', {}).get('pre_20d_drift_pct', 0.0),
-                'market_drift_source': pred.get('inputs_snapshot', {}).get('market_drift_source', 'unavailable'),
+                'pre_drift_5d': drift.get('pre_5d_return_pct'),
+                'pre_drift_20d': drift.get('pre_20d_return_pct'),
+                'market_drift_source': 'current' if len(drift) == 2 else 'unavailable',
                 'news_sentiment': pred.get('inputs_snapshot', {}).get('pre_news_sentiment', 0.0)
             })
 
         except Exception as e:
-            logging.debug(f"Error scanning {sym}: {e}")
+            diagnostics['errors'].append({'symbol': sym, 'stage': 'scan', 'error': type(e).__name__})
+            logging.warning('Earnings scan failed for %s (%s)', sym, type(e).__name__)
 
     # Sort by upcoming date ascending, then confidence descending
-    upcoming_cards.sort(key=lambda x: (x['days_until'], -x['confidence']))
+    upcoming_cards.sort(key=lambda x: (x['days_until'], -(x['confidence'] or 0)))
+    diagnostics['status'] = ('unavailable' if equities and not diagnostics['calendars_received']
+                             else 'partial' if diagnostics['errors'] or any(c['forecast_status'] in {'UNAVAILABLE', 'DEGRADED_INPUTS'} for c in upcoming_cards)
+                             else 'current')
     if own_connection:
         conn.close()
     return upcoming_cards
@@ -303,14 +339,15 @@ def render_radar_table(cards: List[Dict[str, Any]]) -> str:
 
     for c in cards:
         est_str = f"${c['eps_estimate_avg']:.2f}" if (c['eps_estimate_avg'] is not None and isinstance(c['eps_estimate_avg'], (int, float))) else "N/A"
-        beat_str = f"{c['hist_beat_rate']*100:.0f}% ({c['total_hist_reports']})"
-        bias_str = f"{c['direction_bias'][:8]} ({c['confidence']*100:.0f}%)"
-        gap_str = f"±{c['expected_gap_pct']:.1f}%"
+        beat_str = f"{c['hist_beat_rate']*100:.0f}% ({c['total_hist_reports']})" if c['hist_beat_rate'] is not None else 'unknown'
+        probability = c.get('prob_day5_up')
+        bias_str = f"raw P(up) {probability:.1%}" if probability is not None else "raw unavailable"
+        gap_str = f"±{c['expected_gap_pct']:.1f}%" if c['expected_gap_pct'] is not None else 'unknown'
         in_str = f"{c['days_until']}d"
 
         lines.append(
             f"{c['symbol']:6s} | {c['scheduled_date']:10s} | {in_str:4s} | {est_str:9s} | {beat_str:9s} | "
-            f"{bias_str:14s} | {gap_str:7s} | {c['recommended_strategy'][:32]:32s}"
+            f"{bias_str:14s} | {gap_str:7s} | {c['recommended_strategy'][:32]:32s} | {c.get('forecast_status', 'UNVALIDATED')}"
         )
 
     lines.extend([

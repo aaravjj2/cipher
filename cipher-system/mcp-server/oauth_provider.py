@@ -35,7 +35,7 @@ import threading
 import time
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlparse
 
 STATE_PATH = Path(os.environ.get(
     "CIPHER_MCP_OAUTH_STATE",
@@ -144,10 +144,14 @@ def register_client(body: dict[str, Any]) -> tuple[int, dict[str, Any]]:
 
 
 def _redirect_allowed(uri: str) -> bool:
-    if uri.startswith("https://"):
-        return True
-    # Loopback HTTP is permitted for native clients by OAuth 2.1.
-    return uri.startswith("http://127.0.0.1") or uri.startswith("http://localhost")
+    try:
+        parsed = urlparse(uri)
+        if not parsed.hostname or parsed.username or parsed.password or parsed.fragment:
+            return False
+        return parsed.scheme == "https" or (
+            parsed.scheme == "http" and parsed.hostname in {"127.0.0.1", "localhost", "::1"})
+    except ValueError:
+        return False
 
 
 # --------------------------------------------------------------------------- authorize
@@ -173,13 +177,19 @@ def validate_authorize(params: dict[str, str]) -> tuple[dict[str, Any] | None, s
         return None, "code_challenge is required (PKCE)"
     if (params.get("code_challenge_method") or "") != "S256":
         return None, "code_challenge_method must be S256"
+    if params.get("scope", "cipher.read") != "cipher.read":
+        return None, "only cipher.read scope is supported"
+    resource = os.environ.get("CIPHER_MCP_PUBLIC_URL", "").rstrip("/")
+    resource = resource + "/mcp" if resource else ""
+    if resource and params.get("resource", resource) != resource:
+        return None, "resource does not match this server"
     return {
         "client_id": client_id,
         "redirect_uri": redirect_uri,
         "code_challenge": challenge,
         "state": params.get("state") or "",
         "scope": params.get("scope") or "cipher.read",
-        "resource": params.get("resource") or "",
+        "resource": params.get("resource") or resource,
         "client_name": client.get("client_name") or client_id,
     }, None
 
@@ -193,6 +203,7 @@ def issue_code(context: dict[str, Any]) -> str:
             "redirect_uri": context["redirect_uri"],
             "code_challenge": context["code_challenge"],
             "scope": context["scope"],
+            "resource": context.get("resource", ""),
             "expires": time.time() + CODE_TTL,
         }
         _save(state)
@@ -219,6 +230,7 @@ def consent_page(context: dict[str, Any], base: str, *, error: str | None = None
             "code_challenge_method": "S256",
             "state": context["state"],
             "scope": context["scope"],
+            "resource": context.get("resource", ""),
         }.items()
     )
     warning = f'<p class="err">{html.escape(error)}</p>' if error else ""
@@ -275,14 +287,14 @@ def exchange(form: dict[str, str]) -> tuple[int, dict[str, Any]]:
     return 400, {"error": "unsupported_grant_type"}
 
 
-def _issue_tokens(client_id: str, scope: str) -> dict[str, Any]:
+def _issue_tokens(client_id: str, scope: str, resource: str = "") -> dict[str, Any]:
     access = "cipher_at_" + secrets.token_urlsafe(32)
     refresh = "cipher_rt_" + secrets.token_urlsafe(32)
     now = time.time()
     with _LOCK:
         state = _load()
-        state["tokens"][access] = {"client_id": client_id, "scope": scope, "expires": now + ACCESS_TTL}
-        state["refresh"][refresh] = {"client_id": client_id, "scope": scope, "expires": now + REFRESH_TTL}
+        state["tokens"][access] = {"client_id": client_id, "scope": scope, "resource": resource, "expires": now + ACCESS_TTL}
+        state["refresh"][refresh] = {"client_id": client_id, "scope": scope, "resource": resource, "expires": now + REFRESH_TTL}
         _save(state)
     return {
         "access_token": access,
@@ -307,16 +319,22 @@ def _exchange_code(form: dict[str, str]) -> tuple[int, dict[str, Any]]:
         return 400, {"error": "invalid_grant", "error_description": "unknown or used code"}
     if record["expires"] < time.time():
         return 400, {"error": "invalid_grant", "error_description": "code expired"}
-    if client_id and client_id != record["client_id"]:
+    if form.get("resource", record.get("resource", "")) != record.get("resource", ""):
+        return 400, {"error": "invalid_target"}
+    if client_id != record["client_id"]:
         return 400, {"error": "invalid_grant", "error_description": "client mismatch"}
     redirect_uri = form.get("redirect_uri")
-    if redirect_uri and redirect_uri != record["redirect_uri"]:
+    if redirect_uri != record["redirect_uri"]:
         return 400, {"error": "invalid_grant", "error_description": "redirect_uri mismatch"}
     if not verifier:
         return 400, {"error": "invalid_request", "error_description": "code_verifier is required"}
-    if not hmac.compare_digest(_sha256_b64url(verifier), record["code_challenge"]):
+    try:
+        matches = hmac.compare_digest(_sha256_b64url(verifier), record["code_challenge"])
+    except (UnicodeError, TypeError):
+        matches = False
+    if not matches:
         return 400, {"error": "invalid_grant", "error_description": "PKCE verification failed"}
-    return 200, _issue_tokens(record["client_id"], record.get("scope") or "cipher.read")
+    return 200, _issue_tokens(record["client_id"], record.get("scope") or "cipher.read", record.get("resource", ""))
 
 
 def _exchange_refresh(form: dict[str, str]) -> tuple[int, dict[str, Any]]:
@@ -327,7 +345,9 @@ def _exchange_refresh(form: dict[str, str]) -> tuple[int, dict[str, Any]]:
         _save(state)
     if not record or record["expires"] < time.time():
         return 400, {"error": "invalid_grant", "error_description": "unknown or expired refresh_token"}
-    return 200, _issue_tokens(record["client_id"], record.get("scope") or "cipher.read")
+    if form.get("client_id", record["client_id"]) != record["client_id"] or form.get("resource", record.get("resource", "")) != record.get("resource", ""):
+        return 400, {"error": "invalid_grant"}
+    return 200, _issue_tokens(record["client_id"], record.get("scope") or "cipher.read", record.get("resource", ""))
 
 
 def token_is_valid(presented: str) -> bool:
@@ -337,8 +357,12 @@ def token_is_valid(presented: str) -> bool:
     with _LOCK:
         tokens = _load()["tokens"]
     now = time.time()
+    resource = os.environ.get("CIPHER_MCP_PUBLIC_URL", "").rstrip("/")
+    resource = resource + "/mcp" if resource else ""
     for issued, record in tokens.items():
-        if record.get("expires", 0) > now and hmac.compare_digest(presented, issued):
+        if (record.get("expires", 0) > now and record.get("scope") == "cipher.read"
+                and (not resource or record.get("resource") == resource)
+                and hmac.compare_digest(presented, issued)):
             return True
     return False
 

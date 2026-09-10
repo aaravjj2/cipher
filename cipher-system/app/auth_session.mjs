@@ -42,7 +42,7 @@ export function createAuthSessionStore({
   const absolute = positive(absoluteMs, DEFAULT_ABSOLUTE_MS);
   const guestAbsolute = positive(guestAbsoluteMs, DEFAULT_GUEST_ABSOLUTE_MS);
 
-  function create({ userId, accessToken, email = null, profile = null, guest = false }) {
+  function create({ userId, accessToken, email = null, profile = null, guest = false, localOperator = false }) {
     const id = String(randomId());
     const createdAt = now();
     sessions.set(id, {
@@ -51,6 +51,7 @@ export function createAuthSessionStore({
       email: email ? String(email) : null,
       profile,
       guest: Boolean(guest),
+      localOperator: Boolean(localOperator),
       createdAt,
       lastSeenAt: createdAt,
     });
@@ -76,6 +77,7 @@ export function createAuthSessionStore({
       email: session.email,
       profile: session.profile,
       guest: session.guest,
+      localOperator: session.localOperator,
     };
   }
 

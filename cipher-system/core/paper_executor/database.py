@@ -1,13 +1,40 @@
 from __future__ import annotations
 
 import json
+import math
 import sqlite3
+from dataclasses import asdict, is_dataclass
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import date, datetime, time, timedelta, timezone
+from enum import Enum
 from pathlib import Path
 from typing import Any, Iterator
+from zoneinfo import ZoneInfo
 
 SCHEMA_VERSION = 2
+
+
+def _json_value(value: Any) -> Any:
+    if is_dataclass(value):
+        return asdict(value)
+    if isinstance(value, Enum):
+        return value.value
+    if isinstance(value, (date, datetime)):
+        return value.isoformat()
+    if isinstance(value, Path):
+        return str(value)
+    raise TypeError(f"Unsupported ledger JSON value: {type(value).__name__}")
+
+
+def _session_bounds(now: datetime | str) -> tuple[str, str, str]:
+    instant = datetime.fromisoformat(now.replace("Z", "+00:00")) if isinstance(now, str) else now
+    if instant.tzinfo is None:
+        instant = instant.replace(tzinfo=timezone.utc)
+    zone = ZoneInfo("America/New_York")
+    day = instant.astimezone(zone).date()
+    start = datetime.combine(day, time.min, zone)
+    end = datetime.combine(day + timedelta(days=1), time.min, zone)
+    return day.isoformat(), start.astimezone(timezone.utc).isoformat(), end.astimezone(timezone.utc).isoformat()
 
 
 class PaperExecutorDatabase:
@@ -202,7 +229,7 @@ class PaperExecutorDatabase:
             try:
                 db.execute(
                     "insert into signal_batches(id, source, received_at, status, checksum, raw_json) values (?, ?, ?, ?, ?, ?)",
-                    (batch["batch_id"], batch["source"], batch["received_at"], "RECEIVED", checksum, json.dumps(batch["raw"], default=str)),
+                    (batch["batch_id"], batch["source"], batch["received_at"], "RECEIVED", checksum, json.dumps(batch["raw"], default=_json_value)),
                 )
             except sqlite3.IntegrityError:
                 return False
@@ -227,7 +254,7 @@ class PaperExecutorDatabase:
                 (
                     card_id, batch_id, (normalized or raw).get("ticker"), (normalized or raw).get("scanner_type"),
                     (normalized or raw).get("direction"), (normalized or raw).get("setup"), (normalized or raw).get("captured_at"),
-                    status, skip_reason, json.dumps(raw, default=str), json.dumps(normalized, default=str) if normalized else None,
+                    status, skip_reason, json.dumps(raw, default=_json_value), json.dumps(normalized, default=_json_value) if normalized else None,
                 ),
             )
 
@@ -269,6 +296,70 @@ class PaperExecutorDatabase:
                 "last_entry_block": self._event(latest_entry_block),
             }
 
+    def session_snapshot(self, market_date: str) -> dict[str, int]:
+        """Lifecycle counts for one market date; never mix them with lifetime totals."""
+        _, start, end = _session_bounds(datetime.combine(date.fromisoformat(market_date), time(12), ZoneInfo("America/New_York")))
+        with self.connect() as db:
+            def scalar(sql: str, timestamp: str) -> int:
+                sql += f" and julianday({timestamp})>=julianday(?) and julianday({timestamp})<julianday(?)"
+                return int(db.execute(sql, (start, end)).fetchone()[0] or 0)
+            return {
+                "batches_received": scalar("select count(*) from signal_batches where 1", "received_at"),
+                "cards_submitted": scalar(
+                    "select count(*) from signal_cards c join signal_batches b on b.id=c.batch_id where 1", "b.received_at"
+                ),
+                "cards_admitted": scalar(
+                    "select count(*) from signal_cards c join signal_batches b on b.id=c.batch_id where c.status='ELIGIBLE'", "b.received_at"
+                ),
+                "contracts_evaluated": scalar(
+                    "select count(*) from contract_candidates cc join signal_episodes e on e.id=cc.episode_id where 1", "e.started_at"
+                ),
+                "positions_opened": scalar("select count(*) from paper_positions where 1", "opened_at"),
+                "positions_closed": scalar("select count(*) from paper_positions where 1", "closed_at"),
+                "orders_filled": scalar(
+                    "select count(*) from paper_orders where status in ('FILLED','SIMULATED_FILLED')", "created_at"
+                ),
+                "entry_blocks": scalar(
+                    "select count(*) from system_events where event_type='ENTRY_BLOCKED'", "event_time"
+                ),
+            }
+
+    def portfolio_snapshot(self, starting_cash: float) -> dict[str, Any]:
+        """Derive the self-managed long-option paper account from its ledger."""
+        with self.connect() as db:
+            closed = db.execute(
+                """select count(*) trades,
+                          coalesce(sum((exit_price-entry_price)*quantity*100),0) pnl,
+                          coalesce(sum(case when exit_price>entry_price then 1 else 0 end),0) wins
+                     from paper_positions where status='CLOSED'"""
+            ).fetchone()
+            opened = db.execute(
+                """select p.entry_price,p.quantity,
+                          (select m.bid from paper_marks m where m.position_id=p.id order by m.marked_at desc limit 1) bid,
+                          (select m.ask from paper_marks m where m.position_id=p.id order by m.marked_at desc limit 1) ask
+                     from paper_positions p where p.status in ('OPEN','SHADOW_OPEN')"""
+            ).fetchall()
+        realized = float(closed["pnl"] or 0)
+        cost = sum(float(row["entry_price"]) * int(row["quantity"]) * 100 for row in opened)
+        midpoint_pnl = sum(
+            (((float(row["bid"]) + float(row["ask"])) / 2) - float(row["entry_price"]))
+            * int(row["quantity"]) * 100
+            for row in opened if row["bid"] is not None and row["ask"] is not None
+        )
+        liquidation_pnl = sum(
+            (float(row["bid"]) - float(row["entry_price"])) * int(row["quantity"]) * 100
+            for row in opened if row["bid"] is not None
+        )
+        return {
+            "kind": "cipher_local_paper", "external_order_capability": False,
+            "starting_cash": round(starting_cash, 2),
+            "cash_balance": round(starting_cash + realized - cost, 2),
+            "realized_pnl": round(realized, 2), "open_positions": len(opened),
+            "closed_trades": int(closed["trades"]), "wins": int(closed["wins"]),
+            "marked_equity": round(starting_cash + realized + midpoint_pnl, 2),
+            "liquidation_equity": round(starting_cash + realized + liquidation_pnl, 2),
+        }
+
     @staticmethod
     def _event(row: sqlite3.Row | None) -> dict[str, Any] | None:
         if not row:
@@ -299,9 +390,29 @@ class PaperExecutorDatabase:
         with self.connect() as db:
             db.execute(
                 "insert into system_events(id, event_time, event_type, payload_json) values (?, ?, ?, ?)",
-                (event_id, self.now_text(), event_type, json.dumps(payload, default=str)),
+                (event_id, self.now_text(), event_type, json.dumps(payload, default=_json_value)),
             )
         return event_id
+
+    def end_episode(self, episode_id: str) -> None:
+        with self.connect() as db:
+            db.execute(
+                "update signal_episodes set ended_at = coalesce(ended_at, ?) where id = ?",
+                (self.now_text(), episode_id),
+            )
+
+    def end_orphaned_episodes(self) -> int:
+        """End episodes that have no open position after recovery."""
+        with self.connect() as db:
+            cursor = db.execute(
+                """update signal_episodes set ended_at = coalesce(ended_at, ?)
+                   where ended_at is null and id not in (
+                       select episode_id from paper_positions
+                       where status in ('OPEN','SHADOW_OPEN') and episode_id is not null
+                   )""",
+                (self.now_text(),),
+            )
+            return int(cursor.rowcount)
 
     def persist_candidates(self, episode_id: str, candidates: list[Any]) -> None:
         from .models import sha256_id
@@ -337,7 +448,7 @@ class PaperExecutorDatabase:
                         quote.spread_pct if quote else None, quote.volume if quote else None,
                         quote.open_interest if quote else None, quote.timestamp.isoformat() if quote else None,
                         json.dumps(list(candidate.rejection_reasons)), candidate.ranking_score,
-                        json.dumps(payload, default=str),
+                        json.dumps(payload, default=_json_value),
                     ),
                 )
 
@@ -346,6 +457,35 @@ class PaperExecutorDatabase:
         placeholders = ",".join("?" for _ in statuses)
         with self.connect() as db:
             return [dict(row) for row in db.execute(f"select * from paper_positions where status in ({placeholders})", statuses).fetchall()]
+
+    @staticmethod
+    def _session_counts(db: sqlite3.Connection, now: datetime | str, ticker: str | None = None) -> dict[str, int]:
+        _, start, end = _session_bounds(now)
+        row = db.execute(
+            """select
+                coalesce(sum(julianday(opened_at)>=julianday(?) and julianday(opened_at)<julianday(?)),0) new_positions,
+                coalesce(sum(status='CLOSED' and exit_price<entry_price and julianday(closed_at)>=julianday(?) and julianday(closed_at)<julianday(?)),0) stopped_trades,
+                coalesce(sum(ticker=? and julianday(opened_at)>=julianday(?) and julianday(opened_at)<julianday(?)),0) ticker_entries
+               from paper_positions""", (start, end, start, end, ticker, start, end),
+        ).fetchone()
+        return {key: int(row[key]) for key in ("new_positions", "stopped_trades", "ticker_entries")}
+
+    def session_counts(self, now: datetime | str, ticker: str | None = None) -> dict[str, int]:
+        with self.connect() as db:
+            return self._session_counts(db, now, ticker)
+
+    @classmethod
+    def _sync_daily_state(cls, db: sqlite3.Connection, now: datetime | str) -> None:
+        today, _, _ = _session_bounds(now)
+        counts = cls._session_counts(db, now)
+        payload = {"trade_date": today, **counts}
+        db.execute(
+            """insert into daily_account_state(trade_date,new_positions,stopped_trades,payload_json)
+               values(?,?,?,?) on conflict(trade_date) do update set
+               new_positions=excluded.new_positions, stopped_trades=excluded.stopped_trades,
+               payload_json=excluded.payload_json""",
+            (today, counts["new_positions"], counts["stopped_trades"], json.dumps(payload)),
+        )
 
     def create_position_transactional(
         self,
@@ -362,10 +502,19 @@ class PaperExecutorDatabase:
         max_open_positions: int,
         max_positions_per_ticker: int,
         max_new_positions_per_day: int,
+        max_new_positions_per_ticker_per_day: int,
         stop_after_daily_losses: int,
+        starting_cash: float | None = None,
+        entry_order: dict[str, Any] | None = None,
     ) -> tuple[bool, str | None]:
-        today = datetime.now(timezone.utc).date().isoformat()
+        opened_at = str(payload.get("opened_at") or self.now_text())
+        _session_bounds(opened_at)
+        if isinstance(quantity, bool) or not isinstance(quantity, int) or quantity <= 0 or not math.isfinite(entry_price) or entry_price <= 0:
+            raise ValueError("Position requires positive integer quantity and finite positive entry price")
+        if starting_cash is not None and (not math.isfinite(starting_cash) or starting_cash < 0):
+            raise ValueError("starting_cash must be finite and nonnegative")
         with self.connect() as db:
+            db.execute("BEGIN IMMEDIATE")
             existing_episode = db.execute(
                 "select id from paper_positions where episode_id = ? and status in ('OPEN','SHADOW_OPEN','CLOSED')",
                 (episode_id,),
@@ -381,34 +530,48 @@ class PaperExecutorDatabase:
             ).fetchone()[0]
             if ticker_count >= max_positions_per_ticker:
                 return False, "SKIPPED_POSITION_EXISTS"
-            state = db.execute("select * from daily_account_state where trade_date = ?", (today,)).fetchone()
-            new_positions = int(state["new_positions"]) if state else 0
-            stopped = int(state["stopped_trades"]) if state else 0
+            counts = self._session_counts(db, opened_at, ticker)
+            new_positions, stopped = counts["new_positions"], counts["stopped_trades"]
             if new_positions >= max_new_positions_per_day:
                 return False, "SKIPPED_DAILY_LIMIT"
+            ticker_entries = counts["ticker_entries"]
+            if ticker_entries >= max_new_positions_per_ticker_per_day:
+                return False, "SKIPPED_TICKER_DAILY_LIMIT"
             if stopped >= stop_after_daily_losses:
                 return False, "SKIPPED_DAILY_STOP_LIMIT"
-            now = str(payload.get("opened_at") or self.now_text())
+            if starting_cash is not None:
+                cash_delta = db.execute("""select coalesce(sum(case
+                    when status='CLOSED' then (exit_price-entry_price)*quantity*100
+                    when status in ('OPEN','SHADOW_OPEN') then -entry_price*quantity*100
+                    else 0 end),0) from paper_positions""").fetchone()[0]
+                if entry_price * quantity * 100 > starting_cash + float(cash_delta) + 1e-8:
+                    return False, "SKIPPED_INSUFFICIENT_CASH"
+            now = opened_at
             db.execute(
                 """
                 insert into paper_positions(id, episode_id, ticker, direction, symbol, quantity, entry_price, opened_at, status, payload_json)
                 values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (position_id, episode_id, ticker, direction, symbol, quantity, entry_price, now, status, json.dumps(payload, default=str)),
+                (position_id, episode_id, ticker, direction, symbol, quantity, entry_price, now, status, json.dumps(payload, default=_json_value)),
             )
-            account_payload = {"trade_date": today, "new_positions": new_positions + 1, "stopped_trades": stopped}
-            db.execute(
-                """
-                insert into daily_account_state(trade_date, new_positions, stopped_trades, payload_json)
-                values (?, ?, ?, ?)
-                on conflict(trade_date) do update set
-                    new_positions = excluded.new_positions,
-                    stopped_trades = excluded.stopped_trades,
-                    payload_json = excluded.payload_json
-                """,
-                (today, new_positions + 1, stopped, json.dumps(account_payload)),
-            )
+            if entry_order is not None:
+                if entry_order.get("position_id") != position_id:
+                    raise ValueError("Entry order position mismatch")
+                self._insert_order(db, **entry_order)
+            self._sync_daily_state(db, opened_at)
         return True, None
+
+    @staticmethod
+    def _insert_order(db: sqlite3.Connection, *, order_id: str, episode_id: str | None,
+                      position_id: str, side: str, symbol: str, quantity: int, status: str,
+                      fill: Any, created_at: str) -> bool:
+        cursor = db.execute(
+            """insert into paper_orders(id,episode_id,position_id,side,symbol,quantity,status,fill_json,created_at)
+               values(?,?,?,?,?,?,?,?,?)""",
+            (order_id, episode_id, position_id, side, symbol, quantity, status,
+             json.dumps(fill, default=_json_value), created_at),
+        )
+        return cursor.rowcount == 1
 
     def insert_order(
         self, *, order_id: str, episode_id: str | None, position_id: str,
@@ -422,7 +585,7 @@ class PaperExecutorDatabase:
                        id,episode_id,position_id,side,symbol,quantity,status,fill_json,created_at)
                    values(?,?,?,?,?,?,?,?,?)""",
                 (order_id, episode_id, position_id, side, symbol, quantity, status,
-                 json.dumps(fill, default=str), created_at),
+                 json.dumps(fill, default=_json_value), created_at),
             )
             return cursor.rowcount == 1
 
@@ -431,7 +594,7 @@ class PaperExecutorDatabase:
         with self.connect() as db:
             cursor = db.execute(
                 "update paper_orders set status = ?, fill_json = ? where id = ?",
-                (status, json.dumps(payload, default=str), order_id),
+                (status, json.dumps(payload, default=_json_value), order_id),
             )
             return cursor.rowcount == 1
 
@@ -452,7 +615,7 @@ class PaperExecutorDatabase:
                 """,
                 (
                     mark_id, position_id, payload["marked_at"], payload.get("bid"), payload.get("ask"),
-                    payload.get("pnl_pct"), json.dumps(payload, default=str),
+                    payload.get("pnl_pct"), json.dumps(payload, default=_json_value),
                 ),
             )
         return mark_id
@@ -485,7 +648,7 @@ class PaperExecutorDatabase:
                 (mark_id, position_id, episode_id, symbol.upper(), role, payload["observed_at"],
                  payload["captured_at"], source, quote.bid, quote.ask, quote.bid_size, quote.ask_size,
                  quote.last, quote.volume, quote.open_interest, payload["quote_age_seconds"],
-                 json.dumps(payload, default=str)))
+                 json.dumps(payload, default=_json_value)))
         return mark_id
 
     def mark_coverage(self, position_id: str, *, expected_interval_seconds: int = 30,
@@ -519,9 +682,14 @@ class PaperExecutorDatabase:
                 "mark_assumption": "Long-option liquidation uses bid; displayed midpoint is non-executable reference only.",
                 "interpolation": False, "actual_fill_claim": False}
 
-    def close_position(self, position_id: str, exit_price: float, exit_reason: str, payload: dict[str, Any]) -> bool:
-        now = self.now_text()
+    def close_position(self, position_id: str, exit_price: float, exit_reason: str, payload: dict[str, Any],
+                       exit_order: dict[str, Any] | None = None) -> bool:
+        if not math.isfinite(exit_price):
+            raise ValueError("Exit price must be finite")
+        now = str(payload.get("closed_at") or payload.get("marked_at") or self.now_text())
+        _session_bounds(now)
         with self.connect() as db:
+            db.execute("BEGIN IMMEDIATE")
             row = db.execute("select * from paper_positions where id = ?", (position_id,)).fetchone()
             if not row or row["status"] == "CLOSED":
                 return False
@@ -534,7 +702,7 @@ class PaperExecutorDatabase:
                     f"event_{position_id}_{exit_reason}",
                     now,
                     "EXIT_TRIGGERED",
-                    json.dumps({"position_id": position_id, "exit_reason": exit_reason, **payload}, default=str),
+                    json.dumps({"position_id": position_id, "exit_reason": exit_reason, **payload}, default=_json_value),
                 ),
             )
             db.execute(
@@ -545,22 +713,11 @@ class PaperExecutorDatabase:
                 """,
                 (now, exit_price, exit_reason, position_id),
             )
-            if exit_reason == "option_stop_loss":
-                today = datetime.now(timezone.utc).date().isoformat()
-                state = db.execute("select * from daily_account_state where trade_date = ?", (today,)).fetchone()
-                stopped = int(state["stopped_trades"]) if state else 0
-                new_positions = int(state["new_positions"]) if state else 0
-                account_payload = {"trade_date": today, "new_positions": new_positions, "stopped_trades": stopped + 1}
-                db.execute(
-                    """
-                    insert into daily_account_state(trade_date, new_positions, stopped_trades, payload_json)
-                    values (?, ?, ?, ?)
-                    on conflict(trade_date) do update set
-                        stopped_trades = excluded.stopped_trades,
-                        payload_json = excluded.payload_json
-                    """,
-                    (today, new_positions, stopped + 1, json.dumps(account_payload)),
-                )
+            if exit_order is not None:
+                if exit_order.get("position_id") != position_id:
+                    raise ValueError("Exit order position mismatch")
+                self._insert_order(db, **exit_order)
+            self._sync_daily_state(db, now)
         return True
 
     def integrity_ok(self) -> bool:

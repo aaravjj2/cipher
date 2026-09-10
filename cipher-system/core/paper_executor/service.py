@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 import threading
 from datetime import datetime, timezone
@@ -16,10 +17,11 @@ from .runtime import RuntimeCoordinator
 
 
 class PaperExecutorApp:
-    def __init__(self, cfg: ExecutorConfig):
+    def __init__(self, cfg: ExecutorConfig, *, market_data=None, runtime_class=RuntimeCoordinator):
         self.cfg = cfg
         self.db = PaperExecutorDatabase(cfg.database_path)
-        self.runtime = RuntimeCoordinator(cfg, self.db)
+        self.runtime = runtime_class(cfg, self.db, market_data=market_data)
+        self.cohort_group = None
         self.runtime.recover()
         self._rate: dict[str, list[float]] = {}
 
@@ -28,6 +30,8 @@ class PaperExecutorApp:
         return self.runtime.mode
 
     def ingest(self, payload: dict[str, Any]) -> dict[str, Any]:
+        if self.cohort_group is not None:
+            return self.cohort_group.ingest(payload)
         return self.runtime.ingest_payload(payload)
 
     def set_mode(self, mode: str, token: str | None) -> dict[str, Any]:
@@ -98,7 +102,13 @@ def make_handler(app: PaperExecutorApp):
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(body)))
             self.end_headers()
-            self.wfile.write(body)
+            try:
+                self.wfile.write(body)
+            except (BrokenPipeError, ConnectionResetError):
+                # Health clients may time out while the response is being
+                # assembled under load. A disconnected reader is not a worker
+                # failure and must not emit a misleading service traceback.
+                return
 
         def do_OPTIONS(self) -> None:
             if not self._origin_ok():
@@ -116,12 +126,22 @@ def make_handler(app: PaperExecutorApp):
         def do_GET(self) -> None:
             parsed = urlparse(self.path)
             if parsed.path == "/health":
-                payload = health_payload(app.cfg, app.db, app.runtime.mode, app.runtime.quote_manager.degraded)
-                payload.update(app.runtime.health())
+                runtime_health = app.runtime.health()
+                payload = health_payload(
+                    app.cfg, app.db, app.runtime.mode, app.runtime.quote_manager.degraded,
+                    runtime_health["observability"]["database_integrity_ok"],
+                )
+                payload.update(runtime_health)
                 self._send(200, payload)
             elif parsed.path == "/api/paper/status":
-                payload = health_payload(app.cfg, app.db, app.runtime.mode, app.runtime.quote_manager.degraded)
-                payload.update(app.runtime.health())
+                runtime_health = app.runtime.health()
+                payload = health_payload(
+                    app.cfg, app.db, app.runtime.mode, app.runtime.quote_manager.degraded,
+                    runtime_health["observability"]["database_integrity_ok"],
+                )
+                payload.update(runtime_health)
+                if app.cohort_group is not None:
+                    payload["cohorts"] = app.cohort_group.summary()
                 self._send(200, payload)
             elif parsed.path == "/api/paper/market-data-probe":
                 try:
@@ -134,7 +154,9 @@ def make_handler(app: PaperExecutorApp):
             elif parsed.path == "/api/paper/" + "positions":
                 self._send(200, {"positions": app.db.rows("paper_positions")})
             elif parsed.path == "/api/paper/events":
-                self._send(200, {"events": []})
+                self._send(200, {"events": app.db.rows("paper_events")[-100:]})
+            elif parsed.path == "/api/paper/cohorts":
+                self._send(200, {"cohorts": app.cohort_group.summary() if app.cohort_group else []})
             elif parsed.path == "/api/paper/episodes":
                 self._send(200, {"episodes": app.db.rows("signal_episodes")})
             else:
@@ -176,9 +198,34 @@ def run(config_path: str | None = None) -> None:
     import signal
 
     cfg = load_config(config_path)
-    app = PaperExecutorApp(cfg)
-    app.runtime.start()
-    server = ThreadingHTTPServer((cfg.server.host, cfg.server.port), make_handler(app))
+    if os.environ.get("CIPHER_AUTOPILOT_COHORTS") == "1":
+        from .alpaca_core_market_data import AlpacaCoreMarketData
+        from .cohorts import CohortGroup, CohortRuntime, SharedObservations, configurations
+        from .tradier_market_data import TradierMarketData
+
+        provider = (AlpacaCoreMarketData(cfg.market_data) if cfg.market_data.provider == "alpaca_core"
+                    else TradierMarketData(cfg.market_data))
+        observations = SharedObservations(provider, cfg.runtime_root / "cohorts" / "observations.sqlite")
+        apps = [PaperExecutorApp(c, market_data=observations.view(), runtime_class=CohortRuntime)
+                for c in configurations(cfg)]
+        apps[0].cohort_group = CohortGroup(apps)
+        apps[0].cohort_group.recover()
+    else:
+        apps = [PaperExecutorApp(cfg)]
+    servers = []
+    try:
+        # Bind every endpoint before starting any worker. Port conflicts fail
+        # startup without leaving a subset of experiments executing.
+        for app in apps:
+            servers.append(ThreadingHTTPServer((app.cfg.server.host, app.cfg.server.port), make_handler(app)))
+        for app in apps:
+            app.runtime.start()
+    except Exception:
+        for server in servers:
+            server.server_close()
+        for app in apps:
+            app.runtime.stop()
+        raise
     stop_event = threading.Event()
 
     def _request_shutdown(signum, frame) -> None:
@@ -188,15 +235,24 @@ def run(config_path: str | None = None) -> None:
     # stop the worker threads instead of dying mid-write.
     signal.signal(signal.SIGTERM, _request_shutdown)
     signal.signal(signal.SIGINT, _request_shutdown)
-    server_thread = threading.Thread(target=server.serve_forever, name="paper-executor-http", daemon=True)
-    server_thread.start()
+    server_threads = [threading.Thread(target=server.serve_forever, name=f"paper-executor-http-{index}", daemon=True)
+                      for index, server in enumerate(servers)]
+    for server_thread in server_threads:
+        server_thread.start()
     try:
         while not stop_event.wait(0.5):
-            pass
+            if apps[0].cohort_group is not None:
+                try:
+                    apps[0].cohort_group.maintain()
+                except Exception as exc:
+                    apps[0].db.insert_system_event("COHORT_MAINTENANCE_FAILED", {"error": type(exc).__name__})
     finally:
-        server.shutdown()
-        server_thread.join(timeout=5)
-        app.runtime.stop()
+        for server, server_thread in zip(servers, server_threads):
+            server.shutdown()
+            server_thread.join(timeout=5)
+            server.server_close()
+        for app in apps:
+            app.runtime.stop()
 
 
 if __name__ == "__main__":

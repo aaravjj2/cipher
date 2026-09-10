@@ -84,6 +84,12 @@ const providerSessionClient = createProviderSessionClient({
   coreUrl,
   internalToken: internalProxyToken,
 });
+const operatorProviderCredentials = {
+  key: String(process.env.ALPACA_ALGO_KEY || process.env.ALPACA_ALGO_PLUS_KEY || process.env.ALPACA_API_KEY || ""),
+  secret: String(process.env.ALPACA_ALGO_SECRET || process.env.ALPACA_ALGO_PLUS_SECRET || process.env.ALPACA_API_SECRET || ""),
+  optionsFeed: String(process.env.ALPACA_DATA_FEED || "opra").toLowerCase(),
+  stockFeed: String(process.env.ALPACA_STOCK_FEED || "sip").toLowerCase(),
+};
 if (hostedMode && !internalProxyToken) {
   throw new Error("Hosted mode requires CIPHER_INTERNAL_PROXY_TOKEN for the internal core hop.");
 }
@@ -275,6 +281,7 @@ const routes = {
   "/api/morning-brief": "/api/morning-brief",
   "/api/research-desk": "/api/research-desk",
   "/api/paper-portfolios": "/api/paper-portfolios",
+  "/api/theta-review": "/api/theta-review",
   "/api/prospective-fronttests": "/api/prospective-fronttests",
   "/api/autopilot-status": "/api/autopilot-status",
   "/api/options-chain": "/api/options-chain",
@@ -313,7 +320,7 @@ const routes = {
   "/api/backtest": "/api/backtest",
 };
 
-function trustedCoreHeaders(userContext) {
+async function trustedCoreHeaders(userContext, needsProvider = true) {
   if (!hostedMode || !userContext) return {};
   const headers = {
     "x-cipher-internal-token": internalProxyToken,
@@ -323,7 +330,10 @@ function trustedCoreHeaders(userContext) {
     headers["x-cipher-guest"] = "1";
     return headers;
   }
-  headers["x-cipher-access-token"] = userContext.accessToken;
+  if (userContext.accessToken) headers["x-cipher-access-token"] = userContext.accessToken;
+  if (needsProvider && userContext.localOperator && operatorProviderCredentials.key && operatorProviderCredentials.secret) {
+    await providerSessionClient.ensureOperator({ ...userContext, ...operatorProviderCredentials });
+  }
   const providerSessionId = providerSessionClient.sessionFor(userContext.userId);
   if (providerSessionId) headers["x-cipher-provider-session"] = providerSessionId;
   return headers;
@@ -376,7 +386,7 @@ async function proxySSE(req, res, query, userContext = null) {
   req.on("close", onClose);
   try {
     const response = await fetch(target, {
-      headers: { accept: "text/event-stream", ...trustedCoreHeaders(userContext) },
+      headers: { accept: "text/event-stream", ...await trustedCoreHeaders(userContext) },
       signal: controller.signal,
     });
     res.writeHead(response.status, {
@@ -461,7 +471,7 @@ createServer(async (req, res) => {
       try {
         return await proxyCore(res, "/health", new URLSearchParams(), {
           acceptEncoding: req.headers["accept-encoding"] || "",
-          headers: trustedCoreHeaders(userContext),
+          headers: await trustedCoreHeaders(userContext),
           requestOrigin: req.headers.origin || "",
         });
       } catch {
@@ -476,6 +486,17 @@ createServer(async (req, res) => {
     } catch {
       return sendJson(res, 503, { status: "unavailable", read_only: true });
     }
+  }
+  if (hostedMode && url.pathname === "/auth/status") {
+    const method = (req.method || "GET").toUpperCase();
+    const headers = corsHeaders(req.headers.origin);
+    if (method !== "GET") {
+      return sendJson(res, 405, { error: "method not allowed" }, { ...headers, allow: "GET" });
+    }
+    // This endpoint deliberately exposes no project URL, key, tenant identifier, or
+    // provider response. It lets the login UI distinguish an invalid/dead deployment
+    // from bad user credentials while guest access remains independently available.
+    return sendJson(res, 200, await supabaseAuth.health(), headers);
   }
   if (hostedMode && url.pathname === "/auth/session") {
     const method = (req.method || "GET").toUpperCase();
@@ -514,6 +535,60 @@ createServer(async (req, res) => {
       return sendJson(res, 200, { authenticated: false }, { ...headers, "set-cookie": cookie });
     }
     return sendJson(res, 405, { error: "method not allowed" }, { ...headers, allow: "GET, POST, DELETE" });
+  }
+  if (hostedMode && url.pathname === "/auth/operator") {
+    const method = (req.method || "GET").toUpperCase();
+    const headers = corsHeaders(req.headers.origin);
+    if (method !== "POST") {
+      return sendJson(res, 405, { error: "method not allowed" }, { ...headers, allow: "POST" });
+    }
+    const origin = String(req.headers.origin || "");
+    if (!origin || !hostedOrigins.has(origin)) return sendJson(res, 403, { error: "origin not allowed" }, headers);
+    if (!authGate.enabled || !authGate.configured) {
+      return sendJson(res, 503, { error: "host access is not configured" }, headers);
+    }
+    let body;
+    try {
+      body = JSON.parse(await readBoundedBody(req));
+    } catch (error) {
+      return sendJson(res, error instanceof RangeError ? 413 : 400, { error: "invalid request" }, headers);
+    }
+    const result = await authGate.login(String(body?.password || ""), clientKey(req));
+    if (!result.ok) {
+      const retrySeconds = Math.max(1, Math.ceil((result.retryAfterMs || 0) / 1000));
+      return sendJson(
+        res,
+        result.retryAfterMs > 0 ? 429 : 401,
+        { error: "invalid credentials", retry_after_seconds: retrySeconds },
+        { ...headers, ...(result.retryAfterMs > 0 ? { "retry-after": String(retrySeconds) } : {}) },
+      );
+    }
+    const profile = accessProfiles.operator();
+    const session = {
+      userId: "cipher-local-operator",
+      accessToken: null,
+      email: null,
+      profile,
+      guest: false,
+      localOperator: true,
+    };
+    let providerConnected = false;
+    if (operatorProviderCredentials.key && operatorProviderCredentials.secret) {
+      try {
+        await providerSessionClient.connect({ ...session, ...operatorProviderCredentials });
+        providerConnected = true;
+      } catch {
+        // Host authentication is independent of optional market-data session
+        // initialization. Settings can retry without ever persisting credentials.
+      }
+    }
+    const cookie = authSessions.create(session);
+    return sendJson(
+      res,
+      200,
+      { ...sessionPayload(session), provider_connected: providerConnected },
+      { ...headers, "set-cookie": cookie },
+    );
   }
   if (hostedMode && url.pathname === "/auth/guest") {
     const headers = corsHeaders(req.headers.origin);
@@ -621,6 +696,7 @@ createServer(async (req, res) => {
         const result = await providerSessionClient.connect({
           userId: hostedUser.userId,
           accessToken: hostedUser.accessToken,
+          localOperator: hostedUser.localOperator,
           key: body.key,
           secret: body.secret,
           optionsFeed: body.options_feed,
@@ -647,6 +723,13 @@ createServer(async (req, res) => {
     return proxySSE(req, res, query, coreUserContext);
   }
   if (routes[url.pathname]) {
+    if (url.pathname === "/api/theta-review" && (!hostedUser || hostedUser.guest)) {
+      return sendJson(res, 403, { error: "Theta portfolio owner authentication required" }, corsHeaders(req.headers.origin));
+    }
+    if (url.pathname === "/api/theta-review" && req.method === "POST" &&
+        (!req.headers.origin || !hostedOrigins.has(req.headers.origin))) {
+      return sendJson(res, 403, { error: "Origin not allowed" }, corsHeaders(req.headers.origin));
+    }
     const query = new URLSearchParams(url.searchParams);
     if (query.has("symbol") && !query.has("ticker")) {
       query.set("ticker", query.get("symbol"));
@@ -674,7 +757,8 @@ createServer(async (req, res) => {
       return await proxyCore(res, routes[url.pathname], query, {
         method,
         body,
-        headers: { ...headers, ...trustedCoreHeaders(coreUserContext) },
+        headers: { ...headers, ...await trustedCoreHeaders(coreUserContext,
+          !["/api/earnings-radar", "/api/autopilot-status", "/api/paper-portfolios", "/api/research-ranking", "/api/theta-review"].includes(url.pathname)) },
         acceptEncoding: req.headers["accept-encoding"] || "",
         requestOrigin: req.headers.origin || "",
       });

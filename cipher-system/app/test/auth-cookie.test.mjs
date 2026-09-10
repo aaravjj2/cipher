@@ -25,10 +25,19 @@ test("auth cookie store uses an opaque identifier and keeps token material serve
     email: null,
     profile: null,
     guest: false,
+    localOperator: false,
   });
 
   now += 501;
   assert.equal(store.get({ headers: { cookie: "cipher_session=opaque-session-id" } }), null);
+});
+
+test("host-session marker remains server-side and survives cookie lookup", () => {
+  const store = createAuthSessionStore({ randomId: () => "opaque-host-session" });
+  const cookie = store.create({ userId: "cipher-local-operator", localOperator: true });
+  const session = store.get({ headers: { cookie: cookie.split(";", 1)[0] } });
+  assert.equal(session.localOperator, true);
+  assert.doesNotMatch(cookie, /operator|localOperator/);
 });
 
 

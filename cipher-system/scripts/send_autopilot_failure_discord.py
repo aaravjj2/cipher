@@ -26,6 +26,15 @@ def main() -> int:
         db_path=RUNTIME / "data/paper_trades/autopilot_shadow.sqlite",
         state_path=RUNTIME / "autopilot/notification_state.json",
     )
+    cohorts = {}
+    for name in ("confirmation", "cost", "exit"):
+        root = RUNTIME / "cohorts" / name
+        if (root / "paper.sqlite").exists():
+            cohorts[name] = deliver_latest_failure(
+                lambda message, name=name: send_webhook(f"[{name}] {message}", webhook),
+                db_path=root / "paper.sqlite", state_path=root / "notification_state.json",
+            )
+    result["cohorts"] = cohorts
     print(json.dumps(result, sort_keys=True))
     return 0
 

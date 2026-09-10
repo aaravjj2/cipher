@@ -265,6 +265,7 @@ export type PaperPortfolioSummary = {
   realized_pnl: number;
   marked_equity: number;
   liquidation_equity: number;
+  cash_balance?: number;
   unrealized_pnl_mid: number;
   liquidation_pnl: number;
   daily_realized_pnl: number;
@@ -300,10 +301,14 @@ export type OpportunitySummary = {
   session_expired: number;
   skipped_targets: number;
   skipped_invalidations: number;
-  scope: "underlying_path_counterfactual";
+  scope: "underlying_path_counterfactual" | "autopilot_local_option_ledger";
 };
 
 export type PaperPortfoliosResponse = {
+  theta?: {
+    historical: { version: string; realized_pnl: number | null; reported_estimated_pnl?: number; unknown_closed_pnl?: number; positions: Array<Record<string, unknown>> };
+    quote_based: { version: string; mode: string; available_cash: number | null; realized_pnl: number | null; open_exposure?: number; pending_exits?: number; unresolved_pnl?: number; execution_health?: string; data_health?: string; notification_health?: string; positions: Array<Record<string, unknown>>; rollout?: { eligible: boolean; reasons: string[] } };
+  };
   as_of: string | null;
   paper_only: true;
   read_only: true;
@@ -351,14 +356,19 @@ export type EarningsRadarCard = {
   total_hist_reports: number;
   direction_bias: string;
   confidence: number;
-  expected_gap_pct: number;
-  reversal_risk_pct: number;
+  raw_direction?: string;
+  raw_confidence?: number;
+  prob_day5_up?: number;
+  forecast_status?: string;
+  expected_gap_pct: number | null;
+  reversal_risk_pct: number | null;
   recommended_strategy: string;
   rationale: string;
 };
 
 export type EarningsRadarResponse = {
-  status: "current" | "stale" | "unavailable";
+  status: "current" | "stale" | "unavailable" | "partial";
+  reason?: string | null;
   age_hours: number | null;
   as_of: string | null;
   days_ahead?: number;
@@ -1192,6 +1202,7 @@ export type FlashAgenticRow = {
 
 export type FlashAgenticLive = {
   loop_running: boolean;
+  freshness?: { state: string; observed_at: string | null; age_seconds: number | null };
   cycle: number | null;
   status_updated_at: string | null;
   captured_at: string | null;
@@ -2244,12 +2255,12 @@ export type AutopilotStatus = {
   scheduler: { action: string; as_of?: string | null; reason?: string };
   plan: {
     available: boolean; plan_id?: string | null; market_date?: string | null;
-    state: string; created_at?: string | null; candidate_count: number;
+    state: string; freshness: "current" | "last_session" | "stale"; created_at?: string | null; candidate_count: number;
     candidates: Array<{
       ticker: string;
       direction: string;
-      score: number;
-      reward_risk: number;
+      score: number | null;
+      reward_risk: number | null;
       sentiment_status?: string;
       ai_evaluation?: {
         thesis?: string;
@@ -2263,7 +2274,19 @@ export type AutopilotStatus = {
   };
   executor: {
     reachable: boolean; mode: string; reconciliation_passed?: boolean;
-    operating_state: "HEALTHY_NO_SETUP" | "SETUP_REJECTED" | "DATA_FAILURE" | "ACTIVE_POSITION" | "AWAITING_DATA_CHECK";
+    cohorts?: Array<{
+      cohort_id: string; version: string; error?: string; primary?: boolean;
+      health?: { ready: boolean; mode: string };
+      evaluation?: {
+        activity?: { observed_sessions: number; entries_per_observed_session: number | null; rejection_reasons: Record<string, number> };
+        evidence_coverage?: { positions: number; positions_with_quote_tape: number; positions_with_prospective_provenance: number };
+        current?: { trades: number; win_rate_pct: number | null; pnl_usd: number; expectancy_usd?: number | null; promotion_eligible?: boolean };
+        overall: { trades: number; win_rate_pct: number | null; pnl_usd?: number; net_pnl_usd?: number; expectancy_usd?: number | null; observed_liquidation_drawdown_usd?: number | null };
+        per_version?: Record<string, unknown>;
+        promotion_blockers: string[];
+      };
+    }>;
+    operating_state: "HEALTHY_NO_SETUP" | "SETUP_REJECTED" | "DATA_FAILURE" | "ACTIVE_POSITION" | "AWAITING_DATA_CHECK" | "MARKET_CLOSED";
     quote_feed_degraded?: boolean; open_shadow_positions: number;
     provider_session_ready?: boolean | null; market_data_ready: boolean;
     last_chain_success_at?: string | null; entry_blocked_reason?: string | null;
@@ -2273,12 +2296,16 @@ export type AutopilotStatus = {
       contract_candidates?: number; paper_orders?: number; open_shadow_positions?: number;
       open_paper_positions?: number; closed_positions?: number; entry_blocks?: number;
     };
+    session?: { market_date: string; batches_received: number; cards_submitted: number; cards_admitted: number; contracts_evaluated: number; positions_opened: number; positions_closed: number; orders_filled: number; entry_blocks: number };
     last_mark_at?: string | null; last_worker_exception?: unknown;
     execution_backend?: "simulated" | "alpaca_paper" | "unavailable";
+    portfolio_kind?: "cipher_local_paper" | "external_paper_account" | "unavailable";
+    external_order_capability?: boolean;
     paper_broker?: {
       backend: string; ready: boolean; paper_only: true; last_error?: string | null;
       account?: { status?: string; currency?: string; equity?: string; buying_power?: string; paper_only?: true } | null;
       unknown_positions?: string[];
+      owned_orphan_positions?: string[];
       recent_orders?: Array<{
         id?: string; client_order_id?: string; symbol?: string; side?: string; quantity?: number;
         limit_price?: number; status?: string; filled_quantity?: number; average_fill_price?: number;
@@ -2299,7 +2326,7 @@ export type AutopilotStatus = {
     market_date: string; trace_available: boolean; cycles: number;
     actions: Record<string, number>; rejection_reason_counts: Record<string, number>;
     premarket_plan_observed: boolean; confirmation_cycle_observed: boolean;
-    paper_submissions: number;
+    cards_submitted: number;
     recent: Array<Record<string, unknown>>;
   };
   paper_only: true;

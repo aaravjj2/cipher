@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 
 const DEFAULT_CACHE_TTL_MS = 30_000;
+const DEFAULT_HEALTH_CACHE_TTL_MS = 30_000;
+const DEFAULT_REQUEST_TIMEOUT_MS = 5_000;
 const MAX_TOKEN_LENGTH = 4096;
 
 function tokenFromRequest(request) {
@@ -35,13 +37,46 @@ export function createSupabaseAuth({
   anonKey,
   fetchImpl = globalThis.fetch,
   cacheTtlMs = DEFAULT_CACHE_TTL_MS,
+  healthCacheTtlMs = DEFAULT_HEALTH_CACHE_TTL_MS,
+  requestTimeoutMs = DEFAULT_REQUEST_TIMEOUT_MS,
 } = {}) {
   const baseUrl = String(supabaseUrl || "").replace(/\/+$/, "");
   const publicKey = String(anonKey || "");
   const cache = new Map();
+  let healthCache = null;
+
+  const configured = Boolean(baseUrl && publicKey && typeof fetchImpl === "function");
+
+  function requestSignal() {
+    const timeout = Math.max(1, Number(requestTimeoutMs) || DEFAULT_REQUEST_TIMEOUT_MS);
+    return AbortSignal.timeout(timeout);
+  }
+
+  async function health({ refresh = false } = {}) {
+    if (!configured) return { provider: "supabase", configured: false, reachable: false };
+    const now = Date.now();
+    if (!refresh && healthCache && healthCache.expiresAt > now) return healthCache.value;
+    let reachable = false;
+    try {
+      const response = await fetchImpl(`${baseUrl}/auth/v1/settings`, {
+        method: "GET",
+        headers: { accept: "application/json", apikey: publicKey },
+        signal: requestSignal(),
+      });
+      reachable = response.ok;
+    } catch {
+      reachable = false;
+    }
+    const value = { provider: "supabase", configured: true, reachable };
+    healthCache = {
+      value,
+      expiresAt: now + Math.max(0, Number(healthCacheTtlMs) || 0),
+    };
+    return value;
+  }
 
   async function validateAccessToken(accessToken) {
-    if (!accessToken || !baseUrl || !publicKey || typeof fetchImpl !== "function") return null;
+    if (!accessToken || !configured) return null;
 
     const key = tokenCacheKey(accessToken);
     const cached = cache.get(key);
@@ -58,6 +93,7 @@ export function createSupabaseAuth({
           apikey: publicKey,
           authorization: `Bearer ${accessToken}`,
         },
+        signal: requestSignal(),
       });
       if (!response.ok) return null;
       const payload = await response.json();
@@ -69,7 +105,10 @@ export function createSupabaseAuth({
       try {
         const accessResponse = await fetchImpl(
           `${baseUrl}/rest/v1/account_access?select=role,developer_settings&user_id=eq.${encodeURIComponent(userId)}&limit=1`,
-          { headers: { accept: "application/json", apikey: publicKey, authorization: `Bearer ${accessToken}` } },
+          {
+            headers: { accept: "application/json", apikey: publicKey, authorization: `Bearer ${accessToken}` },
+            signal: requestSignal(),
+          },
         );
         if (accessResponse.ok) databaseAccess = (await accessResponse.json())?.[0] || null;
       } catch {
@@ -93,5 +132,5 @@ export function createSupabaseAuth({
     if (typeof accessToken === "string" && accessToken) cache.delete(tokenCacheKey(accessToken));
   }
 
-  return { validateRequest, validateAccessToken, invalidate };
+  return { validateRequest, validateAccessToken, invalidate, health };
 }

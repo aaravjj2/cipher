@@ -31,6 +31,12 @@ from .paper_portfolio import (
     render_paper_book_table,
     settle_expired_positions,
 )
+from .auto_improve import (
+    run_auto_improve_cycle,
+    get_profit_summary,
+    retrain_model,
+    archive_winners,
+)
 from .discord_bot import notify_discord_paper_book, notify_discord_weekly_preview, get_discord_webhook_url
 from .db import init_db, get_all_earnings, get_price_impact
 
@@ -112,6 +118,19 @@ def main():
     discord_parser = subparsers.add_parser('notify-discord', help='Deliver earnings radar and paper book to Discord')
     discord_parser.add_argument('--type', choices=['preview', 'portfolio', 'all'], default='all', help='Notification type')
     discord_parser.add_argument('--webhook-url', type=str, help='Override Discord Webhook URL')
+    discord_parser.add_argument('--radar-input', type=str, help='Use the completed radar artifact; do not rescan for notifications')
+
+    # 13. Auto-Improve & Profit Ledger
+    improve_parser = subparsers.add_parser('auto-improve', help='Run auto-improvement cycle (settle, drift check, retrain if needed)')
+    improve_parser.add_argument('--summary', action='store_true', help='Show profit summary instead of running cycle')
+
+    # 14. Expert Rating Engine
+    rate_parser = subparsers.add_parser('rate', help='Expert 1-10 rating with multi-horizon research')
+    rate_parser.add_argument('--symbol', type=str, required=True, help='Ticker symbol (e.g. NVDA)')
+
+    # 15. Morning Autopilot
+    autopilot_parser = subparsers.add_parser('autopilot', help='Run morning autopilot - top 3 option trades')
+    autopilot_parser.add_argument('--json-output', type=str, help='Write machine-readable output to JSON path')
 
     args = parser.parse_args()
 
@@ -231,7 +250,8 @@ def main():
         tiers = [t.strip() for t in args.tiers.split(',')] if args.tiers else None
         symbols = [args.symbol.upper()] if args.symbol else None
         print(f"Scanning for upcoming earnings in the next {args.days} days...")
-        cards = find_upcoming_earnings(days_ahead=args.days, tiers=tiers, symbols=symbols)
+        diagnostics = {}
+        cards = find_upcoming_earnings(days_ahead=args.days, tiers=tiers, symbols=symbols, diagnostics=diagnostics)
         model_results = (load_trained_models() or {}).get("results", {})
         # Prospective prediction log: every radar card, including NO_TRADE
         # decisions, is recorded before outcomes exist. Idempotent per
@@ -262,6 +282,8 @@ def main():
                 "as_of": pd.Timestamp.now(tz="UTC").isoformat(timespec="seconds"),
                 "days_ahead": args.days,
                 "count": len(cards),
+                "data_status": diagnostics.get("status", "unavailable"),
+                "scan_diagnostics": diagnostics,
                 "cards": cards,
                 "paper_scorecard": get_paper_scorecard(),
                 "validation": {
@@ -287,9 +309,21 @@ def main():
             }
             out = Path(args.json_output)
             out.parent.mkdir(parents=True, exist_ok=True)
-            out.write_text(json.dumps(payload, default=str, indent=2), encoding="utf-8")
+            import tempfile
+            with tempfile.NamedTemporaryFile(mode='w', dir=out.parent, prefix=out.name, suffix='.tmp', delete=False) as handle:
+                temporary = Path(handle.name)
+                try:
+                    json.dump(payload, handle, default=str, indent=2, allow_nan=False)
+                    handle.flush()
+                    os.fsync(handle.fileno())
+                except Exception:
+                    temporary.unlink(missing_ok=True)
+                    raise
+            temporary.replace(out)
             print(f"Radar JSON written to {out}")
         print(render_radar_table(cards))
+        if diagnostics.get('status') == 'unavailable':
+            return 1
 
     elif args.command == 'status':
         conn = init_db()
@@ -363,7 +397,41 @@ def main():
             print(f"[ERROR] {row['symbol']}: {row['error']}")
         return 1 if result['errors'] else 0
 
-    elif args.command == 'notify-discord':
+    elif args.command == 'auto-improve':
+        if args.summary:
+            summary = get_profit_summary()
+            print(json.dumps(summary, indent=2, default=str))
+        else:
+            print("Running auto-improvement cycle...")
+            result = run_auto_improve_cycle()
+            print(json.dumps(result, indent=2, default=str))
+
+    elif args.command == 'rate':
+        import sys
+        sys.path.insert(0, '/home/aarav/Aarav/cipher/cipher-github/cipher-system')
+        from core.copilot.rating_engine import rate_ticker
+        print(f"Running expert rating analysis for {args.symbol.upper()}...")
+        result = rate_ticker(args.symbol.upper())
+        if result.get("error"):
+            print(f"Error: {result['error']}")
+        else:
+            print(json.dumps(result, indent=2, default=str))
+
+    elif args.command == 'autopilot':
+        import sys
+        sys.path.insert(0, '/home/aarav/Aarav/cipher/cipher-github/cipher-system')
+        from core.morning_autopilot import run_morning_autopilot
+        print("Running morning autopilot scan...")
+        result = run_morning_autopilot()
+        print(json.dumps(result, indent=2, default=str))
+        if args.json_output:
+            from pathlib import Path
+            out = Path(args.json_output)
+            out.parent.mkdir(parents=True, exist_ok=True)
+            out.write_text(json.dumps(result, default=str, indent=2))
+            print(f"Output written to {out}")
+
+    if args.command == 'notify-discord':
         webhook_url = args.webhook_url or get_discord_webhook_url()
         print(f"Preparing Discord digest notification...")
         if not webhook_url:
@@ -373,7 +441,7 @@ def main():
 
         results = []
         if args.type in ('preview', 'all'):
-            res1 = notify_discord_weekly_preview(webhook_url=webhook_url)
+            res1 = notify_discord_weekly_preview(webhook_url=webhook_url, radar_path=args.radar_input)
             results.append(res1)
             print(f"Weekly Preview Notification: {res1.get('status')}")
             if 'payload' in res1 and not webhook_url:

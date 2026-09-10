@@ -1,0 +1,11 @@
+[Unit]
+Description=Weekly Cipher scanner universe validation
+
+[Timer]
+OnCalendar=Sun *-*-* 10:00:00 UTC
+Persistent=true
+RandomizedDelaySec=300
+Unit=cipher-universe-refresh.service
+
+[Install]
+WantedBy=timers.target

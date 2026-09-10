@@ -8,6 +8,7 @@ order path.
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 import threading
@@ -27,17 +28,17 @@ _OCC = re.compile(r"^(?P<root>[A-Z.]{1,6})(?P<date>\d{6})[CP]\d{8}$")
 
 def _timestamp(value: Any) -> datetime:
     if not value:
-        return datetime.now(timezone.utc)
+        raise ValueError("quote timestamp missing")
     text = str(value).replace("Z", "+00:00")
     # Alpaca emits nanoseconds while datetime accepts microseconds.  Preserve
     # timezone semantics and truncate only excess fractional precision.
     text = re.sub(r"(\.\d{6})\d+(?=[+-]\d\d:\d\d$)", r"\1", text)
     try:
         stamp = datetime.fromisoformat(text)
-    except ValueError:
-        return datetime.now(timezone.utc)
+    except ValueError as exc:
+        raise ValueError("invalid quote timestamp") from exc
     if stamp.tzinfo is None:
-        stamp = stamp.replace(tzinfo=timezone.utc)
+        raise ValueError("quote timestamp requires timezone")
     return stamp.astimezone(timezone.utc)
 
 
@@ -166,12 +167,26 @@ class AlpacaCoreMarketData:
             cached = self._chains.get(ticker)
             if not force and cached and time.monotonic() - cached[0] <= self.cfg.chain_cache_seconds:
                 return cached[1]
-        payload = self._request("/api/options-chain", {
+        params = {
             "ticker": ticker,
             "feed": "opra",
             "expirations": self.cfg.chain_expiration_count,
             "fresh": "1" if force else "0",
-        })
+        }
+        payload = self._request("/api/options-chain", params)
+        if payload.get("feed") != "opra" and self.provider_session_ready:
+            # A restarted core silently serves fallback data for unknown
+            # provider sessions instead of answering 401, which left entries
+            # blocked until the executor itself was restarted. Treat any
+            # non-OPRA body while holding a session as a stale session: drop
+            # it and retry once before failing closed.
+            self._clear_provider_session()
+            self.last_error = {
+                "at": datetime.now(timezone.utc).isoformat(), "path": "/api/options-chain",
+                "status": None, "reason": "STALE_PROVIDER_SESSION_RETRY",
+            }
+            params["fresh"] = "1"
+            payload = self._request("/api/options-chain", params)
         if payload.get("feed") != "opra":
             self.last_error = {
                 "at": datetime.now(timezone.utc).isoformat(), "path": "/api/options-chain",
@@ -196,18 +211,25 @@ class AlpacaCoreMarketData:
     def _quote(row: dict[str, Any]) -> Quote | None:
         try:
             bid, ask = float(row["bid"]), float(row["ask"])
+            stamp = _timestamp(row.get("quote_time") or row.get("as_of"))
+            last = float(row["last"]) if row.get("last") is not None else None
+            volume = int(row["volume"]) if row.get("volume") is not None else None
+            oi = int(row["open_interest"]) if row.get("open_interest") is not None else None
+            bid_size = int(row["bid_size"]) if row.get("bid_size") is not None else None
+            ask_size = int(row["ask_size"]) if row.get("ask_size") is not None else None
         except (KeyError, TypeError, ValueError):
             return None
-        if bid < 0 or ask <= 0 or ask < bid:
+        if (not all(math.isfinite(value) for value in (bid, ask))
+                or (last is not None and not math.isfinite(last))
+                or bid < 0 or ask <= 0 or ask < bid
+                or any(value is not None and value < 0 for value in (volume, oi, bid_size, ask_size))):
             return None
         return Quote(
             symbol=str(row.get("symbol") or row.get("ticker") or "").upper(),
             bid=bid,
             ask=ask,
-            last=float(row["last"]) if row.get("last") is not None else None,
-            timestamp=_timestamp(row.get("quote_time") or row.get("as_of")),
-            volume=int(row["volume"]) if row.get("volume") is not None else None,
-            open_interest=int(row["open_interest"]) if row.get("open_interest") is not None else None,
+            last=last, timestamp=stamp, volume=volume, open_interest=oi,
+            bid_size=bid_size, ask_size=ask_size,
         )
 
     def quotes(self, symbols: list[str]) -> dict[str, Quote]:

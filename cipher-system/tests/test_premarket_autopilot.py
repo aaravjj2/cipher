@@ -224,7 +224,7 @@ def test_scheduler_records_retryable_plan_failure_without_writing_stale_plan(tmp
     assert event["action"] == "premarket_plan_unavailable"
 
 
-def test_scheduler_confirmation_uses_cipher_primary_and_submits_merged_payload(tmp_path, monkeypatch) -> None:
+def test_scheduler_confirmation_uses_only_cipher_and_submits_payload(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("CIPHER_INTERNAL_PROXY_TOKEN", "internal-token")
     monkeypatch.setenv("ALPACA_ALGO_KEY", "server-key")
     monkeypatch.setenv("ALPACA_ALGO_SECRET", "server-secret")
@@ -263,8 +263,7 @@ def test_scheduler_confirmation_uses_cipher_primary_and_submits_merged_payload(t
     # endpoint boundary explicitly (path end, ? or &) instead of a bare substring.
     scan_calls = [call for call in calls if re.search(r"/api/scan(?:\?|$)", call["url"])]
     strategies = [url.split("strategy=")[1].split("&")[0] for url in [call["url"] for call in scan_calls]]
-    assert "cipher" in strategies
-    assert "flash" in strategies
+    assert strategies == ["cipher"]
     ingest = [call for call in calls if "/api/scanner-ingest" in call["url"]]
     assert len(ingest) == 1
     submitted = ingest[0]["payload"]
@@ -272,7 +271,8 @@ def test_scheduler_confirmation_uses_cipher_primary_and_submits_merged_payload(t
     assert len(submitted["cards"]) == 1
     assert submitted["cards"][0]["ticker"] == "MU"
     assert result["action"] == "paper_confirmations_submitted"
-    assert result["confirmed"] == 1
+    assert result["cards_submitted"] == 1
+    assert result["batch_accepted"] is True
     assert result["confirmation_sources"] == ["cipher"]
 
 
@@ -350,7 +350,7 @@ def test_premarket_payload_rejects_stale_or_wrong_direction_candidates() -> None
     assert by_ticker["NVDA"] == ["direction_changed"]
 
 
-def test_scheduler_premarket_mode_submits_best_candidates_to_executor(tmp_path, monkeypatch) -> None:
+def test_scheduler_premarket_mode_defers_candidates_until_options_open(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("CIPHER_INTERNAL_PROXY_TOKEN", "internal-token")
     monkeypatch.setenv("ALPACA_ALGO_KEY", "server-key")
     monkeypatch.setenv("ALPACA_ALGO_SECRET", "server-secret")
@@ -373,23 +373,19 @@ def test_scheduler_premarket_mode_submits_best_candidates_to_executor(tmp_path, 
         now=stamp(8, 0), plan_path=tmp_path / "plan.json", status_path=tmp_path / "status.json",
     )
     assert result["action"] == "premarket_plan_saved"
-    assert result["premarket_entry_mode"] is True
-    assert result["premarket_entries"] == 1
-    assert result["premarket_batch_id"] == "premarket-batch-1"
+    assert result["premarket_entry_mode"] is False
+    assert result["premarket_entry_requested"] is True
+    assert result["premarket_entry_deferred"] is True
+    assert result["premarket_entries"] == 0
     ingest = [call for call in calls if "/api/scanner-ingest" in call["url"]]
-    assert len(ingest) == 1
-    submitted = ingest[0]["payload"]
-    assert submitted["premarket_entry"] is True
-    assert submitted["scan_type"] == "cipher"
-    assert len(submitted["cards"]) == 1
-    assert submitted["cards"][0]["ticker"] == "MU"
-    assert submitted["cards"][0]["premarket_entry"] is True
+    assert ingest == []
     saved = json.loads((tmp_path / "plan.json").read_text())
-    assert saved["entry_policy"]["premarket_entry_allowed"] is True
+    assert saved["entry_policy"]["premarket_entry_allowed"] is False
     trace = tmp_path / "cycles" / "2026-08-17.jsonl"
     event = json.loads(trace.read_text().splitlines()[-1])
     assert event["action"] == "premarket_plan_saved"
-    assert event["premarket_entries"] == 1
+    assert event["premarket_entries"] == 0
+    assert event["premarket_entry_deferred"] is True
 
 
 def test_service_provider_session_is_ephemeral_and_disconnects(tmp_path, monkeypatch):

@@ -19,10 +19,10 @@ from .autopilot_planner import (
     build_premarket_plan,
     confirmation_payload,
     phase_at,
-    premarket_payload,
     sentiment_context,
 )
 from .local_scan_scheduler import request_json, scanner_url
+from .config import load_config
 
 
 CORE_URL = "http://127.0.0.1:8282"
@@ -32,10 +32,8 @@ STATE_DIR = ROOT / "data" / "paper_runtime" / "autopilot"
 PLAN_PATH = STATE_DIR / "premarket_plan.json"
 STATUS_PATH = STATE_DIR / "status.json"
 
-FOUNDATION_UNIVERSE = (
-    "SPY", "QQQ", "IWM", "AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META",
-    "TSLA", "AVGO", "AMD", "MU", "SNDK", "NFLX", "PLTR", "COIN", "IBIT",
-)
+AUTOPILOT_CONFIG = ROOT / "config" / "paper_autopilot_shadow.yaml"
+FOUNDATION_UNIVERSE = load_config(AUTOPILOT_CONFIG).strategy.allowed_tickers
 
 
 def ensure_executor_market_data(executor_url: str, ticker: str) -> dict[str, Any]:
@@ -168,6 +166,7 @@ def _append_cycle_audit(status_path: Path, status: dict[str, Any], now: datetime
 
 
 def discovery_universe(core_url: str, *, limit: int = 30) -> list[str]:
+    allowed = set(FOUNDATION_UNIVERSE)
     symbols = list(FOUNDATION_UNIVERSE)
     try:
         discovered = request_json(f"{core_url.rstrip('/')}/api/finviz-discovery?limit={limit}")
@@ -180,7 +179,7 @@ def discovery_universe(core_url: str, *, limit: int = 30) -> list[str]:
     unique: list[str] = []
     for raw in symbols:
         symbol = str(raw).upper()
-        if symbol and symbol not in seen:
+        if symbol in allowed and symbol not in seen:
             seen.add(symbol)
             unique.append(symbol)
     return unique
@@ -205,7 +204,7 @@ def run_cycle(
         "action": "noop",
     }
     if phase == AutopilotPhase.PREMARKET_DISCOVERY:
-        premarket_entry_mode = premarket_entry_enabled(premarket_entry)
+        premarket_entry_requested = premarket_entry_enabled(premarket_entry)
         try:
             with service_provider_session(core_url):
                 universe = discovery_universe(core_url)
@@ -213,7 +212,7 @@ def run_cycle(
                 sentiment = sentiment_context(universe, as_of=now)
                 plan = build_premarket_plan(
                     scan, now=now, sentiment=sentiment,
-                    premarket_entry_allowed=premarket_entry_mode,
+                    premarket_entry_allowed=False,
                 )
         except (urllib.error.URLError, TimeoutError, ValueError) as exc:
             # The timer retries at 09:15 ET. Preserve any prior artifact for
@@ -227,43 +226,23 @@ def run_cycle(
             })
         else:
             _atomic_json(plan_path, plan)
-            submission: dict[str, Any] = {"premarket_entries": 0}
-            if premarket_entry_mode:
-                # Opt-in premarket-entry mode: the ranked plan candidates are
-                # submitted to the paper executor directly from the fresh
-                # premarket setup. The executor re-checks setup/ticker/portfolio
-                # gates and still only ever writes to the simulated book.
-                try:
-                    payload = premarket_payload(plan, scan, now=now)
-                    if payload["cards"]:
-                        ensure_executor_market_data(executor_url, str(payload["cards"][0]["ticker"]))
-                        accepted = request_json(executor_url, payload=payload, timeout=30)
-                        submission.update({
-                            "premarket_entries": len(payload["cards"]),
-                            "premarket_batch_id": accepted.get("batch_id"),
-                            "premarket_rejected": len(payload["rejected"]),
-                            "premarket_tickers": [row.get("ticker") for row in payload["cards"]],
-                            "premarket_rejection_reason_counts": _reason_counts(payload["rejected"]),
-                        })
-                    else:
-                        submission.update({
-                            "premarket_entries": 0,
-                            "premarket_rejected": payload["rejected"],
-                            "premarket_rejection_reason_counts": _reason_counts(payload["rejected"]),
-                        })
-                except (urllib.error.URLError, TimeoutError, ValueError) as exc:
-                    submission.update({
-                        "premarket_entries": 0,
-                        "premarket_submission_error": type(exc).__name__,
-                        "premarket_submission_retryable": True,
-                    })
+            # US equity options do not have a premarket session. Submitting the
+            # plan here can only consume a previous-session quote, create a
+            # false data-failure alert, and poison duplicate tracking before a
+            # tradable quote exists. Keep the opt-in visible for operators but
+            # defer every candidate to regular-session confirmation.
+            submission: dict[str, Any] = {
+                "premarket_entries": 0,
+                "premarket_entry_requested": premarket_entry_requested,
+                "premarket_entry_deferred": premarket_entry_requested,
+            }
             status.update({
                 "action": "premarket_plan_saved",
                 "plan_id": plan["plan_id"],
                 "universe_size": len(universe),
                 "candidates": len(plan["candidates"]),
                 "rejected": len(plan["rejected"]),
-                "premarket_entry_mode": premarket_entry_mode,
+                "premarket_entry_mode": False,
                 "candidate_tickers": [row["ticker"] for row in plan["candidates"]],
                 "rejection_reason_counts": _reason_counts(plan["rejected"]),
                 **submission,
@@ -278,11 +257,8 @@ def run_cycle(
             if not tickers:
                 status.update({"action": "no_candidates", "plan_id": plan.get("plan_id")})
             else:
-                # Primary confirmation is the regular-session Cipher scan; the
-                # Flash and Flash-Agentic scans merge only tickers the primary
-                # scan did not confirm. Each scan failure is recorded and the
-                # cycle continues with whatever strategies were available.
-                confirm_strategies = ("cipher", "flash", "flash_agentic")
+                # Autopilot uses only the regular-session Cipher confirmation.
+                confirm_strategies = ("cipher",)
                 scans: list[dict[str, Any]] = []
                 scan_errors: list[str] = []
                 session_error: dict[str, Any] | None = None
@@ -316,17 +292,19 @@ def run_cycle(
                         except (urllib.error.URLError, TimeoutError, ValueError) as exc:
                             status.update({
                                 "action": "blocked", "reason": "executor_market_data_unavailable",
-                                "error_type": type(exc).__name__, "confirmed": 0,
+                                "error_type": type(exc).__name__, "cards_submitted": 0,
                                 "rejected": len(payload["rejected"]), "plan_id": plan.get("plan_id"),
                             })
                         else:
                             status.update({
                                 "action": "paper_confirmations_submitted",
                                 "plan_id": plan.get("plan_id"),
-                                "confirmed": len(payload["cards"]),
+                                "cards_submitted": len(payload["cards"]),
+                                "batch_accepted": bool(accepted.get("accepted", True)),
+                                "batch_queued": bool(accepted.get("queued", True)),
                                 "rejected": len(payload["rejected"]),
                                 "batch_id": accepted.get("batch_id"),
-                                "confirmed_tickers": [row.get("ticker") for row in payload["cards"]],
+                                "submitted_tickers": [row.get("ticker") for row in payload["cards"]],
                                 "rejection_reason_counts": _reason_counts(payload["rejected"]),
                                 "confirmation_sources": payload.get("confirmation_sources") or [],
                                 "scan_types": payload.get("scan_types") or [],
@@ -335,7 +313,7 @@ def run_cycle(
                         status.update({
                             "action": "no_confirmed_entries",
                             "plan_id": plan.get("plan_id"),
-                            "confirmed": 0,
+                            "cards_submitted": 0,
                             "rejected": payload["rejected"],
                             "rejection_reason_counts": _reason_counts(payload["rejected"]),
                             "confirmation_sources": payload.get("confirmation_sources") or [],

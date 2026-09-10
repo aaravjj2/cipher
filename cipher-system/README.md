@@ -5,8 +5,11 @@ connects discovery, chart and market-structure analysis, contract liquidity,
 research agents, journaling, prospective validation, and autonomous **paper**
 execution through one evidence trail.
 
-Cipher is not a live-trading bot. The browser has no broker-order endpoint; the
-only broker client is isolated, limit-only, and hard-locked to Alpaca paper.
+Cipher is not a live-trading bot. The browser has no broker-order endpoint and
+the deployed Autopilot writes modeled fills only to Cipher's local SQLite paper
+portfolio. A legacy Alpaca-paper adapter remains regression-tested in source,
+but it is disabled by the deployed configuration and is never instantiated by
+the local-paper runtime.
 
 ## Daily workflow
 

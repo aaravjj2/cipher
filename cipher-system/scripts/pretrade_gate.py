@@ -36,13 +36,15 @@ DECISION_LOG = Path("/home/aarav/Aarav/cipher/runtime/data/agent_decision_log.js
 
 NEW_YORK = ZoneInfo("America/New_York")
 
-# Mirrors config/paper_autopilot_shadow.yaml [portfolio]/[contract]; kept
-# literal here so the gate stays stdlib-only. If the yaml changes, change
-# these with it.
-MAX_OPEN_POSITIONS = 3
-MAX_POSITIONS_PER_TICKER = 1
-MAX_NEW_POSITIONS_PER_DAY = 5
-MAX_CONTRACT_COST_USD = 700.0
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from core.paper_executor.config import load_config  # noqa: E402
+from core.exchange_calendar import is_session  # noqa: E402
+
+_POLICY = load_config(Path(__file__).resolve().parents[1] / "config" / "paper_autopilot_shadow.yaml")
+MAX_OPEN_POSITIONS = _POLICY.portfolio.maximum_open_positions
+MAX_POSITIONS_PER_TICKER = _POLICY.portfolio.maximum_positions_per_ticker
+MAX_NEW_POSITIONS_PER_DAY = _POLICY.portfolio.maximum_new_positions_per_day
+MAX_CONTRACT_COST_USD = _POLICY.contract.maximum_contract_cost
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from agent_decision_log import has_event  # noqa: E402
@@ -55,7 +57,7 @@ def _session_is_open(now: datetime | None = None) -> tuple[bool, str]:
     window in which the portfolio gates still apply.
     """
     local = (now or datetime.now(datetime.now().astimezone().tzinfo)).astimezone(NEW_YORK)
-    if local.weekday() >= 5:
+    if not is_session(local.date()):
         return False, f"{local:%A} — market closed"
     minutes = local.hour * 60 + local.minute
     if minutes < 9 * 60 + 30:

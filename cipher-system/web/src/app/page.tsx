@@ -201,5 +201,5 @@ export default function Home() {
     </main>
   );
   if (auth.session) return <TerminalHome key={auth.session.mode} session={auth.session} />;
-  return <AuthPanel authError={auth.error} />;
+  return <AuthPanel authError={auth.error} providerAvailable={auth.providerAvailable} />;
 }

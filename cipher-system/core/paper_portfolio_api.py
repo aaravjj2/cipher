@@ -8,6 +8,12 @@ import sqlite3
 from typing import Any
 
 from core.fronttest_portfolios import DEFAULT_DB, NY, SPECS
+from core.paper_executor.config import load_config
+from core.exchange_calendar import is_session
+
+
+AUTOPILOT_CONFIG = Path(__file__).resolve().parents[1] / "config" / "paper_autopilot_shadow.yaml"
+AUTOPILOT_DB = Path("/home/aarav/Aarav/cipher/runtime/data/paper_runtime/data/paper_trades/autopilot_shadow.sqlite")
 
 
 def _decode(value: str | None) -> dict:
@@ -61,7 +67,127 @@ def _open_mark(row: dict, *, now: datetime, stale_after_seconds: float = 120.0) 
     }
 
 
-def snapshot(db_path: Path = DEFAULT_DB, *, recent_limit: int = 30) -> dict[str, Any]:
+def _autopilot_portfolio(db_path: Path, *, now: datetime, recent_limit: int) -> dict[str, Any] | None:
+    """Adapt Autopilot's canonical local ledger to the Paper Portfolios view."""
+    if not db_path.is_file():
+        return None
+    cfg = load_config(AUTOPILOT_CONFIG)
+    starting_cash = cfg.portfolio.starting_cash
+    market_day = now.astimezone(NY).date().isoformat()
+    with sqlite3.connect(f"file:{db_path.resolve()}?mode=ro", uri=True, timeout=2.0) as db:
+        db.row_factory = sqlite3.Row
+        raw = [dict(row) for row in db.execute(
+            """select p.*,
+                      (select m.marked_at from paper_marks m where m.position_id=p.id order by m.marked_at desc limit 1) last_mark_at,
+                      (select m.bid from paper_marks m where m.position_id=p.id order by m.marked_at desc limit 1) last_bid,
+                      (select m.ask from paper_marks m where m.position_id=p.id order by m.marked_at desc limit 1) last_ask
+                 from paper_positions p order by p.opened_at desc limit ?""",
+            (recent_limit,),
+        )]
+        totals = db.execute(
+            """select count(*) closed,coalesce(sum((exit_price-entry_price)*quantity*100),0) pnl,
+                      coalesce(sum(case when exit_price>entry_price then 1 else 0 end),0) wins
+                 from paper_positions where status='CLOSED'"""
+        ).fetchone()
+        counts = db.execute(
+            """select count(*) signals,
+                      (select count(*) from paper_positions where status in ('OPEN','SHADOW_OPEN')) opens,
+                      (select count(*) from paper_positions where substr(opened_at,1,10)=?) entries_today,
+                      (select count(*) from paper_positions where status='CLOSED' and substr(closed_at,1,10)=?) closes_today,
+                      (select count(*) from paper_positions where status='CLOSED' and substr(closed_at,1,10)=? and exit_price>entry_price) wins_today,
+                      (select count(*) from paper_positions where status='CLOSED' and substr(closed_at,1,10)=? and exit_price<entry_price) losses_today,
+                      (select coalesce(sum((exit_price-entry_price)*quantity*100),0) from paper_positions where status='CLOSED' and substr(closed_at,1,10)=?) pnl_today
+                 from signal_cards""",
+            (market_day, market_day, market_day, market_day, market_day),
+        ).fetchone()
+        curve = [{"at": "autopilot_local", "equity": starting_cash}]
+        equity = starting_cash
+        for row in db.execute(
+            """select closed_at,(exit_price-entry_price)*quantity*100 pnl
+                 from paper_positions where status='CLOSED' order by closed_at"""
+        ):
+            equity += float(row["pnl"] or 0)
+            curve.append({"at": row["closed_at"], "equity": round(equity, 2)})
+
+    positions = []
+    unrealized_mid = liquidation_pnl = 0.0
+    stale_marks = unavailable_marks = 0
+    for row in raw:
+        quantity, entry = int(row["quantity"]), float(row["entry_price"])
+        payload = _decode(row.get("payload_json"))
+        execution_backend = str(payload.get("execution_backend") or "simulated")
+        execution_mode = str(payload.get("mode") or "shadow")
+        actual_broker_fill = execution_backend == "alpaca_paper" and execution_mode == "paper" and bool(payload.get("broker_order"))
+        item = {
+            "position_id": row["id"], "status": row["status"], "ticker": row["ticker"],
+            "direction": row["direction"], "structure": "long_option", "contract": row["symbol"],
+            "short_contract": None, "quantity": quantity, "entry_fill": entry,
+            "entry_at": row["opened_at"], "exit_at": row["closed_at"],
+            "exit_fill": row["exit_price"], "exit_reason": row["exit_reason"],
+            "execution_backend": execution_backend, "execution_mode": execution_mode,
+            "fill_provenance": "alpaca_paper" if actual_broker_fill else "cipher_modeled",
+        }
+        if row["status"] == "CLOSED":
+            pnl = (float(row["exit_price"]) - entry) * quantity * 100
+            item.update({"pnl": round(pnl, 2), "return_pct": round(pnl / (entry * quantity * 100) * 100, 2),
+                         "mark_status": "closed", "mark_mid": None, "unrealized_pnl_mid": None,
+                         "liquidation_pnl": None})
+        else:
+            mark = _open_mark({"last_bid": row["last_bid"], "last_ask": row["last_ask"],
+                               "entry_fill": entry, "quantity": quantity,
+                               "last_mark_at": row["last_mark_at"], "structure": "long_option"}, now=now)
+            item.update(mark)
+            unrealized_mid += float(mark["unrealized_pnl_mid"] or 0)
+            liquidation_pnl += float(mark["liquidation_pnl"] or 0)
+            stale_marks += mark["mark_status"] == "stale"
+            unavailable_marks += mark["mark_status"] == "unavailable"
+        positions.append(item)
+
+    realized = float(totals["pnl"] or 0)
+    open_count = int(counts["opens"] or 0)
+    open_cost = sum(
+        float(row["entry_price"]) * int(row["quantity"]) * 100
+        for row in raw if row["status"] in {"OPEN", "SHADOW_OPEN"}
+    )
+    current_time = now.astimezone(NY).time().replace(tzinfo=None)
+    start = datetime.strptime(cfg.strategy.entry_window_et_start or "00:00", "%H:%M").time()
+    end = datetime.strptime(cfg.strategy.entry_window_et_end or "23:59", "%H:%M").time()
+    entry_window_open = is_session(now.astimezone(NY).date()) and start <= current_time < end
+    daily_loss_locked = int(counts["losses_today"]) >= cfg.portfolio.stop_after_daily_losses
+    return {
+        "portfolio_id": "autopilot_local", "strategy": "Cipher Autopilot · Local Paper",
+        "starting_cash": starting_cash, "realized_equity": round(starting_cash + realized, 2),
+        "realized_pnl": round(realized, 2), "closed_trades": int(totals["closed"]),
+        "wins": int(totals["wins"]), "open_positions": open_count,
+        "unrealized_pnl_mid": round(unrealized_mid, 2), "liquidation_pnl": round(liquidation_pnl, 2),
+        "marked_equity": round(starting_cash + realized + unrealized_mid, 2),
+        "liquidation_equity": round(starting_cash + realized + liquidation_pnl, 2),
+        "cash_balance": round(starting_cash + realized - open_cost, 2),
+        "daily_realized_pnl": round(float(counts["pnl_today"] or 0), 2),
+        "daily_closed_trades": int(counts["closes_today"]), "daily_wins": int(counts["wins_today"]),
+        "daily_losses": int(counts["losses_today"]),
+        "daily_entries": int(counts["entries_today"]),
+        "risk_state": {"daily_loss_locked": daily_loss_locked, "entry_window_open": entry_window_open,
+                       "stale_open_marks": stale_marks, "unavailable_open_marks": unavailable_marks,
+                       "new_entries_allowed": entry_window_open and not daily_loss_locked
+                                              and int(counts["entries_today"]) < cfg.portfolio.maximum_new_positions_per_day},
+        "config": {"symbol": "MULTI", "execution_backend": "simulated",
+                   "external_order_capability": False},
+        "positions": positions, "signals": [], "equity_curve": curve,
+        "opportunity_summary": {"signals": int(counts["signals"]), "resolved": int(totals["closed"]),
+                                "tracking": open_count, "targets": 0, "invalidations": 0,
+                                "session_expired": 0, "skipped_targets": 0, "skipped_invalidations": 0,
+                                "scope": "autopilot_local_option_ledger"},
+        "bounded_recent_realized_pnl": round(sum(float(row.get("pnl") or 0) for row in positions), 2),
+        "description": "Autopilot now executes in Cipher's internal quote-driven paper ledger. Historical Alpaca-paper rows remain labeled by provenance; new brokerage orders are disabled.",
+        "enabled": True,
+    }
+
+
+def snapshot(db_path: Path = DEFAULT_DB, *, recent_limit: int = 30,
+             autopilot_db_path: Path | None = None) -> dict[str, Any]:
+    from core.theta_portfolio import dashboard
+    theta = dashboard()
     if not db_path.exists():
         empty_opportunity = {
             "signals": 0, "resolved": 0, "tracking": 0, "targets": 0,
@@ -83,7 +209,7 @@ def snapshot(db_path: Path = DEFAULT_DB, *, recent_limit: int = 30) -> dict[str,
                 "minimum_sample": 20, "ranked": False, "rows": [],
                 "caveat": "No local paper database is initialized.",
             },
-            "portfolios": [], "runs": [],
+            "portfolios": [], "runs": [], "theta": theta,
             "caveat": "Local paper database is not initialized. No broker orders.",
         }
     now = datetime.now(timezone.utc)
@@ -245,6 +371,28 @@ def snapshot(db_path: Path = DEFAULT_DB, *, recent_limit: int = 30) -> dict[str,
         runs = [dict(row) for row in db.execute(
             "select run_id,started_at,completed_at,status,error from runs order by run_id desc limit 20"
         )]
+    autopilot = _autopilot_portfolio(autopilot_db_path or AUTOPILOT_DB, now=now, recent_limit=recent_limit)
+    if autopilot:
+        portfolios.append(autopilot)
+        comparison_rows.append({
+            "portfolio_id": autopilot["portfolio_id"], "strategy": autopilot["strategy"],
+            "closed_sample": autopilot["closed_trades"], "minimum_sample": 20,
+            "sample_status": "USABLE" if autopilot["closed_trades"] >= 20 else ("EARLY" if autopilot["closed_trades"] >= 10 else "TINY"),
+            "win_rate": round(autopilot["wins"] / autopilot["closed_trades"] * 100, 2) if autopilot["closed_trades"] else None,
+            "average_option_return_pct": None, "profit_factor_on_return_units": None,
+            "rank_eligible": autopilot["closed_trades"] >= 20,
+        })
+        from core.paper_executor.cohort_evaluation import evaluate_cohort
+        baseline_path = autopilot_db_path or AUTOPILOT_DB
+        for name in ("confirmation", "cost", "exit"):
+            candidate_path = baseline_path.parents[2] / "cohorts" / name / "paper.sqlite"
+            if not candidate_path.is_file():
+                continue
+            candidate = _autopilot_portfolio(candidate_path, now=now, recent_limit=recent_limit)
+            if candidate:
+                candidate.update(portfolio_id=f"autopilot_{name}", strategy=f"Cipher Autopilot · {name.title()}",
+                                 evaluation=evaluate_cohort(candidate_path, baseline_path))
+                portfolios.append(candidate)
     last_run_at = max((row.get("completed_at") or row.get("started_at") or "" for row in runs), default="") or None
     as_of = last_run_at or datetime.fromtimestamp(db_path.stat().st_mtime, timezone.utc).isoformat()
     opportunity_summary = {
@@ -275,9 +423,9 @@ def snapshot(db_path: Path = DEFAULT_DB, *, recent_limit: int = 30) -> dict[str,
             "rows": comparison_rows,
             "caveat": "Dollar P/L is not compared because portfolio risk fractions differ. No strategy is rank-eligible before 20 prospective closes.",
         },
-        "portfolios": portfolios, "runs": runs,
+        "portfolios": portfolios, "runs": runs, "theta": theta,
         "caveat": (
-            "Local shadow simulation with modeled spread crossing and slippage. "
+            "Local paper simulation with modeled spread crossing and slippage. "
             "Skipped-signal outcomes describe the subsequent underlying path only, not option P/L. "
             "Marked equity uses observed option midpoints; liquidation equity crosses the displayed spread with modeled slippage. "
             "Stale or missing marks are labeled. No broker orders."

@@ -202,7 +202,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def log_message(self, fmt: str, *args: Any) -> None:
         # Never log the Authorization header or query strings; only method and status.
-        sys.stderr.write(f"{self.address_string()} {self.command} {self.path.split('?')[0]} {fmt % args}\n")
+        # BaseHTTPRequestHandler's format arguments contain the original request
+        # line, including OAuth codes in query strings. Never log them.
+        sys.stderr.write(f"{self.address_string()} {self.command} {self.path.split('?')[0]}\n")
 
     def _trace(self, note: str, **fields: Any) -> None:
         """Record what a client actually sent, so a host's generic error becomes evidence.
@@ -251,6 +253,9 @@ class Handler(BaseHTTPRequestHandler):
         unreachable. The tunnel hostname also changes between runs, so this cannot be a
         constant.
         """
+        configured = os.environ.get("CIPHER_MCP_PUBLIC_URL", "").rstrip("/")
+        if configured:
+            return configured
         proto = (self.headers.get("X-Forwarded-Proto") or "").split(",")[0].strip()
         host = (self.headers.get("X-Forwarded-Host") or "").split(",")[0].strip()
         if not host:

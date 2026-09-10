@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
-from core.paper_executor.config import ContractConfig, ExecutorConfig, InstrumentConfig, MarketDataConfig, ScannerConfig, VmForwardingConfig
+from core.paper_executor.config import ContractConfig, ExecutionConfig, ExecutorConfig, InstrumentConfig, MarketDataConfig, ScannerConfig, VmForwardingConfig, load_config
 from core.paper_executor.database import PaperExecutorDatabase
 from core.paper_executor.models import Mode, Quote
 from core.paper_executor.runtime import RuntimeCoordinator
@@ -83,7 +84,8 @@ def runtime(tmp_path, md=None, *, vm_enabled=True):
         vm_forwarding=VmForwardingConfig(enabled=vm_enabled),
     )
     db = PaperExecutorDatabase(cfg.database_path)
-    rt = RuntimeCoordinator(cfg, db, market_data=md or MockMarketData())
+    md = md or MockMarketData()
+    rt = RuntimeCoordinator(cfg, db, market_data=md, clock=lambda: md.now)
     rt.recover()
     return rt
 
@@ -115,6 +117,44 @@ def test_runtime_end_to_end_shadow_take_profit_and_restart_no_duplicate(tmp_path
     assert duplicate["duplicate_batch"] is True
     rt2.drain_for_tests()
     assert len(rt2.db.rows("paper_positions")) == 1
+
+
+def test_deployed_autopilot_uses_only_the_local_simulated_ledger(tmp_path):
+    config_path = Path(__file__).resolve().parents[1] / "config" / "paper_autopilot_shadow.yaml"
+    cfg = load_config(config_path)
+    assert cfg.execution == ExecutionConfig(
+        backend="simulated", order_timeout_seconds=20, poll_interval_seconds=1.0,
+        auto_promote_paper=True, paper_forward_test_authorized=True,
+    )
+
+    class BrokerMustNotBeCalled:
+        def __getattr__(self, name):
+            raise AssertionError(f"external broker method accessed: {name}")
+
+    md = MockMarketData()
+    isolated = ExecutorConfig(
+        runtime_root=tmp_path, database_path=tmp_path / "paper.sqlite",
+        market_data=MarketDataConfig(quote_maximum_age_seconds=10),
+        contract=ContractConfig(minimum_dte=0, allow_0dte=True),
+        scanner=ScannerConfig(maximum_signal_age_seconds=999999999),
+        vm_forwarding=VmForwardingConfig(enabled=False),
+        execution=cfg.execution,
+    )
+    rt = RuntimeCoordinator(
+        isolated, PaperExecutorDatabase(isolated.database_path),
+        market_data=md, broker=BrokerMustNotBeCalled(), clock=lambda: md.now,
+    )
+    rt.recover()
+    for state in rt.states.values():
+        state.running = True
+    assert rt.promote_to_paper() == (True, "paper")
+    assert rt.mode is Mode.PAPER
+    rt.ingest_payload(signal(md.now))
+    rt.drain_for_tests()
+    assert rt.db.rows("paper_positions")[0]["status"] == "OPEN"
+    md.option_bid, md.option_ask = 1.35, 1.45
+    assert rt.monitor_once(md.now)[0]["closed"] is True
+    assert {row["status"] for row in rt.db.rows("paper_orders")} == {"SIMULATED_FILLED"}
 
 
 def test_runtime_stop_loss_exit(tmp_path):
@@ -247,11 +287,29 @@ def test_crash_during_position_creation_does_not_duplicate_episode_position(tmp_
         max_open_positions=2,
         max_positions_per_ticker=1,
         max_new_positions_per_day=5,
+        max_new_positions_per_ticker_per_day=5,
         stop_after_daily_losses=2,
     )
     assert created is False
     assert reason == "SKIPPED_DUPLICATE"
     assert len(rt.db.rows("paper_positions")) == 1
+
+
+def test_daily_ticker_limit_blocks_reentry_after_close(tmp_path):
+    db = PaperExecutorDatabase(tmp_path / "paper.sqlite")
+    common = dict(
+        ticker="NVDA", direction="bullish", symbol="NVDA260911C00100000",
+        quantity=1, entry_price=1.0, status="SHADOW_OPEN",
+        payload={"opened_at": "2026-09-09T14:00:00+00:00"},
+        max_open_positions=3, max_positions_per_ticker=1,
+        max_new_positions_per_day=5, max_new_positions_per_ticker_per_day=1,
+        stop_after_daily_losses=2,
+    )
+    assert db.create_position_transactional(position_id="p1", episode_id="e1", **common) == (True, None)
+    assert db.close_position("p1", 1.2, "option_take_profit", {}) is True
+    created, reason = db.create_position_transactional(position_id="p2", episode_id="e2", **common)
+    assert created is False
+    assert reason == "SKIPPED_TICKER_DAILY_LIMIT"
 
 
 def test_crash_during_position_close_is_idempotent(tmp_path):
@@ -264,6 +322,10 @@ def test_crash_during_position_close_is_idempotent(tmp_path):
     second = rt.db.close_position(pos["id"], 1.20, "option_take_profit", {})
     assert first["closed"] is True
     assert second is False
+    assert rt.quote_manager.active_symbols == []
+    assert rt.quote_manager.degraded is False
+    episode = rt.db.rows("signal_episodes")[0]
+    assert episode["ended_at"] is not None
 
 
 def test_runtime_shadow_debit_spread_entry_and_take_profit(tmp_path):
@@ -277,7 +339,7 @@ def test_runtime_shadow_debit_spread_entry_and_take_profit(tmp_path):
         instrument=InstrumentConfig(model="debit_spread"),
         vm_forwarding=VmForwardingConfig(enabled=False),
     )
-    rt = RuntimeCoordinator(cfg, PaperExecutorDatabase(cfg.database_path), market_data=md)
+    rt = RuntimeCoordinator(cfg, PaperExecutorDatabase(cfg.database_path), market_data=md, clock=lambda: md.now)
     rt.recover()
     open_shadow_position(rt, md)
     position = rt.db.rows("paper_positions")[0]
@@ -312,8 +374,33 @@ def test_stale_quote_at_entry_is_a_classified_block_not_worker_error(tmp_path):
     worker_errors = [row for row in rt.db.rows("system_events") if row["event_type"] == "WORKER_ERROR"]
     assert worker_errors == []
     block = rt.db.operational_snapshot()["last_entry_block"]
-    assert block["reason"] == "SKIPPED_MARKET_DATA_UNAVAILABLE"
+    assert block["reason"] == "SKIPPED_STALE_QUOTE"
     assert block["error"] == "stale quote"
+
+
+def test_transient_degraded_feed_retries_on_the_next_card(tmp_path):
+    md = MockMarketData()
+    rt = runtime(tmp_path, md)
+    md.quote_fail = True
+    first = rt.ingest_payload(signal(md.now))
+    rt.drain_for_tests()
+    assert rt.quote_manager.degraded is True
+    first_episode = rt.db.rows("signal_episodes")[0]
+    assert first_episode["ended_at"] is not None
+
+    md.quote_fail = False
+    md.now += timedelta(minutes=31)
+    second_payload = signal(md.now)
+    second_payload["batch_id"] = "b2"
+    second = rt.ingest_payload(second_payload)
+    assert second["batch_id"] != first["batch_id"]
+    rt.drain_for_tests()
+
+    # Retryable failures respect the configured episode cooldown before a fresh
+    # attempt clears the provider failure and opens a trade.
+    assert rt.quote_manager.last_error is None
+    assert len(rt.db.rows("signal_episodes")) == 2
+    assert len(rt.db.rows("paper_positions")) == 1
 
 
 def test_mark_quote_age_is_never_negative(tmp_path):

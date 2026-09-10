@@ -18,24 +18,26 @@ function boundedCredentialPayload(input) {
 
 export function createProviderSessionClient({ coreUrl, internalToken, fetchImpl = globalThis.fetch } = {}) {
   const sessions = new Map();
+  const reconnecting = new Map();
   const baseUrl = String(coreUrl || "").replace(/\/+$/, "");
   const token = String(internalToken || "");
 
   async function request(userContext, body) {
-    if (!baseUrl || !token || !userContext?.userId || !userContext?.accessToken) {
+    if (!baseUrl || !token || !userContext?.userId || (!userContext?.accessToken && !userContext?.localOperator)) {
       throw new Error("provider session is unavailable");
     }
     const encoded = JSON.stringify(body);
     if (Buffer.byteLength(encoded, "utf8") > MAX_BODY_BYTES) throw new Error("provider session request is too large");
+    const headers = {
+      accept: "application/json",
+      "content-type": "application/json",
+      "x-cipher-internal-token": token,
+      "x-cipher-user-id": userContext.userId,
+    };
+    if (userContext.accessToken) headers["x-cipher-access-token"] = userContext.accessToken;
     const response = await fetchImpl(`${baseUrl}/internal/provider-session`, {
       method: "POST",
-      headers: {
-        accept: "application/json",
-        "content-type": "application/json",
-        "x-cipher-internal-token": token,
-        "x-cipher-user-id": userContext.userId,
-        "x-cipher-access-token": userContext.accessToken,
-      },
+      headers,
       body: encoded,
     });
     let payload = {};
@@ -45,10 +47,22 @@ export function createProviderSessionClient({ coreUrl, internalToken, fetchImpl 
   }
 
   return {
+    async ensureOperator(input) {
+      if (!input?.localOperator) throw new Error("host operator context required");
+      const userId = input.userId;
+      if (reconnecting.has(userId)) return reconnecting.get(userId);
+      const pending = (async () => {
+        if (sessions.has(userId) && (await this.status(input)).status === "connected") return;
+        await this.connect(input);
+      })();
+      reconnecting.set(userId, pending);
+      try { await pending; } finally { reconnecting.delete(userId); }
+    },
     async connect(input) {
       const userContext = {
         userId: String(input?.userId || ""),
         accessToken: String(input?.accessToken || ""),
+        localOperator: input?.localOperator === true,
       };
       const payload = boundedCredentialPayload({ ...input, action: "connect" });
       const result = await request(userContext, payload);

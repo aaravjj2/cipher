@@ -945,6 +945,7 @@ export function SetupScanner({ onNavigate }: { onNavigate?: (panel: string, tick
   const [historyLoading, setHistoryLoading] = useState(false);
   const [agenticView, setAgenticView] = useState(false);
   const [agentic, setAgentic] = useState<FlashAgenticLive | null>(null);
+  const agenticLive = agentic?.loop_running && agentic?.freshness?.state === "current";
   const [agenticError, setAgenticError] = useState("");
   const [discoveryMessage, setDiscoveryMessage] = useState("");
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -1301,7 +1302,7 @@ export function SetupScanner({ onNavigate }: { onNavigate?: (panel: string, tick
           {historyOpen && (
             <div
               className="absolute left-0 mt-2 w-[420px] max-h-[360px] overflow-y-auto z-20"
-              role="listbox"
+              role="group"
               aria-label="Saved scan history"
               style={{ background: "var(--panel)", border: "1px solid var(--line)", boxShadow: "0 14px 38px rgba(0,0,0,0.6)" }}
             >
@@ -1320,7 +1321,6 @@ export function SetupScanner({ onNavigate }: { onNavigate?: (panel: string, tick
                   <button
                     key={entry.id}
                     type="button"
-                    role="option"
                     aria-label={`Load saved ${entry.strategy} ${entry.mode} scan`}
                     onClick={() => loadFromHistory(entry)}
                     className="flex flex-col w-full text-left px-4 py-2.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--gold)]"
@@ -1449,16 +1449,16 @@ export function SetupScanner({ onNavigate }: { onNavigate?: (panel: string, tick
               <span
                 className="flex flex-row items-center gap-1.5 text-[11px] font-bold uppercase px-[10px] py-[4px] rounded-full"
                 style={{
-                  border: `1px solid color-mix(in srgb, ${agentic?.loop_running ? "var(--accent)" : "var(--text-mute)"} 55%, transparent)`,
-                  color: agentic?.loop_running ? "var(--accent)" : "var(--text-mute)",
+                  border: `1px solid color-mix(in srgb, ${agenticLive ? "var(--accent)" : "var(--text-mute)"} 55%, transparent)`,
+                  color: agenticLive ? "var(--accent)" : "var(--text-mute)",
                 }}
               >
                 <span
-                  className={`w-[7px] h-[7px] rounded-full ${agentic?.loop_running ? "animate-pulse" : ""}`}
-                  style={{ background: agentic?.loop_running ? "var(--accent)" : "var(--text-mute)" }}
+                  className={`w-[7px] h-[7px] rounded-full ${agenticLive ? "animate-pulse" : ""}`}
+                  style={{ background: agenticLive ? "var(--accent)" : "var(--text-mute)" }}
                   aria-hidden="true"
                 />
-                {agentic?.loop_running ? "Live" : "Idle"}
+                {agenticLive ? "Live" : agentic?.freshness?.state === "stale" ? "Stale capture" : "Historical / idle"}
               </span>
               <span className="text-[15px] font-bold" style={{ color: "var(--text)" }}>
                 Flash Agentic
@@ -1469,13 +1469,13 @@ export function SetupScanner({ onNavigate }: { onNavigate?: (panel: string, tick
               <span className="text-[11.5px]" style={{ color: "var(--text-mute)", fontFamily: "var(--font-mono)" }}>
                 {agentic.cycle != null ? `cycle ${agentic.cycle} · ` : ""}
                 {agentic.captured_at
-                  ? `captured ${new Date(agentic.captured_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", second: "2-digit" })}`
+                  ? `captured ${new Date(agentic.captured_at).toLocaleString("en-US", { year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" })}`
                   : "no capture yet"}
               </span>
             )}
           </div>
 
-          {!agentic?.loop_running && (
+          {!agenticLive && (
             <div
               className="flex flex-row items-start gap-3 px-4 py-3"
               style={{
@@ -1487,8 +1487,8 @@ export function SetupScanner({ onNavigate }: { onNavigate?: (panel: string, tick
                 ⚠
               </span>
               <p className="text-[13px]" style={{ color: "var(--text-dim)" }}>
-                The background capture loop isn&apos;t running, so this shows the last captured
-                snapshot. Start it with{" "}
+                Fresh browser evidence is unavailable; this is a historical snapshot, not a live signal.
+                The source needs a connected, logged-in browser. Restart capture with{" "}
                 <code style={{ color: "var(--text)" }}>python3 core/flash_agentic_live_loop.py</code>{" "}
                 — it drives a real browser session against the live product.
               </p>

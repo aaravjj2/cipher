@@ -13,7 +13,7 @@ WorkingDirectory=/home/aarav/Aarav/cipher/cipher-github
 EnvironmentFile=-/etc/cipher/cipher.env
 # Run every stage even if one fails, but preserve a failing service result so
 # monitoring cannot report a partial digest as healthy.
-ExecStart=/bin/bash -c 'status=0; /home/aarav/Aarav/cipher/cipher-github/.venv-research-py312/bin/python -m earnings_model paper-settle || status=1; /home/aarav/Aarav/cipher/cipher-github/.venv-research-py312/bin/python -m earnings_model radar --json-output /home/aarav/Aarav/cipher/runtime/data/earnings_radar.json || status=1; /home/aarav/Aarav/cipher/cipher-github/.venv-research-py312/bin/python -m earnings_model paper-enter || status=1; /home/aarav/Aarav/cipher/cipher-github/.venv-research-py312/bin/python -m earnings_model notify-discord --type all || status=1; exit $status'
+ExecStart=/bin/bash -c 'status=0; /home/aarav/Aarav/cipher/cipher-github/.venv-research-py312/bin/python -m earnings_model paper-settle || status=1; /home/aarav/Aarav/cipher/cipher-github/.venv-research-py312/bin/python -m earnings_model radar --json-output /home/aarav/Aarav/cipher/runtime/data/earnings_radar.json || status=1; /home/aarav/Aarav/cipher/cipher-github/.venv-research-py312/bin/python -m earnings_model paper-enter || status=1; /home/aarav/Aarav/cipher/cipher-github/.venv-research-py312/bin/python -m earnings_model notify-discord --type all --radar-input /home/aarav/Aarav/cipher/runtime/data/earnings_radar.json || status=1; exit $status'
 NoNewPrivileges=true
 PrivateTmp=true
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6

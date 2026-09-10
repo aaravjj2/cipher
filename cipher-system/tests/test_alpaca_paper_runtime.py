@@ -52,7 +52,7 @@ def make_runtime(tmp_path, broker):
         execution=ExecutionConfig(backend="alpaca_paper", order_timeout_seconds=1, poll_interval_seconds=0.001),
     )
     db = PaperExecutorDatabase(cfg.database_path)
-    runtime = RuntimeCoordinator(cfg, db, market_data=md, broker=broker)
+    runtime = RuntimeCoordinator(cfg, db, market_data=md, broker=broker, clock=lambda: md.now)
     runtime.recover()
     runtime.mode = Mode.PAPER
     return runtime, md
@@ -113,12 +113,26 @@ def test_unfilled_broker_exit_backs_off_before_resubmitting(tmp_path):
     assert len(broker.intents) == submissions_after_first_failure
 
 
-def test_unknown_broker_position_blocks_reconciliation(tmp_path):
+def test_unrelated_broker_position_is_visible_but_does_not_block_reconciliation(tmp_path):
     broker = FilledBroker()
     broker.positions = lambda: [{"symbol": "AAPL", "quantity": 1}]
     runtime, _ = make_runtime(tmp_path, broker)
-    assert runtime.reconciliation_passed is False
+    assert runtime.reconciliation_passed is True
     assert runtime.health()["paper_broker"]["unknown_positions"] == ["AAPL"]
+
+
+def test_known_cipher_orphan_position_blocks_reconciliation(tmp_path):
+    broker = FilledBroker()
+    runtime, _ = make_runtime(tmp_path, broker)
+    runtime.db.insert_order(
+        order_id="owned-order", episode_id=None, position_id="missing-position",
+        side="BUY_TO_OPEN", symbol="AAPL260918C00100000", quantity=1,
+        status="FILLED", fill={}, created_at="2026-09-01T14:00:00+00:00",
+    )
+    broker.positions = lambda: [{"symbol": "AAPL260918C00100000", "quantity": 1}]
+    runtime.recover()
+    assert runtime.reconciliation_passed is False
+    assert runtime.health()["paper_broker"]["owned_orphan_positions"] == ["AAPL260918C00100000"]
 
 
 def test_explicit_forward_test_authorization_can_promote_only_paper_backend(tmp_path):
@@ -139,3 +153,25 @@ def test_explicit_forward_test_authorization_can_promote_only_paper_backend(tmp_
         state.running = True
     ok, reason = runtime.promote_to_paper()
     assert (ok, reason, runtime.mode) == (True, "paper", Mode.PAPER)
+
+
+def test_monitor_retries_reconciliation_and_promotion_without_restart(tmp_path, monkeypatch):
+    broker = FilledBroker()
+    runtime, _ = make_runtime(tmp_path, broker)
+    runtime.cfg = ExecutorConfig(
+        runtime_root=runtime.cfg.runtime_root, database_path=runtime.cfg.database_path,
+        market_data=runtime.cfg.market_data, contract=runtime.cfg.contract,
+        scanner=runtime.cfg.scanner, vm_forwarding=runtime.cfg.vm_forwarding,
+        execution=ExecutionConfig(
+            backend="alpaca_paper", auto_promote_paper=True,
+            paper_forward_test_authorized=True,
+        ),
+    )
+    runtime.mode = Mode.SHADOW
+    runtime.reconciliation_passed = False
+    for state in runtime.states.values():
+        state.running = True
+    monkeypatch.setattr("core.paper_executor.runtime.time.sleep", lambda _seconds: None)
+    runtime._monitor_loop()
+    assert runtime.mode is Mode.PAPER
+    assert runtime.reconciliation_passed is True

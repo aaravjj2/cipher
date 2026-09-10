@@ -20,6 +20,14 @@ test("all profiles preserve the no-live-order invariant and guest is constrained
   assert.equal(guest.capabilities.providerConnection, false);
 });
 
+test("local host profile has developer diagnostics without live-order authority", () => {
+  const profile = createAccessProfileResolver().operator();
+  assert.equal(profile.mode, "developer");
+  assert.equal(profile.capabilities.developerTools, true);
+  assert.equal(profile.capabilities.liveOrders, false);
+  assert.equal(profile.settings.displayName, "Host");
+});
+
 test("developer settings are sanitized before reaching the browser", () => {
   const profiles = createAccessProfileResolver();
   const profile = profiles.authenticated(

@@ -16,6 +16,7 @@ import urllib.request
 from datetime import datetime, time, timezone
 from typing import Any, Iterable
 from zoneinfo import ZoneInfo
+from core.exchange_calendar import is_session
 
 
 NEW_YORK = ZoneInfo("America/New_York")
@@ -43,7 +44,7 @@ def in_entry_window(
     if current.tzinfo is None:
         raise ValueError("now must be timezone-aware")
     local = current.astimezone(NEW_YORK)
-    return local.weekday() < 5 and start <= local.time().replace(tzinfo=None) <= end
+    return is_session(local.date()) and start <= local.time().replace(tzinfo=None) <= end
 
 
 def scanner_url(

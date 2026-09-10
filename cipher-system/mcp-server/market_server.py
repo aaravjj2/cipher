@@ -87,6 +87,27 @@ ALLOWED_PATHS = frozenset({
 
 MAX_RESULT_BYTES = 120_000
 
+# Explicit routes AND parameter schemas: some core GET endpoints can start jobs
+# or write artifacts, so arbitrary paths/action parameters are never exposed.
+READ_TOOLS = {
+    "get_data_freshness": ("/api/product-status", "Source timestamps, exchange session, stale/missing inputs; check before interpreting research.", True),
+    "get_provider_capabilities": ("/api/provider-capabilities", "Configured feed capabilities and limitations, without credentials.", False),
+    "get_earnings_radar": ("/api/earnings-radar", "Stored earnings research with original production time and stale status.", False),
+    "get_research_ranking": ("/api/research-ranking", "Latest research ranking and its age; does not recompute or promote strategies.", False),
+    "get_research_status": ("/api/research-status", "Research evidence availability and validation status.", False),
+    "get_evidence_status": ("/api/evidence-status", "Available local evidence and provenance gaps.", False),
+    "get_governance": ("/api/governance", "Read-only research governance; no promotion or execution.", False),
+    "get_research_desk": ("/api/research-desk", "Latest saved market research report.", False),
+    "get_paper_portfolios": ("/api/paper-portfolios", "Cipher self-managed simulated portfolios, positions and P&L, including local Autopilot; no broker orders.", False),
+    "get_prospective_fronttests": ("/api/prospective-fronttests", "Prospective simulated strategy results and sample limitations.", False),
+    "get_scanner_universe": ("/api/scan/universe", "Scanner universe, cap tiers and validation timestamp.", False),
+    "get_scan_history": ("/api/scan/history", "Saved scanner results; timestamps are historical, not a new scan.", False),
+    "get_company_context": ("/api/company-context", "Corporate event context for a ticker.", True),
+    "get_options_chain": ("/api/options-chain", "Option snapshots with Greeks, IV, OI and quote timestamps. Unknown values are not zero.", True),
+    "get_options_flow": ("/api/flow", "Option flow with provenance: event-time tape where present, otherwise explicitly labelled snapshot fallback.", True),
+}
+ALLOWED_PATHS = ALLOWED_PATHS | frozenset(value[0] for value in READ_TOOLS.values())
+
 RESEARCH_NOTICE = (
     "Cipher is research software and read-only. Nothing it returns is a trade "
     "recommendation, an order, or a position instruction, and no tool here can place one."
@@ -96,20 +117,13 @@ RESEARCH_NOTICE = (
 # --------------------------------------------------------------------------- transport
 
 def _core_headers() -> dict[str, str]:
-    """Hosted cores require the internal proxy token; guests are fine with it.
+    """Authenticate to the hosted core and renew its ephemeral provider session.
 
-    The token is read per call so a credential rotation never needs this
-    process to restart. No key material ever appears in a tool result.
+    Service environment rotation requires a restart; expired provider sessions
+    recover per call. No key material ever appears in a tool result.
     """
-    headers = {"Accept": "application/json"}
-    token = os.environ.get("CIPHER_INTERNAL_PROXY_TOKEN", "")
-    if token:
-        headers.update({
-            "X-Cipher-Internal-Token": token,
-            "X-Cipher-Guest": "1",
-            "X-Cipher-User-Id": "guest",
-        })
-    return headers
+    import core_session
+    return core_session.headers(BASE_URL, TIMEOUT)
 
 
 def _get(path: str, params: dict[str, Any] | None = None) -> Any:
@@ -269,7 +283,10 @@ def tool_specs() -> list[dict[str, Any]]:
         }
 
     symbol = {"type": "string", "description": "Ticker, e.g. SPY or NVDA."}
-    return [
+    return [{"name": name, "description": description,
+             "inputSchema": schema({"symbol": symbol} if needs_symbol else {},
+                                   ["symbol"] if needs_symbol else [])}
+            for name, (_, description, needs_symbol) in READ_TOOLS.items()] + [
         {
             "name": "cipher_health",
             "description": "Check that the local cipher-core research service is reachable and which data feeds it is configured for.",
@@ -696,6 +713,21 @@ def _prospective_tail(limit: int) -> dict[str, Any]:
 
 def handle_tool(name: str, args: dict[str, Any]) -> Any:
     symbol = str(args.get("symbol") or "").strip().upper()
+    if name in READ_TOOLS:
+        path, _, needs_symbol = READ_TOOLS[name]
+        if set(args) - ({"symbol"} if needs_symbol else set()):
+            raise ValueError("unsupported tool arguments")
+        if needs_symbol and (not symbol or len(symbol) > 12 or not all(c.isalnum() or c in '.-' for c in symbol)):
+            raise ValueError("a valid symbol is required")
+        params = {"symbol": symbol} if needs_symbol else {}
+        if name == "get_options_chain":
+            params["expirations"] = 2
+            params["fresh"] = 1
+        if name == "get_options_flow":
+            params["fresh"] = 1
+        if name == "get_scan_history":
+            params["limit"] = 10
+        return _get(path, params)
     if name in {"get_quote", "get_bars", "get_gex_levels", "get_night_vision", "search_contract", "get_news_headlines"}:
         if not symbol:
             raise ValueError("symbol is required")
@@ -757,16 +789,29 @@ def handle_tool(name: str, args: dict[str, Any]) -> Any:
 
 def result(data: Any) -> dict[str, Any]:
     text = json.dumps(data, indent=2, default=str)
-    if len(text) > MAX_RESULT_BYTES:
-        text = (
-            json.dumps({
-                "truncated": True,
-                "reason": f"result exceeded {MAX_RESULT_BYTES} bytes and was cut to protect the host's context",
-                "bytes": len(text),
-            }, indent=2)
-            + "\n"
-            + text[:MAX_RESULT_BYTES]
-        )
+    original_bytes = len(text.encode("utf-8"))
+    if original_bytes > MAX_RESULT_BYTES:
+        # Keep valid JSON and timestamps/caveats instead of slicing mid-contract.
+        def compact(value, limit, depth=0):
+            if depth > 8:
+                return {"omitted": "nested detail"}
+            if isinstance(value, dict):
+                return {str(k): compact(v, limit, depth+1) for k, v in value.items()}
+            if isinstance(value, (list, tuple)):
+                rows = [compact(v, limit, depth+1) for v in value[:limit]]
+                if len(value) > limit:
+                    rows.append({"omitted_items": len(value)-limit})
+                return rows
+            if isinstance(value, str) and len(value) > 2000:
+                return value[:2000] + " [text truncated]"
+            return value
+        envelope = {"truncated": True, "original_bytes": original_bytes}
+        for limit in (20, 10, 5, 1):
+            text = json.dumps({**envelope, "data": compact(data, limit)}, default=str)
+            if len(text.encode("utf-8")) <= MAX_RESULT_BYTES:
+                break
+        else:
+            text = json.dumps({**envelope, "reason": "result cannot fit safely; request narrower evidence"})
         return {"content": [{"type": "text", "text": text}]}
     return {"content": [{"type": "text", "text": text}], "structuredContent": data if isinstance(data, dict) else {"value": data}}
 

@@ -10,6 +10,7 @@ import {
   type ProspectiveFronttestsResponse,
 } from "@/lib/api";
 import { LoadingStatus } from "@/components/ui/skeleton";
+import { ThetaPortfolio } from "./ThetaPortfolio";
 
 const money = (value: number) => value.toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 });
 const text = (value: unknown) => value == null ? "—" : String(value);
@@ -56,6 +57,7 @@ export function PaperPortfolios() {
         <div><h1 className="text-xl font-semibold">Paper Portfolios</h1><p className="text-[11px]" style={{ color: "var(--text-mute)" }}>{data.caveat}</p></div>
         <div className="text-right text-xs"><div>{money(data.combined_marked_equity)} marked (captured mid)</div><div style={{ color: data.combined_realized_pnl >= 0 ? "var(--positive)" : "var(--negative)" }}>{money(data.combined_realized_pnl)} realized (captured fills)</div></div>
       </div>
+      {data.theta && <ThetaPortfolio data={data.theta} />}
       <section className="border p-4" style={{ borderColor: executorTone, background: "var(--panel)" }}>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div><h2 className="text-sm font-semibold">Paper autopilot control plane</h2><p className="text-[10px]" style={{ color: "var(--text-mute)" }}>Premarket plan → closed-bar confirmation → simulated fill → bounded exit. No broker-order capability.</p></div>
@@ -75,7 +77,7 @@ export function PaperPortfolios() {
         {autopilot?.executor.entry_blocked_reason && <p className="mt-2 border px-3 py-2 text-[10px]" style={{ borderColor: "var(--negative)", color: "var(--negative)" }}>Data blocked: {autopilot.executor.entry_blocked_reason.replaceAll("_", " ")}. No simulated fill was created.</p>}
         {autopilot?.executor.last_entry_block && !autopilot.executor.entry_blocked_reason && <p className="mt-2 text-[10px]" style={{ color: "var(--gold)" }}>Latest rejected setup: {autopilot.executor.last_entry_block.ticker ?? "unknown"} · {(autopilot.executor.last_entry_block.reason ?? "policy rejection").replaceAll("_", " ")}</p>}
         {autopilot?.executor.market_data_ready && <p className="mt-2 text-[9px]" style={{ color: "var(--positive)" }}>OPRA data path verified · last chain {autopilot.executor.last_chain_success_at ? new Date(autopilot.executor.last_chain_success_at).toLocaleString() : "available"}</p>}
-        {autopilot && <p className="mt-2 text-[9px]" style={{ color: "var(--text-mute)" }}>Decision trace: {autopilot.daily_trace.cycles} cycles · premarket plan {autopilot.daily_trace.premarket_plan_observed ? "captured" : "missing"} · confirmation {autopilot.daily_trace.confirmation_cycle_observed ? "captured" : "missing"} · paper submissions {autopilot.daily_trace.paper_submissions}</p>}
+        {autopilot && <p className="mt-2 text-[9px]" style={{ color: "var(--text-mute)" }}>Decision trace: {autopilot.daily_trace.cycles} cycles · premarket plan {autopilot.daily_trace.premarket_plan_observed ? "captured" : "missing"} · confirmation {autopilot.daily_trace.confirmation_cycle_observed ? "captured" : "missing"} · cards submitted {autopilot.daily_trace.cards_submitted}</p>}
       </section>
       <div className="grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-8">
         <Stat label="Signals" value={data.opportunity_summary.signals} />

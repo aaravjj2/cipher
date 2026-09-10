@@ -1,12 +1,12 @@
 [Unit]
-Description=Premarket planning and opening confirmation for Cipher shadow autopilot
+Description=Premarket planning and confirmation for Cipher local-paper autopilot
 
 [Timer]
 # Two bounded premarket plans, then 5-minute confirmation checks. After 11:30
 # the scheduler is monitor-only; the continuous executor manages exits.
 OnCalendar=Mon..Fri *-*-* 08:45:00 America/New_York
 OnCalendar=Mon..Fri *-*-* 09:15:00 America/New_York
-OnCalendar=Mon..Fri *-*-* 09:35/5:00 America/New_York
+OnCalendar=Mon..Fri *-*-* 09:45/5:00 America/New_York
 OnCalendar=Mon..Fri *-*-* 10:00/5:00 America/New_York
 OnCalendar=Mon..Fri *-*-* 11:00/5:00 America/New_York
 # Afternoon monitor cadence: the executor keeps marking positions and applying

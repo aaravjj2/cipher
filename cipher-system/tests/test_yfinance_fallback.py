@@ -9,6 +9,13 @@ from core import app
 from core import yfinance_provider
 
 
+def test_alpaca_missing_source_timestamp_is_unknown_not_request_time(monkeypatch):
+    def response(path, _params):
+        return {"quote": {"bp": 100, "ap": 101}} if "/quotes/" in path else {"trade": {"p": 100.5}}
+    monkeypatch.setattr(app, "alpaca", response)
+    assert app._stock_quote("SPY", "sip")["as_of"] is None
+
+
 class Frame:
     def __init__(self, rows, index):
         self._rows = rows

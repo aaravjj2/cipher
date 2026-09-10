@@ -91,3 +91,19 @@ def test_scheduled_digest_preserves_failures_and_orders_stages():
     )
     assert unit.count("|| status=1") == 4
     assert "exit $status" in unit
+    assert '--radar-input' in unit
+
+
+def test_scheduled_preview_uses_fresh_artifact_and_condenses_blocked_cards(monkeypatch, tmp_path):
+    import json
+    from datetime import datetime, timezone
+    path = tmp_path / 'radar.json'
+    path.write_text(json.dumps({'as_of': datetime.now(timezone.utc).isoformat(), 'cards': [{'symbol':'TEST','scheduled_date':'2026-09-15','strategy_eligible':False}], 'data_status':'current'}))
+    monkeypatch.setattr(discord_bot, 'find_upcoming_earnings', lambda **k: (_ for _ in ()).throw(AssertionError('no rescan')))
+    sent=[]
+    monkeypatch.setattr(discord_bot, 'send_discord_payload', lambda p, **k: sent.append(p) or {'status':'delivered'})
+    assert discord_bot.notify_discord_weekly_preview(radar_path=str(path))['status'] == 'delivered'
+    assert sent[0]['embeds'][0]['fields'] == []
+    path.write_text(json.dumps({'as_of':'2020-01-01T00:00:00Z','cards':[]}))
+    assert discord_bot.notify_discord_weekly_preview(radar_path=str(path))['status'] == 'warning'
+    assert len(sent)==1

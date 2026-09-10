@@ -53,3 +53,77 @@ def test_executor_status_preserves_readiness_and_ledger_counts(monkeypatch):
     assert result["provider_session_ready"] is True
     assert result["market_data_ready"] is True
     assert result["counts"]["paper_orders"] == 1
+    assert result["external_order_capability"] is False
+
+
+def test_status_tolerates_partial_plan_and_corrupt_cycle_lines(monkeypatch, tmp_path):
+    plan = tmp_path / "plan.json"
+    status = tmp_path / "status.json"
+    training = tmp_path / "training.json"
+    plan.write_text(json.dumps({
+        "state": "WATCHLIST_ONLY",
+        "candidates": [
+            {"ticker": "SPY", "direction": "BULLISH", "score": None, "sentiment": "missing"},
+            "corrupt-row",
+        ],
+    }))
+    cycles = tmp_path / "cycles"
+    cycles.mkdir()
+    (cycles / "2026-08-17.jsonl").write_text(
+        '{"action":"premarket_plan_saved","rejection_reason_counts":{"missing":2}}\n'
+        '{broken\n'
+        '{"action":"executor_monitoring","rejection_reason_counts":"missing"}\n'
+    )
+    monkeypatch.setattr(autopilot_status, "PLAN", plan)
+    monkeypatch.setattr(autopilot_status, "STATUS", status)
+    monkeypatch.setattr(autopilot_status, "TRAINING", training)
+    monkeypatch.setattr(autopilot_status, "AUTOPILOT_DIR", tmp_path)
+
+    data = autopilot_status.snapshot(
+        now=datetime(2026, 8, 17, 12, 0, tzinfo=timezone.utc),
+        executor_url="http://127.0.0.1:1/api/paper/status",
+    )
+
+    assert data["plan"]["candidate_count"] == 1
+    assert data["plan"]["candidates"][0]["score"] is None
+    assert data["plan"]["candidates"][0]["sentiment_status"] is None
+    assert data["daily_trace"]["cycles"] == 2
+    assert data["daily_trace"]["rejection_reason_counts"] == {"missing": 2}
+
+
+def test_closed_market_status_uses_latest_exchange_session(monkeypatch, tmp_path):
+    (tmp_path / "cycles").mkdir()
+    (tmp_path / "cycles" / "2026-09-04.jsonl").write_text(
+        json.dumps({"action": "paper_confirmations_submitted", "cards_submitted": 4}) + "\n"
+    )
+    plan = tmp_path / "plan.json"
+    plan.write_text(json.dumps({"market_date": "2026-09-04", "candidates": []}))
+    monkeypatch.setattr(autopilot_status, "PLAN", plan)
+    monkeypatch.setattr(autopilot_status, "STATUS", tmp_path / "missing-status.json")
+    monkeypatch.setattr(autopilot_status, "TRAINING", tmp_path / "missing-training.json")
+    monkeypatch.setattr(autopilot_status, "AUTOPILOT_DIR", tmp_path)
+    result = autopilot_status.snapshot(
+        now=datetime(2026, 9, 7, 15, 0, tzinfo=timezone.utc),
+        executor_url="http://127.0.0.1:1/api/paper/status",
+    )
+    assert result["phase"] == "closed"
+    assert result["plan"]["freshness"] == "last_session"
+    assert result["daily_trace"]["market_date"] == "2026-09-04"
+    assert result["daily_trace"]["cards_submitted"] == 4
+    assert result["executor"]["operating_state"] == "DATA_FAILURE"
+
+
+def test_closed_market_without_live_data_is_healthy_idle(monkeypatch, tmp_path):
+    monkeypatch.setattr(autopilot_status, "PLAN", tmp_path / "missing-plan.json")
+    monkeypatch.setattr(autopilot_status, "STATUS", tmp_path / "missing-status.json")
+    monkeypatch.setattr(autopilot_status, "TRAINING", tmp_path / "missing-training.json")
+    monkeypatch.setattr(autopilot_status, "AUTOPILOT_DIR", tmp_path)
+    monkeypatch.setattr(autopilot_status, "_executor", lambda _url: {
+        "reachable": True,
+        "operating_state": "AWAITING_DATA_CHECK",
+    })
+
+    result = autopilot_status.snapshot(now=datetime(2026, 9, 7, 15, 0, tzinfo=timezone.utc))
+
+    assert result["phase"] == "closed"
+    assert result["executor"]["operating_state"] == "MARKET_CLOSED"

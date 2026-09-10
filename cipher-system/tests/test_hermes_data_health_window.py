@@ -10,6 +10,7 @@ outages, so these tests pin the two definitions together.
 from __future__ import annotations
 
 import sys
+import sqlite3
 from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -72,3 +73,16 @@ def test_off_hours_is_reported_rather_than_stale():
     status, detail = health.status_from_latest({"ok": True, "latest": None}, max_age_minutes=30, active=False)
     assert status == "off_hours"
     assert "outside capture window" in detail
+
+
+def test_missing_or_uninitialized_databases_are_reported_as_data(tmp_path):
+    missing = health.latest_tradier(tmp_path / "missing.sqlite")
+    assert missing["ok"] is False
+    assert missing["reason"] == "missing_db"
+
+    empty = tmp_path / "empty.sqlite"
+    sqlite3.connect(empty).close()
+    tradier = health.latest_tradier(empty)
+    gex = health.latest_gex(empty)
+    assert tradier["ok"] is False and tradier["reason"].startswith("unreadable_db:")
+    assert gex["ok"] is False and gex["reason"].startswith("unreadable_db:")

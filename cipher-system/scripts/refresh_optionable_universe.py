@@ -30,6 +30,8 @@ def refresh_payload(payload: dict, assets: list[dict], *, as_of: str) -> dict:
         for row in assets
         if row.get("status") == "active" and "has_options" in (row.get("attributes") or [])
     }
+    if not active:
+        raise ValueError("Asset validation returned no optionable symbols; preserving existing universe")
     tiers = payload.get("sorted_tickers") or {}
     validated = {}
     removed = []

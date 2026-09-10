@@ -18,7 +18,7 @@ import json
 import os
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
@@ -33,10 +33,11 @@ DATA = "https://data.alpaca.markets"
 PAPER_API = "https://paper-api.alpaca.markets"
 CONTRACTS = f"{PAPER_API}/v2/options/contracts"
 
-# Cipher's 12 active scanner tickers
+# Cipher's active scanner tickers, including held positions that need capture history.
 SCANNER_TICKERS = [
     "NVDA", "MSFT", "AAPL", "AVGO", "AMZN", "IBIT",
-    "GOOGL", "TSLA", "META", "MU", "AMD", "QQQ"
+    "GOOGL", "TSLA", "META", "MU", "AMD", "QQQ",
+    "AMKR", "RMBS",
 ]
 
 DEFAULT_MAX_PAGES = 40  # Full liquid ETF chains can require >12 pages of 1000 contracts
@@ -219,7 +220,12 @@ def _num(value: Any) -> float | None:
 def fetch_open_interest(ticker: str, key: str, secret: str) -> dict[str, dict]:
     """Fetch open interest from option contracts metadata."""
     oi_map = {}
-    query = {"underlying_symbols": ticker.upper(), "limit": 10000}
+    today = datetime.now(timezone.utc).date()
+    query = {
+        "underlying_symbols": ticker.upper(), "limit": 10000,
+        "expiration_date_gte": today.isoformat(),
+        "expiration_date_lte": (today + timedelta(days=800)).isoformat(),
+    }
 
     for _ in range(6):  # max 6 pages
         raw = alpaca_request("/v2/options/contracts", query, key, secret, base=PAPER_API)
@@ -233,7 +239,7 @@ def fetch_open_interest(ticker: str, key: str, secret: str) -> dict[str, dict]:
         token = raw.get("next_page_token")
         if not token:
             break
-        query = {"underlying_symbols": ticker.upper(), "limit": 10000, "page_token": token}
+        query = {**query, "page_token": token}
 
     return oi_map
 

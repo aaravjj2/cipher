@@ -7,6 +7,7 @@ from typing import Protocol
 
 from .config import ExecutorConfig
 from .models import Quote
+from .fill_simulator import quote_is_fresh
 
 
 class MarketDataClient(Protocol):
@@ -18,9 +19,10 @@ class MarketDataClient(Protocol):
 class QuoteManager:
     """Single shared quote cache and subscription registry for the executor."""
 
-    def __init__(self, cfg: ExecutorConfig, market_data: MarketDataClient):
+    def __init__(self, cfg: ExecutorConfig, market_data: MarketDataClient, *, clock=None):
         self.cfg = cfg
         self.market_data = market_data
+        self.clock = clock or (lambda: datetime.now(timezone.utc))
         self._lock = threading.RLock()
         self._active: set[str] = set()
         self._latest: dict[str, Quote] = {}
@@ -58,6 +60,7 @@ class QuoteManager:
         with self._lock:
             for symbol in symbols:
                 self._active.discard(symbol.upper())
+            self._refresh_degraded_locked()
 
     def inject_quote(self, quote: Quote) -> None:
         with self._lock:
@@ -72,9 +75,9 @@ class QuoteManager:
         quote = self.latest(symbol)
         if not quote:
             return None
-        now = now or datetime.now(timezone.utc)
+        now = now or self.clock()
         age = (now - quote.timestamp.astimezone(timezone.utc)).total_seconds()
-        return quote if age <= self.cfg.market_data.quote_maximum_age_seconds else None
+        return quote if -2 <= age <= self.cfg.market_data.quote_maximum_age_seconds else None
 
     def refresh(self, symbols: list[str] | None = None) -> dict[str, Quote]:
         requested = [s.upper() for s in (symbols or self.active_symbols)]
@@ -85,8 +88,9 @@ class QuoteManager:
             with self._lock:
                 self._latest.update({symbol.upper(): quote for symbol, quote in quotes.items()})
                 self._last_error = None
-                if quotes:
-                    self._last_fresh_quote_at = datetime.now(timezone.utc).isoformat()
+                fresh = [q.timestamp for q in quotes.values() if quote_is_fresh(q, self.cfg.market_data.quote_maximum_age_seconds, self.clock())]
+                if fresh:
+                    self._last_fresh_quote_at = max(fresh).isoformat()
                 self._reconnect_attempts = 0
                 self._refresh_degraded_locked()
             return quotes
@@ -111,15 +115,15 @@ class QuoteManager:
             time.sleep(min(delay, 1))
 
     def _refresh_degraded_locked(self) -> None:
-        now = datetime.now(timezone.utc)
+        now = self.clock()
         for symbol in self._active:
             quote = self._latest.get(symbol)
             if not quote:
                 self._degraded = True
                 return
-            if (now - quote.timestamp.astimezone(timezone.utc)).total_seconds() > self.cfg.market_data.quote_maximum_age_seconds:
+            if not quote_is_fresh(quote, self.cfg.market_data.quote_maximum_age_seconds, now):
                 self._degraded = True
                 return
         self._degraded = False
         if self._active and self._latest:
-            self._last_fresh_quote_at = now.isoformat()
+            self._last_fresh_quote_at = max(self._latest[s].timestamp for s in self._active).isoformat()

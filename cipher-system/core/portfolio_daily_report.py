@@ -10,6 +10,7 @@ from typing import Callable
 from core.fronttest_portfolios import DEFAULT_DB, NY, ACTIVE_SPECS, connect, portfolio_status
 from core.paper_portfolio_api import _open_mark
 from core.prospective_fronttests import DEFAULT_DB as DEFAULT_PROSPECTIVE_DB
+from core.exchange_calendar import is_session
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_AUTOPILOT_DB = Path("/home/aarav/Aarav/cipher/runtime/data/paper_runtime/data/paper_trades/autopilot_shadow.sqlite")
@@ -113,7 +114,7 @@ def _autopilot_snapshot(path: Path, report_day: date, starting_cash: float = 25_
         candidates = int(db.execute(
             "select count(*) from contract_candidates where datetime(quote_timestamp)>=datetime(?) and datetime(quote_timestamp)<datetime(?)", window,
         ).fetchone()[0])
-    state = "DATA_FAILURE" if failures else ("ACTIVE_POSITION" if open_rows else ("SETUP_REJECTED" if blocks else "HEALTHY_NO_SETUP"))
+    state = "DATA_FAILURE" if failures else ("ACTIVE_POSITION" if open_rows else ("MARKET_CLOSED" if not is_session(report_day) else ("SETUP_REJECTED" if blocks else "HEALTHY_NO_SETUP")))
     return {
         "available": True, "operating_state": state, "signals": signals,
         "candidates": candidates, "entries": entries, "exits": len(closed),
@@ -220,6 +221,11 @@ def snapshot(
         "portfolios": portfolios,
         "prospective_programs": _prospective_snapshot(prospective_db_path, report_day),
         "autopilot": _autopilot_snapshot(autopilot_db_path, report_day),
+        "autopilot_cohorts": [
+            {"cohort_id": name, **_autopilot_snapshot(path, report_day)}
+            for name in ("confirmation", "cost", "exit")
+            if (path := autopilot_db_path.parents[2] / "cohorts" / name / "paper.sqlite").is_file()
+        ],
         "earnings": _earnings_snapshot(earnings_db_path),
     }
 
@@ -262,7 +268,11 @@ def format_message(data: dict) -> str:
             f"{autopilot['wins']}W/{autopilot['losses']}L | block {autopilot['entry_blocks']} / data {autopilot['data_failures']}"
         )
     earnings = data.get("earnings") or {}
-    if earnings.get("available"):
+    for cohort in data.get("autopilot_cohorts") or []:
+        if cohort.get("available"):
+            lines.append(f"Autopilot {cohort['cohort_id']}: {cohort['entries']} in / {cohort['exits']} out · "
+                         f"{cohort['wins']}W/{cohort['losses']}L · eq ${cohort['closing_marked_equity']:,.2f}")
+    if earnings.get("available") and earnings.get("open", 0):
         lines.append(
             f"Earnings legacy: {earnings['open']} open / {earnings['settled']} settled / "
             f"{earnings['wins']} wins | est. P&L ${earnings['estimated_realized_pnl']:+,.2f}"
@@ -270,8 +280,32 @@ def format_message(data: dict) -> str:
     lines.append("Paper simulation only — no broker orders.")
     message = "\n".join(lines)
     if len(message) > 1900:
-        raise ValueError("Discord daily report exceeds the safe message limit")
+        # Keep whole lines and the simulation label when cohorts make the
+        # combined digest longer than Discord's single-message allowance.
+        kept, size = [], 0
+        for line in lines[:-1]:
+            if size + len(line) + 1 > 1780:
+                break
+            kept.append(line)
+            size += len(line) + 1
+        message = "\n".join([*kept, "Additional portfolio detail is available in Cipher.", lines[-1]])
     return message
+
+
+def current_message(data: dict) -> str:
+    """Routine notifications exclude archived research books; full preview remains available."""
+    lines = [f"Cipher Autopilot paper update — {data['report_day']}"]
+    baseline = data.get('autopilot') or {}
+    rows = [dict(baseline, cohort_id='baseline'), *(data.get('autopilot_cohorts') or [])]
+    for row in rows:
+        if not row.get('available'):
+            lines.append(f"{row['cohort_id']}: unavailable")
+            continue
+        lines.append(f"{row['cohort_id']}: {row['entries']} in / {row['exits']} out · "
+                     f"{row['wins']}W/{row['losses']}L · equity ${row['closing_marked_equity']:,.2f}")
+    lines.append('Paper experiments; not promoted. Historical research books remain in Cipher, excluded from this alert.')
+    lines.append('Paper simulation only — no broker orders.')
+    return '\n'.join(lines)
 
 
 def deliver(
@@ -282,6 +316,8 @@ def deliver(
     now: datetime | None = None, force: bool = False,
 ) -> dict:
     moment = (now or datetime.now(timezone.utc)).astimezone(NY)
+    if not is_session(moment.date()):
+        return {"status": "market_closed", "report_day": moment.date().isoformat()}
     db = connect(db_path)
     try:
         ensure_schema(db)
@@ -293,7 +329,7 @@ def deliver(
             return {"status": "already_delivered", "report_day": moment.date().isoformat(),
                     "delivered_at": existing["delivered_at"]}
         data = snapshot(db, moment.date(), prospective_db_path, autopilot_db_path, earnings_db_path)
-        message = format_message(data)
+        message = current_message(data)
         generated = datetime.now(timezone.utc).isoformat()
         db.execute(
             """insert into daily_reports(report_day,generated_at,message,snapshot_json)

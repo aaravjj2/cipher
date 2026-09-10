@@ -1,4 +1,8 @@
 mode: shadow
+experiment:
+  cohort_id: baseline
+  version: v2
+  registry_strategy_id: autopilot.v2.baseline
 runtime_root: /home/aarav/Aarav/cipher/runtime/data/paper_runtime
 database_path: /home/aarav/Aarav/cipher/runtime/data/paper_runtime/data/paper_trades/autopilot_shadow.sqlite
 
@@ -8,10 +12,8 @@ server:
   approved_origins: []
 
 scanner:
-  # The primary RTH confirmation source is the regular-session Cipher scan;
-  # Flash-Agentic cards may merge as a secondary source. Both must be admitted
-  # so autopilot entries no longer depend on Flash-Agentic alone.
-  accepted_types: [cipher, flash, flash_agentic]
+  # Autopilot intentionally uses the regular-session Cipher scan only.
+  accepted_types: [cipher]
   episode_cooldown_minutes: 30
   maximum_signal_age_seconds: 120
   maximum_level_distance_pct: 12.0
@@ -23,11 +25,9 @@ strategy:
   # experiment against the accumulating decision-quality report.
   entry_window_et_start: "09:45"
   entry_window_et_end: "11:30"
-  # Autopilot premarket-entry mode: cipher cards may enter before 09:35 ET on
-  # the fresh premarket setup (the window close still binds; other scanner types
-  # are unaffected). The scheduler submits these only when
-  # CIPHER_AUTOPILOT_PREMARKET_ENTRY=1.
-  allow_premarket_entries: true
+  # US equity options have no premarket execution session. Premarket scans build
+  # the watch plan; entries wait for a fresh regular-session confirmation.
+  allow_premarket_entries: false
   # Setup names contain commas, so block mappings with quoted values are required:
   # YAML flow mappings ({...}) split every value at the first comma, which silently
   # truncated setups like "triple cluster (3 peaks" and made every card fail the
@@ -53,37 +53,11 @@ strategy:
     - {scanner_type: cipher, setup: "put floor", direction: bearish}
     - {scanner_type: cipher, setup: "cipher model", direction: bullish}
     - {scanner_type: cipher, setup: "cipher model", direction: bearish}
-    # Secondary merge source (flash) with the same narrative setups the general
-    # paper executor admits.
-    - {scanner_type: flash, setup: "floor bounce", direction: bullish}
-    - {scanner_type: flash, setup: "ceiling rejection", direction: bearish}
-    - {scanner_type: flash, setup: "momentum push", direction: bullish}
-    - {scanner_type: flash, setup: "momentum push", direction: bearish}
-    - {scanner_type: flash, setup: "rejection reversal", direction: bullish}
-    - {scanner_type: flash, setup: "rejection reversal", direction: bearish}
-    - {scanner_type: flash, setup: "breakout continuation", direction: bullish}
-    - {scanner_type: flash, setup: "breakdown continuation", direction: bearish}
-    - {scanner_type: flash, setup: "breakout attempt", direction: bullish}
-    - {scanner_type: flash, setup: "breakdown attempt", direction: bearish}
-    - {scanner_type: flash_agentic, setup: "triple cluster (3 peaks, above)", direction: bullish}
-    - {scanner_type: flash_agentic, setup: "triple cluster (3 peaks, above)", direction: bearish}
-    - {scanner_type: flash_agentic, setup: "triple cluster (3 peaks, below)", direction: bullish}
-    - {scanner_type: flash_agentic, setup: "triple cluster (3 peaks, below)", direction: bearish}
-    - {scanner_type: flash_agentic, setup: "quad cluster (4 peaks, above)", direction: bullish}
-    - {scanner_type: flash_agentic, setup: "quad cluster (4 peaks, above)", direction: bearish}
-    - {scanner_type: flash_agentic, setup: "quad cluster (4 peaks, below)", direction: bullish}
-    - {scanner_type: flash_agentic, setup: "quad cluster (4 peaks, below)", direction: bearish}
-    - {scanner_type: flash_agentic, setup: "golden / top-pull", direction: bullish}
-    - {scanner_type: flash_agentic, setup: "golden / top-pull", direction: bearish}
-    - {scanner_type: flash_agentic, setup: "battle zone", direction: bullish}
-    - {scanner_type: flash_agentic, setup: "battle zone", direction: bearish}
-    - {scanner_type: flash_agentic, setup: "call wall", direction: bullish}
-    - {scanner_type: flash_agentic, setup: "call wall", direction: bearish}
-    - {scanner_type: flash_agentic, setup: "put floor", direction: bullish}
-    - {scanner_type: flash_agentic, setup: "put floor", direction: bearish}
 
 instrument:
-  model: long_option
+  # Net-debit-defined risk keeps the long leg near ATM without breaching the
+  # $500 position cap or substituting a cheap far-OTM lottery ticket.
+  model: debit_spread
 
 market_data:
   provider: alpaca_core
@@ -97,7 +71,9 @@ market_data:
 
 contract:
   minimum_dte: 1
-  maximum_dte: 3
+  # Seven calendar days preserves a near-term contract across weekends and
+  # exchange holidays. Same-day contracts remain deliberately disabled.
+  maximum_dte: 7
   allow_0dte: false
   preferred_moneyness: atm
   fallback_moneyness: one_strike_itm
@@ -113,6 +89,9 @@ portfolio:
   maximum_open_positions: 3
   maximum_positions_per_ticker: 1
   maximum_new_positions_per_day: 5
+  # Re-entering a ticker after an exit accounted for 6/25 observed trades,
+  # only one winner, and -$276.22. Freeze one independent attempt per session.
+  maximum_new_positions_per_ticker_per_day: 1
   stop_after_daily_losses: 2
 
 exit:
@@ -131,11 +110,13 @@ simulation:
   slippage_pct: 0.5
 
 execution:
-  # Explicitly authorized zero-capital forward test. The adapter rejects every
-  # host except Alpaca's paper endpoint and starts in shadow for reconciliation.
-  backend: alpaca_paper
+  # Cipher owns the paper ledger and models fills from observed option quotes.
+  # Alpaca remains a read-only market-data source; this executor never routes
+  # an order to an external paper or live brokerage account.
+  backend: simulated
   order_timeout_seconds: 20
   poll_interval_seconds: 1.0
+  # Start shadow, reconcile the SQLite ledger, then enter local-paper mode.
   auto_promote_paper: true
   paper_forward_test_authorized: true
 

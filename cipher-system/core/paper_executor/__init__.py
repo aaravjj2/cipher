@@ -1,8 +1,9 @@
-"""Fail-closed simulation and explicitly authorized Alpaca-paper execution.
+"""Fail-closed Cipher-owned paper-portfolio execution.
 
-The browser and research API remain read-only. Broker activity is confined to
-the hardcoded Alpaca paper host, and Cipher's SQLite intent ledger remains the
-authoritative audit trail. Live-capital execution is intentionally absent.
+The browser and research API remain read-only. The deployed backend records
+modeled fills in Cipher's SQLite ledger and has no external order capability.
+The legacy Alpaca-paper adapter is retained only as an inactive, separately
+guarded compatibility path. Live-capital execution is intentionally absent.
 """
 
 from .config import ExecutorConfig, load_config

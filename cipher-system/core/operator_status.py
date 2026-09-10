@@ -24,7 +24,6 @@ BACKUP_STORES = (
     "prospective_fronttests/prospective_fronttests.sqlite",
 )
 CAPTURES = {
-    "tradier_stream": "tradier_stream.sqlite",
     "gex_snapshot": "gex_snapshots/**/*.json",
     "fronttest_portfolios": "fronttest_portfolios/fronttest.sqlite",
     "prospective_fronttests": "prospective_fronttests/prospective_fronttests.sqlite",
@@ -155,7 +154,8 @@ def status(*, caches: Iterable[dict] = ()) -> dict:
     telemetry_db = DATA / "operational_metrics.sqlite"
     runway = provider_telemetry.storage_runway(usage.free, path=telemetry_db)
     return {
-        "generated_at": _now(), "read_only": True, "execution_capability": False,
+        "generated_at": _now(), "healthy": not exceptions,
+        "read_only": True, "execution_capability": False,
         "disk": {"total_bytes": usage.total, "used_bytes": usage.used, "free_bytes": usage.free,
                  "free_percent": round(usage.free / usage.total * 100, 2),
                  "runway_status": runway["status"], "runway_days": runway.get("days"),

@@ -2,9 +2,15 @@
 
 import { FormEvent, useState } from "react";
 import { createBrowserSupabaseClient, isSupabaseConfigured } from "@/lib/supabase";
-import { establishCookieSession, establishGuestSession } from "@/lib/auth";
+import { establishCookieSession, establishGuestSession, establishOperatorSession } from "@/lib/auth";
 
-export function AuthPanel({ authError = null }: { authError?: string | null }) {
+export function AuthPanel({
+  authError = null,
+  providerAvailable = null,
+}: {
+  authError?: string | null;
+  providerAvailable?: boolean | null;
+}) {
   const [mode, setMode] = useState<"sign-in" | "sign-up">("sign-in");
   const [email, setEmail] = useState("");
   const [resetMode, setResetMode] = useState(false);
@@ -12,11 +18,14 @@ export function AuthPanel({ authError = null }: { authError?: string | null }) {
   const [message, setMessage] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [guestBusy, setGuestBusy] = useState(false);
+  const [hostPassword, setHostPassword] = useState("");
+  const [hostBusy, setHostBusy] = useState(false);
 
   if (!isSupabaseConfigured()) return null;
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (providerAvailable === false) return;
     setSubmitting(true);
     setMessage(null);
     try {
@@ -62,16 +71,23 @@ export function AuthPanel({ authError = null }: { authError?: string | null }) {
           </p>
         </div>
 
+        {providerAvailable === false && (
+          <div role="alert" className="rounded-lg border p-3 text-sm" style={{ borderColor: "var(--neg)", background: "var(--panel-2)", color: "var(--text-dim)" }}>
+            <strong style={{ color: "var(--neg)" }}>Member sign-in is temporarily unavailable.</strong>{" "}
+            The configured Supabase Auth project cannot be reached. Guest access remains available while the operator restores the project connection.
+          </div>
+        )}
+
         <form className="flex flex-col gap-4" onSubmit={submit}>
           <label htmlFor="cipher-auth-email" className="flex flex-col gap-1.5 text-sm">
             <span style={{ color: "var(--text-dim)" }}>Email</span>
-            <input id="cipher-auth-email" name="email" required type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} className="rounded-[4px] px-3 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]" style={{ background: "var(--panel-2)", border: "1px solid var(--line)", color: "var(--text)" }} />
+            <input id="cipher-auth-email" name="email" required disabled={providerAvailable === false} type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} className="rounded-[4px] px-3 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)] disabled:opacity-50" style={{ background: "var(--panel-2)", border: "1px solid var(--line)", color: "var(--text)" }} />
           </label>
           {!resetMode && <label htmlFor="cipher-auth-password" className="flex flex-col gap-1.5 text-sm">
             <span style={{ color: "var(--text-dim)" }}>Password</span>
-            <input id="cipher-auth-password" name="password" required minLength={8} type="password" autoComplete={mode === "sign-in" ? "current-password" : "new-password"} value={password} onChange={(event) => setPassword(event.target.value)} className="rounded-[4px] px-3 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]" style={{ background: "var(--panel-2)", border: "1px solid var(--line)", color: "var(--text)" }} />
+            <input id="cipher-auth-password" name="password" required disabled={providerAvailable === false} minLength={8} type="password" autoComplete={mode === "sign-in" ? "current-password" : "new-password"} value={password} onChange={(event) => setPassword(event.target.value)} className="rounded-[4px] px-3 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)] disabled:opacity-50" style={{ background: "var(--panel-2)", border: "1px solid var(--line)", color: "var(--text)" }} />
           </label>}
-          <button type="submit" disabled={submitting} className="rounded-[4px] px-3 py-2 text-sm font-semibold disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]" style={{ background: "var(--accent)", color: "var(--bg)" }}>
+          <button type="submit" disabled={submitting || providerAvailable === false} className="rounded-[4px] px-3 py-2 text-sm font-semibold disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]" style={{ background: "var(--accent)", color: "var(--bg)" }}>
             {submitting ? "Working…" : resetMode ? "Send reset email" : mode === "sign-in" ? "Sign in" : "Create account"}
           </button>
         </form>
@@ -84,6 +100,26 @@ export function AuthPanel({ authError = null }: { authError?: string | null }) {
             {guestBusy ? "Opening demo…" : "Continue as guest"}
           </button>
         </div>
+
+        {providerAvailable === false && (
+          <form className="rounded-lg border p-3" style={{ borderColor: "var(--line)", background: "var(--panel-2)" }} onSubmit={(event) => {
+            event.preventDefault();
+            setHostBusy(true);
+            setMessage(null);
+            void establishOperatorSession(hostPassword)
+              .catch((error) => setMessage(error instanceof Error ? error.message : "Host access failed."))
+              .finally(() => { setHostPassword(""); setHostBusy(false); });
+          }}>
+            <label htmlFor="cipher-host-password" className="flex flex-col gap-1.5 text-sm">
+              <span style={{ color: "var(--text-dim)" }}>Host password</span>
+              <input id="cipher-host-password" name="host-password" required type="password" autoComplete="current-password" value={hostPassword} onChange={(event) => setHostPassword(event.target.value)} className="rounded-[4px] px-3 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]" style={{ background: "var(--bg)", border: "1px solid var(--line)", color: "var(--text)" }} />
+            </label>
+            <button type="submit" disabled={hostBusy || !hostPassword} className="mt-3 rounded-[4px] border px-3 py-2 text-sm font-semibold disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--gold)]" style={{ borderColor: "var(--gold)", color: "var(--gold)" }}>
+              {hostBusy ? "Checking…" : "Sign in as host"}
+            </button>
+            <p className="mt-2 text-[11px] leading-relaxed" style={{ color: "var(--text-mute)" }}>Uses the Cipher host password configured on this machine. It does not depend on Supabase.</p>
+          </form>
+        )}
 
         {message && <p role="status" className="text-sm" style={{ color: "var(--text-dim)" }}>{message}</p>}
         {authError && <p role="alert" className="text-sm" style={{ color: "var(--neg)" }}>{authError}</p>}

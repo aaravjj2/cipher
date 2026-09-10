@@ -27,6 +27,14 @@ test("hosted login exchanges the temporary Supabase token for a cookie session",
   assert.match(api, /credentials: "include"/);
 });
 
+test("host fallback exchanges only the configured machine password for an HttpOnly session", () => {
+  const auth = read("src/lib/auth.ts");
+  const panel = read("src/components/auth/AuthPanel.tsx");
+  assert.match(auth, /\/auth\/operator/);
+  assert.match(panel, /Sign in as host/);
+  assert.doesNotMatch(auth, /localStorage|sessionStorage/);
+});
+
 
 test("auth UI exposes an explicit anonymous guest path without provider credentials", () => {
   const source = read("src/components/auth/AuthPanel.tsx");

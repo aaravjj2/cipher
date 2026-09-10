@@ -7,6 +7,7 @@ momentum drift, and pre-earnings news sentiment to forecast:
   3. Gap reversal / mean-reversion risk
 """
 import os
+import hashlib
 import joblib
 import numpy as np
 import pandas as pd
@@ -92,19 +93,22 @@ def build_feature_dataset(conn=None, symbol=None) -> pd.DataFrame:
     if df.empty:
         return pd.DataFrame()
 
+    for col in ('gap_pct', 'day1_return_pct', 'day5_return_pct', 'eps_actual', 'eps_estimate', 'eps_surprise_pct'):
+        df[col] = pd.to_numeric(df[col], errors='coerce')
+
     # Targets
     df['target_gap_up'] = (df['gap_pct'] > 0).astype(int)
-    df['target_day1_up'] = (df['day1_return_pct'] > 0).astype(int)
-    df['target_day5_up'] = (df['day5_return_pct'] > 0).astype(int)
+    df['target_day1_up'] = (df['day1_return_pct'] > 0).astype(float).where(df['day1_return_pct'].notna())
+    df['target_day5_up'] = (df['day5_return_pct'] > 0).astype(float).where(df['day5_return_pct'].notna())
     df['target_abs_gap'] = df['gap_pct'].abs()
     df['target_abs_day5'] = df['day5_return_pct'].abs()
     df['target_reversal'] = (
         (np.sign(df['gap_pct']) != np.sign(df['day5_return_pct'])) &
         (df['target_abs_gap'] >= 0.5)
-    ).astype(int)
+    ).astype(float).where(df['gap_pct'].notna() & df['day5_return_pct'].notna())
 
     # Point-in-time rolling features per symbol (strictly lookahead-free)
-    df['is_beat_num'] = (df['eps_actual'] > df['eps_estimate']).astype(float)
+    df['is_beat_num'] = (df['eps_actual'] > df['eps_estimate']).astype(float).where(df['eps_actual'].notna() & df['eps_estimate'].notna())
     df['reversal_num'] = df['target_reversal'].astype(float)
 
     grouped = df.groupby('symbol', group_keys=False)
@@ -189,7 +193,6 @@ def _fit_classifier(
     target: str,
 ) -> tuple[Any, Dict[str, Any]]:
     """Select on validation Brier score, then report one untouched holdout."""
-    fitted = {}
     validation = {}
     for name, candidate in _classifier_candidates().items():
         model = clone(candidate).fit(train_df[FEATURE_COLS], train_df[target])
@@ -198,12 +201,15 @@ def _fit_classifier(
             'brier': float(brier_score_loss(validation_df[target], probabilities)),
             'accuracy': float(accuracy_score(validation_df[target], probabilities >= 0.5)),
         }
-        fitted[name] = model
     selected_name = min(validation, key=lambda name: (validation[name]['brier'], name))
-    selected = fitted[selected_name]
+    # Judge the exact development-fitted estimator that would be saved.
+    development = pd.concat([train_df, validation_df], ignore_index=True)
+    selected = clone(_classifier_candidates()[selected_name]).fit(
+        development[FEATURE_COLS], development[target]
+    )
     probabilities = selected.predict_proba(holdout_df[FEATURE_COLS])[:, 1]
     predictions = probabilities >= 0.5
-    train_rate = float(train_df[target].mean())
+    train_rate = float(development[target].mean())
     baseline_label = train_rate >= 0.5
     baseline_probabilities = np.full(len(holdout_df), train_rate)
     confidence_mask = (probabilities >= TRADE_CONFIDENCE) | (probabilities <= 1 - TRADE_CONFIDENCE)
@@ -250,13 +256,7 @@ def _fit_classifier(
             for name, values in validation.items()
         },
     }
-    # Holdout stays untouched: only after recording it do we fit the production
-    # copy on the combined development window.
-    development = pd.concat([train_df, validation_df], ignore_index=True)
-    production = clone(_classifier_candidates()[selected_name]).fit(
-        development[FEATURE_COLS], development[target]
-    )
-    return production, metrics
+    return selected, metrics
 
 
 def _fit_gap_regressor(
@@ -276,21 +276,18 @@ def _fit_gap_regressor(
         prediction = np.maximum(0.0, model.predict(validation_df[FEATURE_COLS]))
         validation_mae[name] = float(mean_absolute_error(validation_df['target_abs_gap'], prediction))
     selected_name = min(validation_mae, key=lambda name: (validation_mae[name], name))
+    development = pd.concat([train_df, validation_df], ignore_index=True)
     selected = clone(candidates[selected_name]).fit(
-        train_df[FEATURE_COLS], train_df['target_abs_gap']
+        development[FEATURE_COLS], development['target_abs_gap']
     )
     prediction = np.maximum(0.0, selected.predict(holdout_df[FEATURE_COLS]))
     mae = float(mean_absolute_error(holdout_df['target_abs_gap'], prediction))
-    baseline_value = float(train_df['target_abs_gap'].median())
+    baseline_value = float(development['target_abs_gap'].median())
     baseline_mae = float(mean_absolute_error(
         holdout_df['target_abs_gap'], np.full(len(holdout_df), baseline_value)
     ))
     improvement = (baseline_mae - mae) / baseline_mae if baseline_mae else 0.0
-    development = pd.concat([train_df, validation_df], ignore_index=True)
-    production = clone(candidates[selected_name]).fit(
-        development[FEATURE_COLS], development['target_abs_gap']
-    )
-    return production, {
+    return selected, {
         'selected_candidate': selected_name,
         'mae_pct': round(mae, 4),
         'baseline_mae_pct': round(baseline_mae, 4),
@@ -318,14 +315,29 @@ def train_earnings_models(
 
     # Filter complete cases for features
     valid = df.dropna(subset=FEATURE_COLS + ['target_day1_up', 'target_day5_up', 'target_abs_gap']).copy()
+    # Earnings events are report-calendar dates, not instants; preserve the
+    # provider's date when its serialized value also carries a UTC offset.
+    valid['earnings_date'] = pd.to_datetime(valid['earnings_date'].astype(str).str[:10], errors='coerce')
+    valid = valid.dropna(subset=['earnings_date'])
+    valid['earnings_date'] = valid['earnings_date'].dt.strftime('%Y-%m-%d')
     valid = valid.sort_values('earnings_date').reset_index(drop=True)
+    if len(valid) < 50:
+        return {'error': 'Insufficient complete dated training events'}
 
     # Chronological 60/20/20: candidate selection never touches the final holdout.
     train_end = int(len(valid) * 0.6)
     validation_end = int(len(valid) * 0.8)
-    train_df = valid.iloc[:train_end]
-    validation_df = valid.iloc[train_end:validation_end]
-    test_df = valid.iloc[validation_end:]
+    # Whole report dates stay in one split. Ten calendar days conservatively
+    # separate five-session labels from the next split's prediction time.
+    dates = pd.to_datetime(valid['earnings_date'])
+    validation_start = dates.iloc[train_end]
+    test_start = dates.iloc[validation_end]
+    embargo = pd.Timedelta(days=10)
+    train_df = valid.loc[dates < validation_start - embargo]
+    validation_df = valid.loc[(dates >= validation_start) & (dates < test_start - embargo)]
+    test_df = valid.loc[dates >= test_start]
+    if min(len(train_df), len(validation_df), len(test_df)) < 20:
+        return {'error': 'Insufficient samples after date-grouped ten-day embargo'}
 
     results = {
         'total_samples': len(valid),
@@ -333,8 +345,31 @@ def train_earnings_models(
         'train_samples': len(train_df),
         'validation_samples': len(validation_df),
         'test_samples': len(test_df),
+        'embargo_days': 10,
+        'evaluated_estimator': 'development_refit_exact_saved_model',
+        'split_dates': {
+            'train_last': str(train_df['earnings_date'].max()),
+            'validation_first': str(validation_df['earnings_date'].min()),
+            'validation_last': str(validation_df['earnings_date'].max()),
+            'test_first': str(test_df['earnings_date'].min()),
+        },
         'models': {}
     }
+    # Freeze the baseline using unique training events only, before prospective
+    # logging begins. Validation/test outcomes never determine this probability.
+    import hashlib
+    import json
+    from datetime import datetime, timezone
+    baseline_training = train_df.drop_duplicates(subset=['symbol', 'earnings_date']) if 'symbol' in train_df else train_df
+    baseline = {
+        'probability': float(baseline_training['target_day5_up'].mean()),
+        'training_events': len(baseline_training),
+        'training_last_date': str(baseline_training['earnings_date'].max()),
+        'frozen_at': datetime.now(timezone.utc).isoformat(),
+        'source': 'unique_training_events_day5_up_v1',
+    }
+    baseline['id'] = hashlib.sha256(json.dumps(baseline, sort_keys=True).encode()).hexdigest()
+    results['forward_baseline'] = baseline
 
     trained_artifacts = {}
 
@@ -384,10 +419,50 @@ def load_trained_models() -> Optional[Dict[str, Any]]:
     """Load cached model artifacts from disk."""
     if os.path.exists(MODEL_ARTIFACT_PATH):
         try:
-            return joblib.load(MODEL_ARTIFACT_PATH)
+            with open(MODEL_ARTIFACT_PATH, 'rb') as stream:
+                digest = hashlib.file_digest(stream, 'sha256').hexdigest()
+                stream.seek(0)
+                payload = joblib.load(stream)
+            payload['model_artifact_sha256'] = digest
+            return payload
         except Exception:
             return None
     return None
+
+
+def upcoming_event_features(history: pd.DataFrame, as_of=None) -> pd.Series:
+    """Build next-report priors, not the prior features of the last report.
+
+    Ten calendar days is a conservative maturity lag for five-session labels.
+    Source revision timestamps are unavailable; this is not historical as-of replay.
+    """
+    now = pd.Timestamp(as_of) if as_of is not None else pd.Timestamp.now(tz='UTC')
+    cutoff = now.date() - pd.Timedelta(days=10)
+    dates = pd.to_datetime(history['earnings_date'].astype(str).str[:10], errors='coerce')
+    mature = history.loc[dates < pd.Timestamp(cutoff)].copy()
+    mature = mature.assign(_report_date=dates.loc[mature.index]).sort_values('_report_date')
+    if mature.empty:
+        raise ValueError('No mature earnings history available')
+    latest = mature.iloc[-1].copy()
+    for destination, source, default in (
+        ('prior_beat_rate', 'is_beat_num', 0.5),
+        ('prior_avg_surprise', 'eps_surprise_pct', 0.0),
+        ('prior_avg_abs_gap', 'target_abs_gap', 3.0),
+        ('prior_avg_day5', 'day5_return_pct', 0.0),
+        ('prior_reversal_rate', 'reversal_num', 0.4),
+    ):
+        values = pd.to_numeric(mature[source], errors='coerce').replace([np.inf, -np.inf], np.nan).dropna()
+        latest[destination] = float(values.mean()) if len(values) else default
+    streak = 0
+    for value in mature['is_beat_num']:
+        if value == 1:
+            streak = max(0, streak) + 1
+        elif value == 0:
+            streak = min(0, streak) - 1
+        else:
+            streak = 0
+    latest['prior_streak'] = streak
+    return latest
 
 
 def predict_for_symbol(
@@ -402,12 +477,9 @@ def predict_for_symbol(
 
     models_data = load_trained_models()
     if not models_data:
-        # Train on the fly if needed
-        train_earnings_models()
-        models_data = load_trained_models()
-
-    if not models_data:
-        return {'error': 'Models could not be loaded or trained'}
+        if own_connection:
+            conn.close()
+        return {'error': 'Model artifact unavailable; explicit offline training and validation required'}
 
     artifacts = models_data['artifacts']
     cols = models_data['feature_cols']
@@ -419,8 +491,10 @@ def predict_for_symbol(
     if sym_df.empty:
         return {'error': f'No historical data found for {symbol}'}
 
-    # Latest record as input features
-    latest = sym_df.iloc[-1].copy()
+    try:
+        latest = upcoming_event_features(sym_df)
+    except ValueError as exc:
+        return {'error': str(exc)}
     for name, value in (feature_overrides or {}).items():
         if name in cols and value is not None:
             latest[name] = float(value)
@@ -469,6 +543,9 @@ def predict_for_symbol(
 
     return {
         'symbol': symbol.upper(),
+        'raw_direction': 'BULLISH' if prob_day5_up >= 0.5 else 'BEARISH',
+        'raw_confidence': round(max(prob_day5_up, 1.0 - prob_day5_up), 4),
+        'forecast_status': 'PAPER_VALIDATED' if direction_eligible else 'UNVALIDATED',
         'direction': direction,
         'confidence': round(confidence, 4),
         'prob_day1_up': round(prob_day1_up, 4),
@@ -478,9 +555,14 @@ def predict_for_symbol(
         'primary_strategy': primary_strategy,
         'rationale': rationale,
         'model_version': models_data.get('model_version', 'legacy-unversioned'),
+        'model_artifact_sha256': models_data.get('model_artifact_sha256'),
+        'forward_baseline': models_data.get('results', {}).get('forward_baseline'),
         'validation_status': strategy_gate.get('status', 'UNVALIDATED'),
         'strategy_eligible': direction_eligible,
         'inputs_snapshot': {
+            'feature_method': 'next_event_mature_priors_v1',
+            'last_mature_report_date': str(latest['earnings_date'])[:10],
+            'maturity_lag_calendar_days': 10,
             'prior_beat_rate': round(float(latest['prior_beat_rate']), 3),
             'prior_streak': int(latest['prior_streak']),
             'pre_5d_drift_pct': round(float(latest['pre_5d_return_pct']), 2),

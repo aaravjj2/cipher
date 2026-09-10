@@ -9,6 +9,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from core import fronttest_portfolios, paper_portfolio_api  # noqa: E402
+from core.paper_executor.database import PaperExecutorDatabase  # noqa: E402
 
 
 def test_snapshot_exposes_seven_read_only_shadow_portfolios(tmp_path: Path) -> None:
@@ -17,7 +18,7 @@ def test_snapshot_exposes_seven_read_only_shadow_portfolios(tmp_path: Path) -> N
     db.close()
     # Seven specs registered: v6_nvda_p05, v6_nvda_c05, v6_nvda_c1,
     # v6_nvda_p1, qqq_early, qqq_validated, mu_pm_liquidity.
-    result = paper_portfolio_api.snapshot(db_path)
+    result = paper_portfolio_api.snapshot(db_path, autopilot_db_path=tmp_path / "missing.sqlite")
     assert result["portfolio_count"] == 7
     assert result["paper_only"] is True
     assert result["read_only"] is True
@@ -56,7 +57,7 @@ def test_snapshot_audits_signal_disposition_position_and_equity(tmp_path: Path) 
     )
     db.commit()
     db.close()
-    result = paper_portfolio_api.snapshot(db_path)
+    result = paper_portfolio_api.snapshot(db_path, autopilot_db_path=tmp_path / "missing.sqlite")
     row = next(x for x in result["portfolios"] if x["portfolio_id"] == "v6_nvda_p05")
     assert row["realized_pnl"] == 160
     assert row["realized_equity"] == 100_160
@@ -86,7 +87,7 @@ def test_snapshot_separates_realized_midpoint_and_liquidation_equity(tmp_path: P
                      ?,1.9,2.0,2.02,100,?,2.4,2.5)""", (now, now),
     )
     db.commit(); db.close()
-    result = paper_portfolio_api.snapshot(db_path)
+    result = paper_portfolio_api.snapshot(db_path, autopilot_db_path=tmp_path / "missing.sqlite")
     row = next(item for item in result["portfolios"] if item["portfolio_id"] == "qqq_early")
     assert row["realized_equity"] == 100_000
     assert row["marked_equity"] == 100_086
@@ -94,3 +95,39 @@ def test_snapshot_separates_realized_midpoint_and_liquidation_equity(tmp_path: P
     assert row["positions"][0]["mark_status"] == "current"
     assert result["combined_marked_equity"] == 700_086
     assert result["normalized_comparison"]["ranked"] is False
+
+
+def test_snapshot_includes_autopilot_local_ledger_in_combined_portfolios(tmp_path: Path) -> None:
+    fronttest = tmp_path / "fronttest.sqlite"
+    fronttest_portfolios.connect(fronttest).close()
+    autopilot = tmp_path / "autopilot.sqlite"
+    paper = PaperExecutorDatabase(autopilot)
+    with paper.connect() as db:
+        db.execute(
+            """insert into paper_positions(id,ticker,direction,symbol,quantity,entry_price,opened_at,
+                                             closed_at,exit_price,exit_reason,status,payload_json)
+                 values('closed','SPY','bullish','SPY-C',1,2.0,'2026-09-01T14:00:00+00:00',
+                        '2026-09-01T14:20:00+00:00',2.5,'option_take_profit','CLOSED','{}')"""
+        )
+        db.execute(
+            """insert into paper_positions(id,ticker,direction,symbol,quantity,entry_price,opened_at,status,payload_json)
+                 values('open','QQQ','bearish','QQQ-P',1,3.0,?,'SHADOW_OPEN','{}')""",
+            (datetime.now(timezone.utc).isoformat(),),
+        )
+        db.execute(
+            """insert into paper_marks(id,position_id,marked_at,bid,ask,pnl_pct,payload_json)
+                 values('mark','open',?,3.2,3.4,10,'{}')""",
+            (datetime.now(timezone.utc).isoformat(),),
+        )
+
+    result = paper_portfolio_api.snapshot(fronttest, autopilot_db_path=autopilot)
+    row = next(item for item in result["portfolios"] if item["portfolio_id"] == "autopilot_local")
+
+    assert result["portfolio_count"] == 8
+    assert result["combined_starting_cash"] == 725_000
+    assert row["config"]["execution_backend"] == "simulated"
+    assert row["config"]["external_order_capability"] is False
+    assert row["realized_pnl"] == 50
+    assert row["unrealized_pnl_mid"] == 30
+    assert row["positions"][0]["mark_status"] == "current"
+    assert {position["fill_provenance"] for position in row["positions"]} == {"cipher_modeled"}

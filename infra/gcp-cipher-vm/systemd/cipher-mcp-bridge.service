@@ -13,9 +13,10 @@ WorkingDirectory=/home/aarav/Aarav/cipher/cipher-github/cipher-system/mcp-server
 Environment=CIPHER_CORE_URL=http://127.0.0.1:8282
 Environment=CIPHER_MCP_BRIDGE_HOST=127.0.0.1
 Environment=CIPHER_MCP_BRIDGE_PORT=8284
-# Deliberately NOT /etc/cipher/cipher.env: that file is rebuilt from scratch by
-# sync-secrets.py and lost every credential during the 2026-08-12 reboot. Secrets in
-# runtime/config survived it.
+# Internal auth and data-provider credentials track the core. OAuth secrets stay
+# in persistent runtime/config, independent of regenerated service environment.
+EnvironmentFile=/etc/cipher/cipher.env
+Environment=CIPHER_MCP_PUBLIC_URL=https://cipher-main.tail39504f.ts.net:10000
 Environment=CIPHER_MCP_TOKEN_FILE=/home/aarav/Aarav/cipher/runtime/config/mcp-bearer-token.txt
 Environment=CIPHER_MCP_OAUTH_STATE=/home/aarav/Aarav/cipher/runtime/config/mcp-oauth-state.json
 ExecStart=/usr/bin/python3 /home/aarav/Aarav/cipher/cipher-github/cipher-system/mcp-server/remote_bridge.py
@@ -35,6 +36,9 @@ ProtectHome=read-only
 # "OSError: [Errno 30] Read-only file system", surfacing to the client as an HTTP 502 from the
 # tunnel -- a failure no unit test reproduces, because tests write to an unsandboxed tmp dir.
 ReadWritePaths=/home/aarav/Aarav/cipher/runtime/config
+# SQLite mode=ro readers may create WAL shared-memory sidecars after a checkpoint.
+# SQL connections remain read-only; immutable=1 would miss active WAL transactions.
+ReadWritePaths=/home/aarav/Aarav/cipher/runtime/data/paper_runtime/data/paper_trades
 ProtectKernelTunables=yes
 ProtectControlGroups=yes
 RestrictAddressFamilies=AF_INET AF_INET6

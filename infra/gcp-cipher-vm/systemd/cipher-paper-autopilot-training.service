@@ -1,5 +1,5 @@
 [Unit]
-Description=Refresh Cipher point-in-time shadow-learning dataset
+Description=Refresh Cipher point-in-time local-paper learning dataset
 After=cipher-paper-autopilot-executor.service
 
 [Service]

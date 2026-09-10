@@ -1,7 +1,7 @@
 """Leakage-safe dataset export for future Cipher ranking models.
 
-Only closed shadow positions are eligible.  Features come from the last scanner
-observation at or before the simulated fill; marks and exits are labels only.
+Only closed paper-ledger positions are eligible. Features come from the last
+scanner observation at or before the fill; marks and exits are labels only.
 The exporter does not train or promote a model.  It records why training is
 blocked until the prospective sample is large and spans enough market dates.
 """
@@ -22,7 +22,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 DEFAULT_DB = Path(__file__).resolve().parents[2] / "data" / "paper_runtime" / "data" / "paper_trades" / "autopilot_shadow.sqlite"
 DEFAULT_OUTPUT = Path(__file__).resolve().parents[2] / "data" / "paper_runtime" / "autopilot" / "training"
 
@@ -67,6 +67,10 @@ def _sample(db: sqlite3.Connection, position: sqlite3.Row) -> dict[str, Any] | N
     if not update:
         return None
     raw = _json(update["payload_json"])
+    position_payload = _json(position["payload_json"])
+    execution_mode = str(position_payload.get("mode") or "unknown")
+    execution_backend = str(position_payload.get("execution_backend") or "simulated")
+    actual_paper_fill = execution_mode == "paper" and execution_backend == "alpaca_paper"
     evidence = raw.get("evidence_snapshot") or {}
     autopilot = raw.get("autopilot") or {}
     sentiment = autopilot.get("sentiment") or {}
@@ -104,6 +108,8 @@ def _sample(db: sqlite3.Connection, position: sqlite3.Row) -> dict[str, Any] | N
         "finbert_events": int(sentiment.get("events") or 0),
         "entry_hour": local.hour,
         "entry_minute": local.minute,
+        "execution_mode": execution_mode,
+        "execution_backend": execution_backend,
     }
     return {
         "schema_version": SCHEMA_VERSION,
@@ -128,8 +134,12 @@ def _sample(db: sqlite3.Connection, position: sqlite3.Row) -> dict[str, Any] | N
             "position_id": position["id"],
             "episode_id": position["episode_id"],
             "feature_source": "last episode update at_or_before opened_at",
-            "label_source": "later shadow marks and simulated liquidation bid",
-            "actual_fill_claim": False,
+            "label_source": (
+                "Alpaca paper fills and observed marks" if actual_paper_fill
+                else "Cipher local modeled fills and observed marks"
+            ),
+            "actual_fill_claim": actual_paper_fill,
+            "modeled_fill_claim": not actual_paper_fill,
             "live_order_authority": False,
         },
     }

@@ -23,6 +23,7 @@ from zoneinfo import ZoneInfo
 
 from core import ai_synthesizer
 from core.evidence_contract import SignalRecord
+from core.exchange_calendar import is_session
 
 # Trained model inference (lazy-loaded on first use)
 _ALPHA_MODEL = None
@@ -62,7 +63,7 @@ def phase_at(now: datetime) -> AutopilotPhase:
     if now.tzinfo is None:
         raise ValueError("now must be timezone-aware")
     local = now.astimezone(NEW_YORK)
-    if local.weekday() >= 5:
+    if not is_session(local.date()):
         return AutopilotPhase.CLOSED
     clock = local.time().replace(tzinfo=None)
     if time(4, 0) <= clock < time(9, 30):

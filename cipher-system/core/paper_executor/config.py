@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import dataclass, field
 import os
 from pathlib import Path
@@ -107,6 +108,7 @@ class PortfolioConfig:
     maximum_open_positions: int = 3
     maximum_positions_per_ticker: int = 1
     maximum_new_positions_per_day: int = 5
+    maximum_new_positions_per_ticker_per_day: int = 5
     stop_after_daily_losses: int = 2
 
 
@@ -127,6 +129,30 @@ class SimulationConfig:
     exit_at_bid: bool = True
     minimum_slippage_dollars: float = 0.01
     slippage_pct: float = 0.5
+    fee_per_contract: float = 0.0
+
+    def __post_init__(self):
+        if not self.entry_at_ask or not self.exit_at_bid:
+            raise ValueError("Only observed ask entries and bid exits are supported")
+        if any(not math.isfinite(value) or value < 0 for value in (self.minimum_slippage_dollars, self.slippage_pct, self.fee_per_contract)):
+            raise ValueError("Simulation costs must be finite and nonnegative")
+
+
+@dataclass(frozen=True)
+class ExperimentConfig:
+    cohort_id: str = "legacy"
+    version: str = "v1"
+    registry_strategy_id: str | None = None
+    confirmation_observations: int = 1
+    maximum_round_trip_stop_fraction: float | None = None
+    take_profit_remaining_fraction: float | None = None
+
+    def __post_init__(self):
+        if self.confirmation_observations < 1:
+            raise ValueError("confirmation_observations must be positive")
+        for value in (self.maximum_round_trip_stop_fraction, self.take_profit_remaining_fraction):
+            if value is not None and not 0 < value <= 1:
+                raise ValueError("experiment fractions must be in (0, 1]")
 
 
 @dataclass(frozen=True)
@@ -168,6 +194,7 @@ class ExecutorConfig:
     exit: ExitConfig = field(default_factory=ExitConfig)
     simulation: SimulationConfig = field(default_factory=SimulationConfig)
     execution: ExecutionConfig = field(default_factory=ExecutionConfig)
+    experiment: ExperimentConfig = field(default_factory=ExperimentConfig)
     vm_forwarding: VmForwardingConfig = field(default_factory=VmForwardingConfig)
     safety: SafetyConfig = field(default_factory=SafetyConfig)
 
@@ -179,7 +206,7 @@ class ExecutorConfig:
 _TOP = {
     "mode", "runtime_root", "database_path", "server", "scanner", "strategy",
     "market_data", "instrument", "contract", "portfolio", "exit", "simulation", "execution",
-    "vm_forwarding", "safety",
+    "vm_forwarding", "safety", "experiment",
 }
 
 
@@ -288,6 +315,7 @@ def load_config(path: str | Path | None = None) -> ExecutorConfig:
         exit=ExitConfig(**{**ExitConfig().__dict__, **exit_data}),
         simulation=SimulationConfig(**{**SimulationConfig().__dict__, **simulation_data}),
         execution=ExecutionConfig(**{**ExecutionConfig().__dict__, **execution_data}),
+        experiment=ExperimentConfig(**data.get("experiment", {})),
         vm_forwarding=VmForwardingConfig(**{**VmForwardingConfig().__dict__, **vm_data}),
         safety=safety,
     )

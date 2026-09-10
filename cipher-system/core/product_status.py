@@ -7,6 +7,7 @@ from pathlib import Path
 import sqlite3
 from typing import Any
 from zoneinfo import ZoneInfo
+from core.exchange_calendar import is_session, previous_session
 
 NY = ZoneInfo("America/New_York")
 GEX_DB = Path(__file__).resolve().parents[1] / "data" / "gex_history.sqlite"
@@ -31,9 +32,9 @@ def _parse(value: str | None) -> datetime | None:
 
 def market_session(now: datetime | None = None) -> dict[str, Any]:
     moment = (now or datetime.now(timezone.utc)).astimezone(NY)
-    weekday = moment.weekday() < 5
+    session_day = is_session(moment.date())
     clock = moment.time().replace(tzinfo=None)
-    if not weekday:
+    if not session_day:
         phase = "closed"
     elif time(4) <= clock < time(9, 30):
         phase = "premarket"
@@ -47,19 +48,30 @@ def market_session(now: datetime | None = None) -> dict[str, Any]:
         "phase": phase,
         "is_regular": phase == "regular",
         "market_date": moment.date().isoformat(),
+        "last_session_date": (
+            moment.date() if session_day and clock >= time(16)
+            else previous_session(moment.date())
+        ).isoformat(),
         "exchange_time": moment.isoformat(),
         "timezone": "America/New_York",
     }
 
 
 def freshness(name: str, observed_at: str | None, *, now: datetime, session: dict,
-              stale_after_seconds: int, source: str, detail: str | None = None) -> dict:
+              stale_after_seconds: int, source: str, detail: str | None = None,
+              market_bound: bool = True) -> dict:
     parsed = _parse(observed_at)
     age = max(0.0, (now.astimezone(timezone.utc) - parsed).total_seconds()) if parsed else None
     if parsed is None:
         state = "unavailable"
-    elif session["phase"] != "regular" and parsed.astimezone(NY).date().isoformat() <= session["market_date"]:
-        state = "last_session"
+    elif parsed > now.astimezone(timezone.utc):
+        state = "unavailable"
+    elif not market_bound:
+        state = "current" if age <= stale_after_seconds else "stale"
+    elif session["phase"] != "regular":
+        observed_day = parsed.astimezone(NY).date()
+        expected_day = date.fromisoformat(session["last_session_date"])
+        state = "current" if age <= stale_after_seconds else "last_session" if observed_day == expected_day else "stale"
     else:
         state = "current" if age is not None and age <= stale_after_seconds else "stale"
     return {
@@ -108,15 +120,21 @@ def status(*, ticker: str, quote: dict | None, flow_session: dict | None,
     items = [
         freshness("quote", (quote or {}).get("as_of"), now=moment, session=session,
                   stale_after_seconds=30, source=(quote or {}).get("feed") or "alpaca"),
-        freshness("flow", (flow_session or {}).get("newest_event_at"), now=moment, session=session,
-                  stale_after_seconds=120, source="tradier_stream",
-                  detail=(flow_session or {}).get("session_date")),
+        (
+            freshness("flow", flow_session.get("newest_event_at"), now=moment, session=session,
+                      stale_after_seconds=120, source="tradier_stream", detail=flow_session.get("session_date"))
+            if flow_session else {
+                "name": "flow", "observed_at": None, "age_seconds": None,
+                "state": "snapshot_only", "source": "alpaca_chain_snapshot",
+                "detail": "Event-time Tradier tape retired; API fallback is one latest trade per contract.",
+            }
+        ),
         freshness("gex", gex_at, now=moment, session=session, stale_after_seconds=1200,
                   source="local_gex_capture", detail="public-OI heuristic; not dealer positioning"),
         freshness("scanner_universe", universe_meta.get("as_of"), now=moment, session=session,
-                  stale_after_seconds=14 * 86400, source=universe_meta.get("source") or "fallback"),
+                  stale_after_seconds=14 * 86400, source=universe_meta.get("source") or "fallback", market_bound=False),
         freshness("research_ranking", _json_timestamp(AUTOPILOT_LAST), now=moment, session=session,
-                  stale_after_seconds=36 * 3600, source="autopilot"),
+                  stale_after_seconds=36 * 3600, source="autopilot", market_bound=False),
         freshness("paper_portfolios", paper_at, now=moment, session=session,
                   stale_after_seconds=20 * 60, source="shadow_simulator", detail=paper_detail),
     ]

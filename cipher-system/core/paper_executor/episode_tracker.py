@@ -17,7 +17,7 @@ class EpisodeTracker:
             row = db.execute(
                 """
                 select * from signal_episodes
-                where episode_key = ? and ended_at is null
+                where episode_key = ?
                 order by last_seen_at desc limit 1
                 """,
                 (card.episode_key,),

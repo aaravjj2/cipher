@@ -69,3 +69,34 @@ test("does not expose bearer values in validation errors", async () => {
   const result = await auth.validateRequest({ headers: { authorization: `Bearer ${secretToken}` } });
   assert.equal(result, null);
 });
+
+test("reports provider reachability without exposing deployment details", async () => {
+  const calls = [];
+  const auth = createSupabaseAuth({
+    supabaseUrl: "https://project.supabase.co",
+    anonKey: "public-anon-key",
+    healthCacheTtlMs: 60_000,
+    fetchImpl: async (url, init) => {
+      calls.push({ url, init });
+      return new Response("{}", { status: 200 });
+    },
+  });
+
+  assert.deepEqual(await auth.health(), { provider: "supabase", configured: true, reachable: true });
+  assert.deepEqual(await auth.health(), { provider: "supabase", configured: true, reachable: true });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, "https://project.supabase.co/auth/v1/settings");
+  assert.ok(calls[0].init.signal instanceof AbortSignal);
+});
+
+test("reports an unreachable or unconfigured provider as unavailable", async () => {
+  const unreachable = createSupabaseAuth({
+    supabaseUrl: "https://missing.supabase.co",
+    anonKey: "public-anon-key",
+    fetchImpl: async () => { throw new Error("getaddrinfo ENOTFOUND secret-host"); },
+  });
+  const unconfigured = createSupabaseAuth();
+
+  assert.deepEqual(await unreachable.health(), { provider: "supabase", configured: true, reachable: false });
+  assert.deepEqual(await unconfigured.health(), { provider: "supabase", configured: false, reachable: false });
+});

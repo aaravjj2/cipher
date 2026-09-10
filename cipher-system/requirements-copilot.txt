@@ -1,0 +1,3 @@
+# Optional dependencies for Cipher Copilot surfaces.
+# Core engine + CLI need only the packages already in .venvs/cipher (openai SDK).
+discord.py>=2.3 ; # only needed for `python -m core.copilot.discord_bot`

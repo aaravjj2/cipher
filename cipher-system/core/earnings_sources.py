@@ -76,7 +76,12 @@ def _finviz_bulk(symbols: Iterable[str]) -> list[dict]:
     return [] if frame is None else [dict(row) for row in frame.to_dict(orient="records")]
 
 
-def finviz_events(symbols: Iterable[str], *, fetch_fn: Callable[[], list[dict]] | None = None) -> tuple[list[dict], list[dict]]:
+def finviz_events(
+    symbols: Iterable[str],
+    *,
+    fetch_fn: Callable[[], list[dict]] | None = None,
+    as_of: date | None = None,
+) -> tuple[list[dict], list[dict]]:
     wanted = {str(symbol).upper() for symbol in symbols}
     try:
         raw_rows = fetch_fn() if fetch_fn else _finviz_bulk(wanted)
@@ -108,7 +113,7 @@ def finviz_events(symbols: Iterable[str], *, fetch_fn: Callable[[], list[dict]] 
             except ValueError:
                 pass
         if day:
-            if date.fromisoformat(day) < date.today():
+            if date.fromisoformat(day) < (as_of or date.today()):
                 continue
             text = str(raw).lower()
             timing = "BMO" if "bmo" in text or "before" in text or "/b" in text else "AMC" if "amc" in text or "after" in text or "/a" in text else "UNKNOWN"
@@ -120,7 +125,8 @@ def finviz_events(symbols: Iterable[str], *, fetch_fn: Callable[[], list[dict]] 
 
 def collect(symbols: list[str], *, yahoo_fetch=None, finviz_fetch=None, observed_at: str | None = None) -> dict:
     yahoo, yahoo_errors = yahoo_events(symbols, fetch_one=yahoo_fetch)
-    finviz, finviz_errors = finviz_events(symbols, fetch_fn=finviz_fetch)
+    observed_day = datetime.fromisoformat(observed_at.replace("Z", "+00:00")).date() if observed_at else None
+    finviz, finviz_errors = finviz_events(symbols, fetch_fn=finviz_fetch, as_of=observed_day)
     rows = yahoo + finviz
     by_symbol: dict[str, set[str]] = {}
     for row in rows:

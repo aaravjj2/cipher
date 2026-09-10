@@ -4,6 +4,8 @@ from datetime import datetime, time, timedelta, timezone
 
 from .config import ExecutorConfig
 from .models import SignalCard, SkipReason
+from core.exchange_calendar import is_session
+from zoneinfo import ZoneInfo
 
 
 def setup_allowed(card: SignalCard, cfg: ExecutorConfig) -> bool:
@@ -48,6 +50,8 @@ def entry_window_allowed(card: SignalCard, cfg: ExecutorConfig) -> bool:
     start = parse_hhmm(cfg.strategy.entry_window_et_start)
     end = parse_hhmm(cfg.strategy.entry_window_et_end)
     current = to_et_time(card.captured_at)
+    if not is_session(card.captured_at.astimezone(ZoneInfo("America/New_York")).date()):
+        return False
     # Opt-in premarket-entry mode: the autopilot (scanner_type "cipher") may
     # enter during premarket hours on its fresh premarket setup. This is
     # deliberately bounded to times before the window opens so the window close

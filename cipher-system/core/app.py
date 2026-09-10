@@ -426,7 +426,9 @@ def earnings_radar() -> dict:
         }
     try:
         payload = json.loads(EARNINGS_RADAR_PATH.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+        if not isinstance(payload, dict) or not isinstance(payload.get('cards', []), list):
+            raise ValueError('Invalid radar shape')
+    except (OSError, ValueError):
         return {"status": "unavailable", "reason": "Radar artifact unreadable.",
                 "as_of": utcnow(), "count": 0, "cards": []}
     try:
@@ -438,7 +440,9 @@ def earnings_radar() -> dict:
         age_hours = None
         stale = True
     return {
-        "status": "stale" if stale else "current",
+        "status": "stale" if stale else payload.get("data_status", "current"),
+        "scan_diagnostics": payload.get("scan_diagnostics"),
+        "reason": "One or more earnings inputs are unavailable; affected forecasts are blocked." if payload.get('data_status') in {'partial', 'unavailable'} else None,
         "age_hours": round(age_hours, 2) if age_hours is not None else None,
         "as_of": payload.get("as_of"),
         "days_ahead": payload.get("days_ahead"),
@@ -929,7 +933,7 @@ def _stock_quote(ticker, feed):
         "last": last,
         "price_context": usable_mid if usable_mid is not None else last,
         "price_context_kind": "mid" if usable_mid is not None else "latest_trade",
-        "as_of": q.get("t", q.get("timestamp", t.get("t", t.get("timestamp", utcnow())))),
+        "as_of": q.get("t") or q.get("timestamp") or t.get("t") or t.get("timestamp"),
         "feed": feed,
         "day_change_pct": None,
     }
@@ -2580,6 +2584,9 @@ class Handler(BaseHTTPRequestHandler):
                     configured = bool(key and secret)
                 data = {
                     "status": "ok",
+                    "kind": "liveness",
+                    "ready": None,
+                    "detail": "Use authenticated operator and product status for data readiness.",
                     "service": "cipher-core",
                     "market_data_configured": configured,
                     "default_options_feed": default_feed,
@@ -2684,6 +2691,14 @@ class Handler(BaseHTTPRequestHandler):
             elif parsed.path == "/api/finviz-discovery":
                 presets = [part.strip() for part in (pget("presets") or "").split(",") if part.strip()] or None
                 data = finviz_discovery.discover(preset_ids=presets, limit=max(1, min(int(pget("limit", "75") or 75), 100)))
+            elif parsed.path == "/api/theta-review":
+                context = request_context.current()
+                owner = os.environ.get("CIPHER_THETA_REVIEW_USER_ID")
+                if not context or context.guest or not owner or context.user_id != owner:
+                    self.send_json(403, {"error": "Theta portfolio owner authentication required"})
+                    return
+                from core.theta_portfolio import snapshot as theta_snapshot
+                data = {"candidates": theta_snapshot().get("candidates", [])}
             elif parsed.path == "/api/paper-portfolios":
                 data = paper_portfolio_api.snapshot()
             elif parsed.path == "/api/prospective-fronttests":
@@ -3008,6 +3023,12 @@ class Handler(BaseHTTPRequestHandler):
                         loop_running = False
                 data = {
                     "loop_running": loop_running,
+                    "freshness": product_status.freshness(
+                        "flash_capture", (capture or {}).get("captured_at"),
+                        now=datetime.now(timezone.utc), session=product_status.market_session(),
+                        stale_after_seconds=120, source="browser_capture",
+                        detail="External browser capture; a running process alone does not establish fresh evidence.",
+                    ),
                     # The running loop writes "cycle"; on clean shutdown it writes a
                     # final payload with "cycles" instead, so a stopped loop reported
                     # cycle=None and looked like it had never run.
@@ -3394,6 +3415,24 @@ class Handler(BaseHTTPRequestHandler):
                     self.send_json(200, {"status": "disconnected", "read_only": True})
                     return
                 self.send_json(400, {"error": "unknown provider session action", "read_only": True})
+                return
+            if parsed.path == "/api/theta-review":
+                context = request_context.current()
+                owner = os.environ.get("CIPHER_THETA_REVIEW_USER_ID")
+                if not context or context.guest or not owner or context.user_id != owner:
+                    self.send_json(403, {"error": "Theta portfolio owner authentication required"})
+                    return
+                from core.theta_portfolio import connect as theta_connect, review as theta_review
+                body = self._read_json_body()
+                db = theta_connect()
+                try:
+                    result = theta_review(db, body.get("candidate_id"), body.get("action"), context.user_id,
+                                          datetime.now(timezone.utc), body.get("correction"))
+                    self.send_json(200, result)
+                except (ValueError, TypeError) as exc:
+                    self.send_json(409, {"error": str(exc)})
+                finally:
+                    db.close()
                 return
             if parsed.path == "/api/backtest":
                 action = (pget("action") or "").lower()

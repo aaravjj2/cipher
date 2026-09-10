@@ -91,3 +91,7 @@ def test_market_bound_capture_treats_friday_as_last_session_through_weekend():
     sunday_night = datetime(2026, 8, 17, 2, 0, tzinfo=timezone.utc)
     result = operator_status._capture_state("gex_snapshot", friday_capture, sunday_night)
     assert result["status"] == "LAST_SESSION"
+
+
+def test_retired_tradier_database_is_not_an_active_capture_dependency():
+    assert "tradier_stream" not in operator_status.CAPTURES

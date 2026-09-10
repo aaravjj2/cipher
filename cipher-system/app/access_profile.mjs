@@ -64,5 +64,14 @@ export function createAccessProfileResolver({ developerUserIds = "", developerEm
     return { mode: "guest", role: "guest", capabilities: GUEST_CAPABILITIES, settings: {} };
   }
 
-  return { authenticated, guest };
+  function operator() {
+    return {
+      mode: DEVELOPER_ROLE,
+      role: DEVELOPER_ROLE,
+      capabilities: DEVELOPER_CAPABILITIES,
+      settings: { displayName: "Host", defaultPanel: "Operator Status" },
+    };
+  }
+
+  return { authenticated, guest, operator };
 }

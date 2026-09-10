@@ -1,3 +1,7 @@
+For the current deployed ChatGPT setup, use [CHATGPT_SETUP.md](CHATGPT_SETUP.md).
+The historical setup notes below predate hosted-core authentication; the current
+bridge uses a private provider-session handshake and exposes 33 read-only tools.
+
 This directory holds **two** MCP servers, for different jobs:
 
 | file | what it does | needs cipher-core? |

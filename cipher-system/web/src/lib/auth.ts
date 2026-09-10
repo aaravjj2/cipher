@@ -26,6 +26,7 @@ export type AuthState = {
   loading: boolean;
   session: AuthIdentity | null;
   error: string | null;
+  providerAvailable: boolean | null;
 };
 
 function readableAuthError(error: unknown): string {
@@ -45,6 +46,20 @@ async function fetchCookieSession(): Promise<AuthIdentity | null> {
   return payload.authenticated && userId ? payload as AuthIdentity : null;
 }
 
+async function fetchAuthProviderAvailability(): Promise<boolean | null> {
+  try {
+    const response = await fetch(hostedApiUrl("/auth/status"), {
+      cache: "no-store",
+      credentials: "include",
+    });
+    if (!response.ok) return null;
+    const payload = await response.json() as { configured?: boolean; reachable?: boolean };
+    return payload.configured === true && payload.reachable === true;
+  } catch {
+    return null;
+  }
+}
+
 export function useAuthSession(): AuthState {
   const configured = isSupabaseConfigured();
   const [state, setState] = useState<AuthState>({
@@ -52,6 +67,7 @@ export function useAuthSession(): AuthState {
     loading: configured,
     session: null,
     error: null,
+    providerAvailable: null,
   });
 
   useEffect(() => {
@@ -60,10 +76,13 @@ export function useAuthSession(): AuthState {
     let active = true;
     const load = async () => {
       try {
-        const session = await fetchCookieSession();
-        if (active) setState({ configured: true, loading: false, session, error: null });
+        const [session, providerAvailable] = await Promise.all([
+          fetchCookieSession(),
+          fetchAuthProviderAvailability(),
+        ]);
+        if (active) setState({ configured: true, loading: false, session, error: null, providerAvailable });
       } catch (error) {
-        if (active) setState({ configured: true, loading: false, session: null, error: readableAuthError(error) });
+        if (active) setState({ configured: true, loading: false, session: null, error: readableAuthError(error), providerAvailable: null });
       }
     };
     void load();
@@ -102,6 +121,24 @@ export async function establishGuestSession(): Promise<AuthIdentity> {
   if (!response.ok) throw new Error("Guest access is temporarily unavailable.");
   const identity = await response.json() as AuthIdentity;
   if (identity.mode !== "guest") throw new Error("The guest session was not created.");
+  window.dispatchEvent(new Event("cipher-auth-changed"));
+  return identity;
+}
+
+export async function establishOperatorSession(password: string): Promise<AuthIdentity> {
+  const response = await fetch(hostedApiUrl("/auth/operator"), {
+    method: "POST",
+    cache: "no-store",
+    credentials: "include",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ password }),
+  });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({})) as { error?: string };
+    throw new Error(payload.error === "invalid credentials" ? "Invalid host password." : "Host access is temporarily unavailable.");
+  }
+  const identity = await response.json() as AuthIdentity;
+  if (identity.mode !== "developer") throw new Error("The host session was not created.");
   window.dispatchEvent(new Event("cipher-auth-changed"));
   return identity;
 }

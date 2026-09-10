@@ -17,7 +17,7 @@ def test_shadow_config_comma_setups_not_truncated():
     setup strings and accept the matching real-world cards."""
     path = Path(__file__).resolve().parents[1] / "config" / "paper_autopilot_shadow.yaml"
     cfg = load_config(path)
-    assert "flash_agentic" in cfg.scanner.accepted_types
+    assert cfg.scanner.accepted_types == ("cipher",)
     assert "cipher" in cfg.scanner.accepted_types
     loaded_setups = {pattern["setup"] for pattern in cfg.strategy.allowed_patterns}
     for comma_setup in (
@@ -33,10 +33,6 @@ def test_shadow_config_comma_setups_not_truncated():
         (Direction.BULLISH, "quad cluster (4 peaks, above)"),
         (Direction.BEARISH, "golden / top-pull"),
     ):
-        assert setup_allowed(_card(direction, setup), cfg)
-        # The same cluster setups must be admissible for the primary RTH
-        # confirmation scanner (cipher) now that autopilot no longer depends on
-        # Flash-Agentic cards to enter.
         assert setup_allowed(_card(direction, setup, "cipher"), cfg)
 
 
@@ -90,12 +86,20 @@ def test_premarket_entries_allowed_only_for_cipher_before_window():
         SignalCard("NVDA", "cipher", Direction.BULLISH, "cipher model", premarket, 100, 101, 99, {}), off)
 
 
-def test_shadow_config_admits_cipher_premarket_card():
-    """The shipped autopilot shadow config enables premarket entries and a cipher
-    premarket card passes the full eligibility gate (setup, ticker, window)."""
+def test_shadow_config_defers_cipher_card_until_options_market_opens():
+    """The shipped config must not send option orders before options trade."""
     path = Path(__file__).resolve().parents[1] / "config" / "paper_autopilot_shadow.yaml"
     cfg = load_config(path)
-    assert cfg.strategy.allow_premarket_entries is True
+    assert cfg.strategy.allow_premarket_entries is False
     premarket = datetime(2026, 7, 28, 12, 45, tzinfo=timezone.utc)  # 08:45 ET
     cipher = SignalCard("NVDA", "cipher", Direction.BULLISH, "cipher model", premarket, 100, 101, 99, {})
-    assert eligibility_skip(cipher, cfg, False, False) is None
+    assert eligibility_skip(cipher, cfg, False, False) is SkipReason.SKIPPED_ENTRY_WINDOW
+
+
+def test_shipped_policy_handles_weekend_expiration_gap_and_blocks_holidays():
+    path = Path(__file__).resolve().parents[1] / "config" / "paper_autopilot_shadow.yaml"
+    cfg = load_config(path)
+    assert cfg.contract.maximum_dte == 7
+    labor_day = datetime(2026, 9, 7, 14, 0, tzinfo=timezone.utc)
+    card = SignalCard("SPY", "cipher", Direction.BULLISH, "cipher model", labor_day, 100, 101, 99, {})
+    assert eligibility_skip(card, cfg, False, False) is SkipReason.SKIPPED_ENTRY_WINDOW

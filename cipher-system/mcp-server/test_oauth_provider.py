@@ -314,7 +314,7 @@ def test_an_authorization_code_cannot_be_used_twice(server):
     _, _, headers = approve(server, client_id, challenge)
     code = urllib.parse.parse_qs(urllib.parse.urlparse(headers["Location"]).query)["code"][0]
     form = {"grant_type": "authorization_code", "code": code,
-            "code_verifier": verifier, "client_id": client_id}
+            "code_verifier": verifier, "client_id": client_id, "redirect_uri": CALLBACK}
     assert request(f"{server}/token", data=dict(form))[0] == 200
     status, raw, _ = request(f"{server}/token", data=dict(form))
     assert status == 400

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import math
 from datetime import datetime, timezone
 from typing import Any
 
@@ -39,7 +40,8 @@ def number(value: Any) -> float | None:
     if value in (None, ""):
         return None
     try:
-        return float(str(value).replace("$", "").replace(",", "").strip())
+        result = float(str(value).replace("$", "").replace(",", "").strip())
+        return result if math.isfinite(result) else None
     except ValueError:
         return None
 
@@ -102,7 +104,7 @@ def validate_card(raw: dict[str, Any], cfg: ExecutorConfig, now: datetime | None
         reasons.append(SkipReason.SKIPPED_INVALID_GEOMETRY.value)
     if invalidation and spot and abs(invalidation - spot) / spot * 100 > cfg.scanner.maximum_level_distance_pct:
         reasons.append(SkipReason.SKIPPED_INVALID_GEOMETRY.value)
-    if (now - captured).total_seconds() > cfg.scanner.maximum_signal_age_seconds:
+    if not -2 <= (now - captured).total_seconds() <= cfg.scanner.maximum_signal_age_seconds:
         reasons.append(SkipReason.SKIPPED_STALE_SIGNAL.value)
     if ticker == "TEST":
         reasons.append(SkipReason.SKIPPED_SYNTHETIC.value)

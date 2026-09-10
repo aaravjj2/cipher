@@ -51,6 +51,21 @@ def test_earnings_radar_marks_unreadable_artifact(monkeypatch, tmp_path):
     assert result["status"] == "unavailable"
 
 
+def test_partial_scan_does_not_look_like_success(monkeypatch, tmp_path):
+    artifact = tmp_path / 'radar.json'
+    artifact.write_text(json.dumps({'as_of': datetime.now(timezone.utc).isoformat(), 'cards': [], 'data_status': 'partial', 'scan_diagnostics': {'errors': [{'stage': 'scan'}]}}))
+    monkeypatch.setattr(app, 'EARNINGS_RADAR_PATH', artifact)
+    result = app.earnings_radar()
+    assert result['status'] == 'partial' and result['scan_diagnostics']['errors']
+
+
+def test_radar_rejects_valid_json_wrong_shape(monkeypatch, tmp_path):
+    artifact = tmp_path / 'radar.json'
+    artifact.write_text('[]')
+    monkeypatch.setattr(app, 'EARNINGS_RADAR_PATH', artifact)
+    assert app.earnings_radar()['status'] == 'unavailable'
+
+
 def test_earnings_radar_freshness_respects_weekend_schedule():
     produced = datetime(2026, 8, 21, 12, 16, tzinfo=timezone.utc)  # Friday 08:16 ET
     saturday = datetime(2026, 8, 22, 22, 0, tzinfo=timezone.utc)

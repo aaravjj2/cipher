@@ -211,3 +211,32 @@ def test_nasdaq_day_maps_are_ttl_cached(monkeypatch):
     second = scanner.cross_check_earnings_date("NVDA", MONDAY)
     assert first["confirmed"] and second["confirmed"]
     assert len(fake.calls) == 3  # three candidate days fetched exactly once each
+
+
+def test_model_error_preserves_calendar_without_fabrication(monkeypatch):
+    _prediction_patch(monkeypatch)
+    monkeypatch.setattr(scanner, 'predict_for_symbol', lambda *a, **k: {'error': 'no historical data'})
+    diagnostics = {}
+    cards = scanner.find_upcoming_earnings(symbols=['NVDA'], conn=object(), diagnostics=diagnostics)
+    assert cards[0]['forecast_status'] == 'UNAVAILABLE'
+    assert cards[0]['expected_gap_pct'] is None and cards[0]['hist_beat_rate'] is None
+    assert cards[0]['recommended_strategy'].startswith('NO TRADE')
+    assert diagnostics['status'] == 'partial'
+    assert 'unknown' in scanner.render_radar_table(cards)
+
+
+def test_history_failure_preserves_event_and_blocks_entry(monkeypatch):
+    _prediction_patch(monkeypatch)
+    monkeypatch.setattr(scanner, 'current_price_drift', lambda ticker: (_ for _ in ()).throw(OSError('offline')))
+    cards = scanner.find_upcoming_earnings(symbols=['NVDA'], conn=object())
+    assert cards[0]['forecast_status'] == 'DEGRADED_INPUTS'
+    assert cards[0]['pre_drift_20d'] is None
+    assert cards[0]['strategy_eligible'] is False
+
+
+def test_total_calendar_outage_is_not_successful_empty_scan(monkeypatch):
+    _prediction_patch(monkeypatch)
+    monkeypatch.setattr(scanner.yf, 'Ticker', lambda s: (_ for _ in ()).throw(OSError('offline')))
+    diagnostics = {}
+    assert scanner.find_upcoming_earnings(symbols=['NVDA'], conn=object(), diagnostics=diagnostics) == []
+    assert diagnostics['status'] == 'unavailable' and len(diagnostics['errors']) == 1

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import math
 from datetime import date, datetime, timezone
 from typing import Iterable
 
@@ -37,9 +38,15 @@ def contracts_from_chain(ticker: str, chain: Iterable[dict], option_type: Option
     return out
 
 
-def evaluate_contract(card: SignalCard, contract: OptionContract, quote: Quote | None, cfg: ContractConfig, now: datetime | None = None) -> ContractCandidate:
+def evaluate_contract(card: SignalCard, contract: OptionContract, quote: Quote | None, cfg: ContractConfig, now: datetime | None = None, *, enforce_contract_cost: bool = True) -> ContractCandidate:
     reasons: list[str] = []
-    contract_dte = dte(contract.expiration, now)
+    try:
+        contract_dte = dte(contract.expiration, now)
+        canonical = occ_symbol(card.ticker, contract.expiration, card.option_type, contract.strike)
+    except (ValueError, OverflowError):
+        return ContractCandidate(contract, quote, -1, ("invalid_contract",), 999999.0)
+    if contract.symbol != canonical or contract.ticker != card.ticker or contract.strike <= 0:
+        reasons.append("contract_identity_mismatch")
     if contract_dte < cfg.minimum_dte or contract_dte > cfg.maximum_dte or (contract_dte == 0 and not cfg.allow_0dte):
         reasons.append("invalid_dte")
     if not contract.active:
@@ -49,13 +56,15 @@ def evaluate_contract(card: SignalCard, contract: OptionContract, quote: Quote |
     if quote is None:
         reasons.append("missing_quote")
         return ContractCandidate(contract, quote, contract_dte, tuple(reasons), 999999.0)
+    if not all(math.isfinite(v) for v in (quote.bid, quote.ask, contract.strike)):
+        return ContractCandidate(contract, quote, contract_dte, ("nonfinite_quote",), 999999.0)
     if quote.bid <= 0 or quote.bid < cfg.minimum_bid:
         reasons.append("bid_below_minimum")
     if quote.ask <= quote.bid:
         reasons.append("ask_not_above_bid")
     if quote.spread_pct > cfg.maximum_spread_pct:
         reasons.append("wide_spread")
-    if quote.ask * 100 > cfg.maximum_contract_cost:
+    if enforce_contract_cost and quote.ask * 100 > cfg.maximum_contract_cost:
         reasons.append("max_cost")
     if quote.open_interest is not None and quote.open_interest < cfg.minimum_open_interest:
         reasons.append("open_interest_below_minimum")
@@ -71,11 +80,48 @@ def evaluate_contract(card: SignalCard, contract: OptionContract, quote: Quote |
     return ContractCandidate(contract, quote, contract_dte, tuple(reasons), score)
 
 
-def select_contract(card: SignalCard, contracts: Iterable[OptionContract], quotes: dict[str, Quote], cfg: ContractConfig, now: datetime | None = None) -> tuple[ContractCandidate | None, list[ContractCandidate]]:
-    candidates = [evaluate_contract(card, c, quotes.get(c.symbol.upper()), cfg, now) for c in contracts if c.option_type == card.option_type]
+def select_contract(card: SignalCard, contracts: Iterable[OptionContract], quotes: dict[str, Quote], cfg: ContractConfig, now: datetime | None = None, *, enforce_moneyness: bool = True, enforce_contract_cost: bool = True) -> tuple[ContractCandidate | None, list[ContractCandidate]]:
+    candidates = [evaluate_contract(card, c, quotes.get(c.symbol.upper()), cfg, now, enforce_contract_cost=enforce_contract_cost) for c in contracts if c.option_type == card.option_type]
+    if enforce_moneyness:
+        candidates = _restrict_moneyness(card, candidates, cfg)
     candidates.sort(key=lambda c: (not c.accepted, c.ranking_score, c.contract.expiration, c.contract.strike, c.contract.symbol))
     accepted = [c for c in candidates if c.accepted]
     return (accepted[0] if accepted else None), candidates
+
+
+def _restrict_moneyness(card: SignalCard, candidates: list[ContractCandidate], cfg: ContractConfig) -> list[ContractCandidate]:
+    allowed_symbols: set[str] = set()
+    by_expiration: dict[str, list[ContractCandidate]] = {}
+    for candidate in candidates:
+        by_expiration.setdefault(candidate.contract.expiration, []).append(candidate)
+    for rows in by_expiration.values():
+        ordered = sorted(rows, key=lambda row: (abs(row.contract.strike - card.spot), row.contract.strike, row.contract.symbol))
+        if not ordered:
+            continue
+        allowed_symbols.add(ordered[0].contract.symbol)
+        if cfg.fallback_moneyness == "one_strike_itm":
+            itm = sorted(
+                (
+                    row for row in rows
+                    if (card.option_type == OptionType.CALL and row.contract.strike < ordered[0].contract.strike)
+                    or (card.option_type == OptionType.PUT and row.contract.strike > ordered[0].contract.strike)
+                ),
+                key=lambda row: abs(row.contract.strike - ordered[0].contract.strike),
+            )
+            if itm:
+                allowed_symbols.add(itm[0].contract.symbol)
+    return [
+        candidate
+        if candidate.contract.symbol in allowed_symbols
+        else ContractCandidate(
+            candidate.contract,
+            candidate.quote,
+            candidate.dte,
+            (*candidate.rejection_reasons, "moneyness_not_allowed"),
+            candidate.ranking_score,
+        )
+        for candidate in candidates
+    ]
 
 
 def select_debit_spread(
@@ -88,10 +134,16 @@ def select_debit_spread(
     maximum_width: float = 10.0,
     now: datetime | None = None,
 ) -> tuple[SpreadCandidate | None, list[ContractCandidate], list[SpreadCandidate]]:
-    _, leg_candidates = select_contract(card, contracts, quotes, cfg, now)
+    _, leg_candidates = select_contract(
+        card, contracts, quotes, cfg, now,
+        enforce_moneyness=False, enforce_contract_cost=False,
+    )
     accepted_legs = [candidate for candidate in leg_candidates if candidate.accepted]
+    allowed_long_symbols = {c.contract.symbol for c in _restrict_moneyness(card, leg_candidates, cfg) if c.accepted}
     spreads: list[SpreadCandidate] = []
     for long_leg in accepted_legs:
+        if long_leg.contract.symbol not in allowed_long_symbols:
+            continue
         long_contract = long_leg.contract
         long_quote = long_leg.quote
         if not long_quote:

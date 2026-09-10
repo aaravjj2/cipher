@@ -10,6 +10,12 @@ from core import fronttest_portfolios
 NY = ZoneInfo("America/New_York")
 
 
+def test_current_notification_excludes_legacy_research_totals():
+    message = daily.current_message({'report_day':'2026-09-10', 'portfolios':[{'portfolio_id':'v6_nvda_c05'}], 'earnings':{'settled':33}, 'autopilot':{}, 'autopilot_cohorts':[]})
+    assert 'v6_nvda' not in message and '33 settled' not in message
+    assert 'baseline: unavailable' in message
+
+
 def test_preview_contains_only_active_isolated_portfolios(tmp_path: Path):
     result = daily.preview(tmp_path / "fronttest.sqlite",
                            datetime(2026, 8, 14, 16, 10, tzinfo=NY),

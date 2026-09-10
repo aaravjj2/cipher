@@ -8,7 +8,8 @@ from core.paper_executor.database import PaperExecutorDatabase
 from core.paper_executor.training_dataset import build_dataset
 
 
-def _seed_closed_sample(path: Path, *, position_id: str, opened: str, closed: str) -> None:
+def _seed_closed_sample(path: Path, *, position_id: str, opened: str, closed: str,
+                        mode: str = "shadow", execution_backend: str = "simulated") -> None:
     PaperExecutorDatabase(path)
     raw = {
         "ticker": "NVDA", "direction": "BULLISH", "setup_type": "PUT FLOOR",
@@ -36,7 +37,8 @@ def _seed_closed_sample(path: Path, *, position_id: str, opened: str, closed: st
         ))
         db.execute("insert into paper_positions values(?,?,?,?,?,?,?,?,?,?,?,?,?)", (
             position_id, "e" + position_id, "NVDA", "bullish", "NVDA260821C00100000", 1, 1.0,
-            opened, closed, 1.2, "option_take_profit", "CLOSED", "{}",
+            opened, closed, 1.2, "option_take_profit", "CLOSED",
+            json.dumps({"mode": mode, "execution_backend": execution_backend}),
         ))
         db.execute("insert into paper_marks values(?,?,?,?,?,?,?)", (
             "m" + position_id, position_id, closed, 1.19, 1.21, 19.0, "{}",
@@ -55,3 +57,32 @@ def test_dataset_uses_entry_cutoff_and_blocks_tiny_corpus(tmp_path):
     assert sample["labels"]["pnl_pct"] == 20.0
     assert manifest["train_samples"] == 0  # no pretend split with one date
     assert manifest["policies"]["model_may_authorize_live_orders"] is False
+
+
+def test_dataset_preserves_paper_vs_shadow_fill_provenance(tmp_path):
+    db = tmp_path / "paper.sqlite"
+    _seed_closed_sample(
+        db, position_id="paper", opened="2026-08-17T14:00:00+00:00",
+        closed="2026-08-17T14:30:00+00:00", mode="paper", execution_backend="alpaca_paper",
+    )
+    build_dataset(db, tmp_path / "out")
+    sample = json.loads((tmp_path / "out" / "prospective.jsonl").read_text())
+    assert sample["features"]["execution_mode"] == "paper"
+    assert sample["features"]["execution_backend"] == "alpaca_paper"
+    assert sample["provenance"]["actual_fill_claim"] is True
+    assert sample["provenance"]["modeled_fill_claim"] is False
+    assert sample["provenance"]["label_source"] == "Alpaca paper fills and observed marks"
+
+
+def test_dataset_never_calls_local_paper_mode_an_actual_fill(tmp_path):
+    db = tmp_path / "paper.sqlite"
+    _seed_closed_sample(
+        db, position_id="local", opened="2026-08-17T14:00:00+00:00",
+        closed="2026-08-17T14:30:00+00:00", mode="paper", execution_backend="simulated",
+    )
+    build_dataset(db, tmp_path / "out")
+    sample = json.loads((tmp_path / "out" / "prospective.jsonl").read_text())
+    assert sample["features"]["execution_backend"] == "simulated"
+    assert sample["provenance"]["actual_fill_claim"] is False
+    assert sample["provenance"]["modeled_fill_claim"] is True
+    assert sample["provenance"]["label_source"] == "Cipher local modeled fills and observed marks"

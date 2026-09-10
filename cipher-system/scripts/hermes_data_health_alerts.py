@@ -31,7 +31,7 @@ NY = ZoneInfo("America/New_York")
 
 SCANNER_TICKERS = (
     "NVDA", "MSFT", "AAPL", "AVGO", "AMZN", "IBIT",
-    "GOOGL", "TSLA", "META", "MU", "AMD", "QQQ",
+    "GOOGL", "TSLA", "META", "MU", "AMD", "QQQ", "AMKR", "RMBS",
 )
 
 
@@ -91,14 +91,17 @@ def _tradier_session_open(current: datetime) -> bool:
 def latest_tradier(db_path: Path) -> dict[str, Any]:
     if not db_path.is_file():
         return {"ok": False, "reason": "missing_db", "path": str(db_path)}
-    with sqlite3.connect(db_path) as db:
-        rows = db.execute(
-            "select symbol, updated_at from tradier_latest_quotes order by updated_at desc limit 5"
-        ).fetchall()
-        # IDs are assigned by the table's INTEGER PRIMARY KEY and collector run
-        # reconciliation verifies the sequence. COUNT(*) scanned the entire 47 GB
-        # event index every 15 minutes, delaying the post-market archive by minutes.
-        count = db.execute("select coalesce(max(id), 0) from tradier_stream_events").fetchone()[0]
+    try:
+        with sqlite3.connect(f"file:{db_path.resolve()}?mode=ro", uri=True) as db:
+            rows = db.execute(
+                "select symbol, updated_at from tradier_latest_quotes order by updated_at desc limit 5"
+            ).fetchall()
+            # IDs are assigned by the table's INTEGER PRIMARY KEY and collector run
+            # reconciliation verifies the sequence. COUNT(*) scanned the entire 47 GB
+            # event index every 15 minutes, delaying the post-market archive by minutes.
+            count = db.execute("select coalesce(max(id), 0) from tradier_stream_events").fetchone()[0]
+    except sqlite3.Error as exc:
+        return {"ok": False, "reason": f"unreadable_db:{exc}", "path": str(db_path)}
     latest = max((parse_dt(row[1]) for row in rows), default=None)
     return {"ok": bool(latest), "latest": latest, "rows": rows, "events": count, "path": str(db_path)}
 
@@ -106,11 +109,14 @@ def latest_tradier(db_path: Path) -> dict[str, Any]:
 def latest_gex(db_path: Path) -> dict[str, Any]:
     if not db_path.is_file():
         return {"ok": False, "reason": "missing_db", "path": str(db_path)}
-    with sqlite3.connect(db_path) as db:
-        rows = db.execute(
-            "select ticker, captured_at from gex_snapshots order by captured_at desc limit 5"
-        ).fetchall()
-        count = db.execute("select count(*) from gex_snapshots").fetchone()[0]
+    try:
+        with sqlite3.connect(f"file:{db_path.resolve()}?mode=ro", uri=True) as db:
+            rows = db.execute(
+                "select ticker, captured_at from gex_snapshots order by captured_at desc limit 5"
+            ).fetchall()
+            count = db.execute("select count(*) from gex_snapshots").fetchone()[0]
+    except sqlite3.Error as exc:
+        return {"ok": False, "reason": f"unreadable_db:{exc}", "path": str(db_path)}
     latest = max((parse_dt(row[1]) for row in rows), default=None)
     return {"ok": bool(latest), "latest": latest, "rows": rows, "snapshots": count, "path": str(db_path)}
 

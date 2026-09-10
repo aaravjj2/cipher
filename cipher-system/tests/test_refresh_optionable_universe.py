@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import pytest
 from pathlib import Path
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "refresh_optionable_universe.py"
@@ -24,3 +25,8 @@ def test_refresh_preserves_tiers_and_records_removed_symbols() -> None:
     assert result["as_of"] == "2026-08-14"
     assert {row["ticker"] for row in result["validation"]["removed"]} == {"BAD", "BBB"}
     assert "NEW" not in result["sorted_tickers"]["mega"]
+
+
+def test_empty_catalog_cannot_erase_existing_universe():
+    with pytest.raises(ValueError, match="preserving"):
+        module.refresh_payload({"sorted_tickers": {"mega": ["SPY"]}}, [], as_of="today")

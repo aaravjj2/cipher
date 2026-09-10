@@ -80,6 +80,17 @@ def test_append_is_idempotent_per_date_and_ticker(tmp_path):
     assert lines[0]["predicted_confidence"] == 0.5
 
 
+def test_raw_probability_survives_for_future_validation():
+    record = pl.build_record(
+        _card(prob_day5_up=0.63, raw_direction='BULLISH', forecast_status='UNVALIDATED'),
+        run_date='2026-09-09', model_version='frozen-v1',
+        gate_status='NO_TRADE_DIRECTION_FAILED_HOLDOUT', entry_attempted=False,
+    )
+    assert record['raw_prob_day5_up'] == 0.63
+    assert record['predicted_confidence'] == 0.5
+    assert record['forecast_status'] == 'UNVALIDATED'
+
+
 def test_new_day_appends_fresh_lines_without_disturbing_old_ones(tmp_path):
     path = tmp_path / "prospective.jsonl"
     pl.append_records(

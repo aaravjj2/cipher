@@ -66,9 +66,15 @@ echo "Building frontend…"
 # or persist the values in the repository. Preserve any explicitly supplied
 # web/.env.local values for local development.
 TEMP_ENV=""
+staged=""
+cleanup() {
+  if [[ -n "$staged" && -d "$staged" ]]; then
+    rm -rf -- "$staged"
+  fi
+}
 if [[ -f /etc/cipher/cipher.env ]]; then
-  TEMP_ENV="$ROOT/web/.env.local"
-  if [[ ! -f "$TEMP_ENV" ]]; then
+  if [[ ! -f "$ROOT/web/.env.local" ]]; then
+    TEMP_ENV="$ROOT/web/.env.local"
     umask 077
     read_deployment_env() {
       if [[ -r /etc/cipher/cipher.env ]]; then
@@ -96,14 +102,6 @@ releases="$ROOT/app/.releases"
 mkdir -p "$releases"
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"
 staged="$(mktemp -d "$ROOT/app/.publish-${stamp}-XXXXXX")"
-cleanup() {
-  # An EXIT trap inherits its final command's status. The short-circuit form returned 1
-  # after a successful publish deliberately moved the staging directory, making the whole
-  # wrapper look failed even though `--check` immediately reported an exact match.
-  if [[ -d "$staged" ]]; then
-    rm -rf -- "$staged"
-  fi
-}
 trap cleanup EXIT
 rsync -a --delete "$ROOT/web/out/" "$staged/"
 [[ -s "$staged/index.html" ]] || { echo "Staged build has no index.html"; exit 1; }

@@ -18,14 +18,27 @@ def latest_failure(db_path: Path) -> dict | None:
         db.row_factory = sqlite3.Row
         rows = db.execute(
             """select id,event_time,event_type,payload_json from system_events
-               where event_type in ('WORKER_ERROR','MARKET_DATA_PROBE_FAILED','ENTRY_BLOCKED')
+               where event_type in ('WORKER_ERROR','MARKET_DATA_PROBE_FAILED','ENTRY_BLOCKED','AUTO_PAPER_PROMOTION','BROKER_RECONCILIATION_FAILED','EXIT_PENDING')
                order by event_time desc limit 50"""
         ).fetchall()
+        open_ids = {row[0] for row in db.execute("select id from paper_positions where status in ('OPEN','SHADOW_OPEN')")}
     for row in rows:
         try:
             payload = json.loads(row["payload_json"])
         except (TypeError, json.JSONDecodeError):
             payload = {}
+        if row["event_type"] == "EXIT_PENDING":
+            if payload.get("position_id") not in open_ids:
+                continue
+            return {"id": f"exit:{payload['position_id']}:{payload.get('since')}",
+                    "event_time": row["event_time"], "event_type": row["event_type"], **payload}
+        if row["event_type"] == "AUTO_PAPER_PROMOTION":
+            # A later successful promotion is the recovery boundary for older
+            # startup/reconciliation failures; do not keep reporting history as
+            # the current incident after the executor has recovered.
+            if payload.get("ok") is not False:
+                return None
+            return {"id": row["id"], "event_time": row["event_time"], "event_type": row["event_type"], **payload}
         if row["event_type"] != "ENTRY_BLOCKED" or payload.get("reason") in BLOCKING_REASONS:
             return {"id": row["id"], "event_time": row["event_time"], "event_type": row["event_type"], **payload}
     return None
@@ -34,6 +47,11 @@ def latest_failure(db_path: Path) -> dict | None:
 def format_failure(event: dict) -> str:
     reason = str(event.get("reason") or event.get("error") or "unknown failure")[:300]
     ticker = f" · {event['ticker']}" if event.get("ticker") else ""
+    if event.get("event_type") == "EXIT_PENDING":
+        return ("⚠️ **Cipher paper exit pending**\n"
+                f"Position: `{event.get('position_id')}` · since `{event.get('since')}`\n"
+                f"Reason: `{reason}` · {event.get('error', 'quote unavailable')}\n"
+                "Position remains open; the worker will retry with fresh quotes.")
     return (
         "⚠️ **Cipher paper autopilot blocked**\n"
         f"`{event.get('event_time')}`{ticker} · {event.get('event_type')}\n"

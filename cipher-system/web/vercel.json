@@ -1,6 +1,12 @@
 {
   "cleanUrls": true,
   "trailingSlash": false,
+  "rewrites": [
+    {
+      "source": "/cipher-api/:path*",
+      "destination": "https://cipher-main.tail39504f.ts.net:8443/:path*"
+    }
+  ],
   "headers": [
     {
       "source": "/(.*)",
