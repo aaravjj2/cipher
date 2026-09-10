@@ -10,8 +10,8 @@ from datetime import date, datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-VERSION = "theta-evidence-v2"
-ADMIN = re.compile(r"^[^\w]*(?:commands|status|eod report|this month|all.time pnl|menu|summary|historical|report)\b", re.I)
+VERSION = "theta-evidence-v3"
+ADMIN = re.compile(r"^[^\w]*(?:commands|status|eod report|this month|all.time pnl|menu|summary|historical|report|trade\s+(?:opened|closed)\s*#\d+)\b", re.I)
 
 
 def source(body):
@@ -29,18 +29,26 @@ def ocr(path: str) -> dict:
         # TSV gives word confidence; stdout stays local and only enters SQLite.
         proc = subprocess.run(["tesseract", str(image), "stdout", "--psm", "6", "tsv"],
                               capture_output=True, text=True, timeout=20, check=True)
-        rows = [r for r in csv.DictReader(io.StringIO(proc.stdout), delimiter="\t") if r.get("text", "").strip()]
-        result["text"] = " ".join(r["text"] for r in rows)
+        # Tesseract emits literal quotes, not CSV-escaped text. CSV quoting can
+        # otherwise consume subsequent TSV rows into a single OCR word.
+        rows = [r for r in csv.DictReader(io.StringIO(proc.stdout), delimiter="\t", quoting=csv.QUOTE_NONE) if r.get("text", "").strip()]
+        lines = {}
+        for row in rows:
+            key = tuple(row[k] for k in ('page_num', 'block_num', 'par_num', 'line_num'))
+            lines.setdefault(key, []).append(row['text'])
+        result["text"] = "\n".join(" ".join(words) for words in lines.values())
         scores = [float(r["conf"]) for r in rows if float(r["conf"]) >= 0]
         result["confidence"] = min(scores) if scores else None
         if not scores or min(scores) < 85:
             result["error"] = "unclear_ocr"
-    except (OSError, ValueError, subprocess.SubprocessError):
+    except (OSError, ValueError, KeyError, TypeError, csv.Error, subprocess.SubprocessError):
         result["error"] = "local_ocr_unavailable"
     return result
 
 
 def parse(text: str, timestamp: str) -> dict:
+    if ADMIN.search(text):
+        raise ValueError("administrative_or_historical")
     text = source(text)
     if ADMIN.search(text) or not text or re.search(r"\b(?:yesterday|last week|backtest|historical report)\b", text, re.I):
         raise ValueError("administrative_or_historical")

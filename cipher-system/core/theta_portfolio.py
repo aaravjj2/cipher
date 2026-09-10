@@ -109,6 +109,22 @@ def initialize(db, latest_id, now):
         put(db, 'restart_count', int(get(db, 'restart_count', 0)) + 1)
 
 
+def ingestion_status(db, now, error=None):
+    """Transport heartbeat is separate from quote execution and new arrivals."""
+    with db:
+        if error:
+            put(db, 'ingestion_error', error)
+        else:
+            put(db, 'last_ingestion_poll', now.isoformat())
+            put(db, 'ingestion_error', '')
+        incident(db, 'telegram_ingestion_unavailable', bool(error), now)
+
+
+def review_incident(db, now):
+    pending = db.execute("select 1 from candidates where status='needs_review' limit 1").fetchone()
+    incident(db, 'review_required', bool(pending), now)
+
+
 def reconcile(db):
     if db.execute('pragma quick_check').fetchone()[0] != 'ok':
         return False
@@ -174,6 +190,7 @@ def ingest(db, message, now):
             if len(matched) == 1:
                 request_exit(db, matched[0], 'signal', now)
         put(db, 'cursor', max(mid, int(get(db, 'cursor', 0))))
+        review_incident(db, now)
     return status
 
 
@@ -353,6 +370,7 @@ def tick(db, provider, now=None, *, clock=None):
     now = clock()
     with db:
         ok = reconcile(db)
+        review_incident(db, now)
         incident(db, 'quote_coverage_incomplete', covered < requested, now)
         db.execute('insert or replace into passes values(?,?,?,?,?,?,?)', (now.isoformat(), mode, session[0].isoformat() if session else None, session[1].isoformat() if session else None, requested, covered, int(ok)))
         put(db, 'last_tick', now.isoformat())
@@ -378,6 +396,7 @@ def review(db, candidate_id, action, actor, now, correction=None):
         if updated.rowcount != 1:
             raise ValueError('candidate_not_reviewable')
         db.execute('insert into reviews(candidate_id,actor,at,action,correction_json) values(?,?,?,?,?)', (row['id'], actor, now.isoformat(), action, dump(parsed) if parsed else None))
+        review_incident(db, now)
     return {'status': 'queued_for_fresh_validation' if parsed else 'rejected'}
 
 
@@ -433,11 +452,17 @@ def snapshot(path=DB, now=None):
             data_health = 'current' if latest_pass['covered'] == latest_pass['requested'] else 'unresolved'
         elif latest_pass and (not latest_pass['session_open'] or not stamp(latest_pass['session_open']) <= now < stamp(latest_pass['session_close'])):
             data_health = 'outside_session'
-        if any(p['mark_error'] for p in opens) or db.execute('select 1 from incidents where active=1').fetchone():
+        if any(p['mark_error'] for p in opens) or db.execute("select 1 from incidents where active=1 and key in ('session_unavailable','quote_coverage_incomplete')").fetchone():
             data_health = 'unresolved'
         elif data_health == 'current' and (not last or not 0 <= (now-stamp(last)).total_seconds() <= 30):
             data_health = 'stale'
+        poll = get(db, 'last_ingestion_poll')
+        ingestion_health = 'error' if get(db, 'ingestion_error') else 'current' if poll and 0 <= (now-stamp(poll)).total_seconds() <= 45 else 'stopped_or_stale'
+        review_counts = {r[0]: r[1] for r in db.execute("select reason,count(*) from candidates where status='needs_review' group by reason")}
         return {'version': VERSION, 'mode': get(db, 'mode'), 'available_cash': round(available(db), 2),
+                'ingestion_health': ingestion_health, 'last_ingestion_poll': poll,
+                'ingestion_error': get(db, 'ingestion_error') or None,
+                'review_pending': sum(review_counts.values()), 'review_reasons': review_counts,
                 'open_exposure': sum(p['collateral'] for p in opens), 'pending_exits': sum(bool(p['pending_reason']) for p in opens),
                 'realized_pnl': round(sum(p['pnl'] or 0 for p in positions if p['status'] == 'CLOSED'), 2),
                 'unresolved_pnl': sum(p['mark_pnl'] is None for p in opens),

@@ -54,7 +54,9 @@ def discord(text: str) -> None:
 def ingest_row(row):
     db = portfolio.connect()
     try:
-        return portfolio.ingest(db, row, datetime.now(timezone.utc))
+        action = portfolio.ingest(db, row, datetime.now(timezone.utc))
+        saved = db.execute('select reason from candidates where id=?', (row['id'],)).fetchone()
+        return {'action': action, 'message_id': row['id'], 'reason': saved[0] if saved else None}
     finally:
         db.close()
 
@@ -75,7 +77,11 @@ def deliver():
         for pending in db.execute('select * from events where delivered_at is null order by created_at limit 20').fetchall():
             try:
                 payload = json.loads(pending['payload'])
-                discord('Theta Cipher paper · ' + payload['action'] + '\n' + json.dumps(payload, ensure_ascii=False)[:1500] + '\nEvent: ' + pending['event_id'])
+                if payload['action'] == 'incident' and payload.get('reason') == 'review_required':
+                    notice = 'Theta Cipher paper — review required\nMessages are awaiting review; they have not created paper positions. Check the authenticated Theta review queue for missing fields or conflicting evidence. Expired messages cannot be approved for execution.'
+                else:
+                    notice = 'Theta Cipher paper · ' + payload['action'] + '\n' + json.dumps(payload, ensure_ascii=False)[:1500]
+                discord(notice + '\nEvent: ' + pending['event_id'])
                 with db:
                     db.execute('update events set delivered_at=?,attempts=attempts+1,last_error=null where event_id=?', (datetime.now(timezone.utc).isoformat(), pending['event_id']))
             except Exception as exc:
@@ -96,6 +102,12 @@ async def periodic(fn):
         await asyncio.sleep(max(.1, 10 - (time.monotonic() - started)))
 
 
+async def poll_messages(client, entity, after):
+    async def fetch():
+        return [m async for m in client.iter_messages(entity, min_id=after, reverse=True, limit=100)]
+    return await asyncio.wait_for(fetch(), timeout=30)
+
+
 async def run(once=False, initialize=False):
     env = load_env(CONFIG)
     SESSION_DIR.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -113,6 +125,7 @@ async def run(once=False, initialize=False):
                     raise RuntimeError('telegram_authorization_required')
                 entity = await client.get_entity(BOT)
             except Exception as exc:
+                portfolio.ingestion_status(db, datetime.now(timezone.utc), type(exc).__name__)
                 print(json.dumps({'telegram_startup_error': type(exc).__name__}), flush=True)
                 if once:
                     raise
@@ -127,8 +140,9 @@ async def run(once=False, initialize=False):
         while not STOP:
             after = int(portfolio.get(db, 'cursor', 0))
             try:
-                messages = [m async for m in client.iter_messages(entity, min_id=after, reverse=True, limit=100)]
+                messages = await poll_messages(client, entity, after)
             except Exception as exc:
+                portfolio.ingestion_status(db, datetime.now(timezone.utc), type(exc).__name__)
                 print(json.dumps({'telegram_error': type(exc).__name__}), flush=True)
                 if once:
                     raise
@@ -139,7 +153,7 @@ async def run(once=False, initialize=False):
                 if message.media:
                     target = MEDIA_DIR / str(message.id)
                     try:
-                        saved = await message.download_media(file=str(target))
+                        saved = await asyncio.wait_for(message.download_media(file=str(target)), timeout=30)
                         if saved:
                             Path(saved).chmod(0o600)
                             media = saved
@@ -149,6 +163,7 @@ async def run(once=False, initialize=False):
                 row = {"id": message.id, "date": message.date.isoformat(), "text": message.raw_text or "", "media_path": media, "reply_to_message_id": message.reply_to_msg_id}
                 result = await asyncio.to_thread(ingest_row, row)
                 print(json.dumps(result), flush=True)
+            portfolio.ingestion_status(db, datetime.now(timezone.utc))
             # Durable outbox: a transport failure cannot silently lose an alert
             # after the Telegram cursor advances. Historical messages are not backfilled.
             if once:

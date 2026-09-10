@@ -58,6 +58,25 @@ Still pending: representative screenshot parsing improvements, broader verified
 contract-class support, and the complete real-session observation/restart gate.
 No historical candidates are replayed by this follow-up.
 
+### Telegram ingestion diagnostics
+
+Telegram polling now has its own `ingestion_health`, `last_ingestion_poll`, and
+sanitized error type in status responses. Empty successful polls count as a
+working connection; they do not count as quote evidence. Poll/media requests
+time out after 30 seconds rather than waiting indefinitely. Logs include the
+message ID, disposition, and review reason without source content.
+
+Unresolved review candidates create one durable Discord incident while the
+queue remains nonempty, not an alert per message or polling cycle. Transport
+errors have a separate deduplicated incident. Neither changes execution gates.
+Source-bot trade-opened/closed receipts are administrative, not new instructions.
+Previously recorded candidates and their original evidence remain unchanged.
+
+Local OCR version `theta-evidence-v3` disables CSV quote interpretation for
+Tesseract TSV and retains line boundaries. Literal quotation marks no longer
+swallow later TSV rows. The 85 minimum-confidence requirement remains in force;
+chart images and incomplete or conflicting structures still require review.
+
 The default Alpaca adapter currently resolves regular/early closes for standard
 SPY, QQQ and IWM options from provider calendar dates plus the published exchange
 class schedule. Other classes require explicit provider `session_close` and
