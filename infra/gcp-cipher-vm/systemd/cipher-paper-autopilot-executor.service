@@ -12,6 +12,7 @@ WorkingDirectory=/home/aarav/Aarav/cipher/cipher-system
 EnvironmentFile=-/etc/cipher/cipher.env
 Environment=CIPHER_PAPER_RUNTIME=/home/aarav/Aarav/cipher/runtime/data/paper_runtime
 Environment=CIPHER_AUTOPILOT_COHORTS=1
+Environment=CIPHER_AUTOPILOT_COST_AWARE=1
 Environment=PYTHONPATH=/home/aarav/Aarav/cipher/cipher-system
 ExecStart=/home/aarav/.venvs/cipher/bin/python -m core.paper_executor.service /home/aarav/Aarav/cipher/cipher-system/config/paper_autopilot_shadow.yaml
 Restart=on-failure

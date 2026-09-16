@@ -27,7 +27,7 @@ def main() -> int:
         state_path=RUNTIME / "autopilot/notification_state.json",
     )
     cohorts = {}
-    for name in ("confirmation", "cost", "exit"):
+    for name in ("confirmation", "cost", "exit", "cost_aware_v3"):
         root = RUNTIME / "cohorts" / name
         if (root / "paper.sqlite").exists():
             cohorts[name] = deliver_latest_failure(

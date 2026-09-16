@@ -241,7 +241,7 @@ def snapshot(
         "autopilot": _autopilot_snapshot(autopilot_db_path, report_day),
         "autopilot_cohorts": [
             {"cohort_id": name, **_autopilot_snapshot(path, report_day)}
-            for name in ("confirmation", "cost", "exit")
+            for name in ("confirmation", "cost", "exit", "cost_aware_v3")
             if (path := autopilot_db_path.parents[2] / "cohorts" / name / "paper.sqlite").is_file()
         ],
         "earnings": _earnings_snapshot(earnings_db_path),

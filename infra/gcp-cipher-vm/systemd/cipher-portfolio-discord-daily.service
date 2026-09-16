@@ -21,6 +21,7 @@ ReadWritePaths=/home/aarav/Aarav/cipher/runtime/data/paper_runtime/data/paper_tr
 ReadWritePaths=/home/aarav/Aarav/cipher/runtime/data/paper_runtime/cohorts/confirmation
 ReadWritePaths=/home/aarav/Aarav/cipher/runtime/data/paper_runtime/cohorts/cost
 ReadWritePaths=/home/aarav/Aarav/cipher/runtime/data/paper_runtime/cohorts/exit
+ReadWritePaths=/home/aarav/Aarav/cipher/runtime/data/paper_runtime/cohorts/cost_aware_v3
 ReadWritePaths=/home/aarav/Aarav/cipher/runtime/data/telegram
 ReadWritePaths=/home/aarav/Aarav/cipher/earnings_model/data
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6

@@ -208,6 +208,10 @@ def run(config_path: str | None = None) -> None:
         observations = SharedObservations(provider, cfg.runtime_root / "cohorts" / "observations.sqlite")
         apps = [PaperExecutorApp(c, market_data=observations.view(), runtime_class=CohortRuntime)
                 for c in configurations(cfg)]
+        if os.environ.get("CIPHER_AUTOPILOT_COST_AWARE") == "1":
+            from .cost_aware import CostAwareRuntime, configuration
+            apps.append(PaperExecutorApp(configuration(cfg), market_data=observations.view(),
+                                         runtime_class=CostAwareRuntime))
         apps[0].cohort_group = CohortGroup(apps)
         apps[0].cohort_group.recover()
     else:
